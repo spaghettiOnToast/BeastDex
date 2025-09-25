@@ -11,7 +11,11 @@ type Props = {
   className?: string;
 };
 
-export default function StatsCarousel({ items, loading = false, className = "" }: Props) {
+export default function StatsCarousel({
+  items,
+  loading = false,
+  className = "",
+}: Props) {
   const data = useMemo(() => (items && items.length > 0 ? items : []), [items]);
   const [index, setIndex] = useState(0);
   const [visible, setVisible] = useState(true);
@@ -49,13 +53,16 @@ export default function StatsCarousel({ items, loading = false, className = "" }
 
   return (
     <div
-      className={`flex items-center gap-4 text-xs md:text-sm text-gray-300 w-full px-4 py-3 rounded-xl border border-gray-800/60 bg-gradient-to-r from-gray-900/80 via-gray-800/60 to-gray-900/80 backdrop-blur-sm ${className}`.trim()}
+      className={`flex items-center gap-4 text-xs md:text-sm text-gray-300 w-full px-4 py-3 rounded-xl border border-gray-800/60 bg-gradient-to-r from-pink-400/40 via-cyan-400/40 to-lime-400/40
+ backdrop-blur-sm ${className}`.trim()}
     >
       <span className="h-2.5 w-2.5 rounded-full bg-[#39ff14] shadow-[0_0_6px_#39ff14] animate-pulse" />
       <div className="relative flex-1 overflow-hidden">
         <div
           key={`${current.title}-${current.subtitle ?? ""}`}
-          className={`transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}
+          className={`transition-opacity duration-300 ${
+            visible ? "opacity-100" : "opacity-0"
+          }`}
         >
           <p className="font-semibold text-lsGold truncate text-sm md:text-base">
             {current.title}

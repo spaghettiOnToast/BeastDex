@@ -9,7 +9,9 @@ import { AppLayout } from "../components/layout/AppLayout";
 
 function BeastDetailPage() {
   const params = useParams<{ tokenId: string }>();
-  const tokenId = params.tokenId ? decodeURIComponent(params.tokenId) : undefined;
+  const tokenId = params.tokenId
+    ? decodeURIComponent(params.tokenId)
+    : undefined;
   const [beast, setBeast] = useState<Beast | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,9 +44,7 @@ function BeastDetailPage() {
         setError(getErrorMessage(error, "Failed to load beast details"));
         setBeast(null);
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -96,6 +96,18 @@ function BeastDetailPage() {
     );
   }
 
+  const moreDetailsSlot = (
+    <section className="rounded-xl border border-gray-800 bg-[#0b0b0f]/60 p-4 text-sm text-gray-300">
+      <h2 className="mb-2 text-base font-semibold text-lsGold">
+        More Details Coming Soon
+      </h2>
+      <p>
+        We&apos;re preparing a deeper dive into each beast, including trait
+        rarities and historical stats. Stay tuned!
+      </p>
+    </section>
+  );
+
   return (
     <AppLayout topBar={topBar}>
       <div className="space-y-6">
@@ -107,7 +119,9 @@ function BeastDetailPage() {
             ← Back to BeastDex
           </Link>
           {ownerLookupLoading ? (
-            <span className="text-[11px] text-gray-400">Fetching owner username...</span>
+            <span className="text-[11px] text-gray-400">
+              Fetching owner username...
+            </span>
           ) : ownerLookupError ? (
             <span className="text-[11px] text-red-400">{ownerLookupError}</span>
           ) : null}
@@ -117,17 +131,8 @@ function BeastDetailPage() {
           beast={beast}
           ownerUsername={ownerUsername}
           imageSize="detail"
+          actionSlot={moreDetailsSlot}
         />
-
-        <section className="rounded-xl border border-gray-800 bg-[#0b0b0f]/60 p-6 text-sm text-gray-300">
-          <h2 className="mb-4 text-base font-semibold text-lsGold">
-            More Details Coming Soon
-          </h2>
-          <p>
-            We&apos;re preparing a deeper dive into each beast, including trait rarities,
-            provenance, and historical stats. Stay tuned!
-          </p>
-        </section>
       </div>
     </AppLayout>
   );

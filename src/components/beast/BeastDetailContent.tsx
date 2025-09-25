@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import type { Beast } from "../../services/beast";
+import type { Beast, BeastAttribute } from "../../services/beast";
 import CometCard from "../ui/CometCard";
 
 type BeastDetailContentProps = {
@@ -17,16 +17,15 @@ export function BeastDetailContent({
   beast,
   ownerUsername,
   actionSlot,
-  imageSize = "modal",
+  imageSize = "detail",
 }: BeastDetailContentProps) {
-  const attributes = Array.isArray(beast.attributes)
-    ? beast.attributes
-    : [];
+  const attributes = Array.isArray(beast.attributes) ? beast.attributes : [];
 
   const ownerAddressLower = beast.owner ? beast.owner.toLowerCase() : "";
   const accountIdentifier = ownerUsername
     ? ownerUsername.trim().toLowerCase()
     : ownerAddressLower;
+
   const ownerLabel = ownerUsername
     ? ownerUsername
     : beast.owner
@@ -35,116 +34,95 @@ export function BeastDetailContent({
 
   const formatAttributeValue = (
     trait: string | undefined,
-    value: BeastAttribute["value"],
+    value: BeastAttribute["value"]
   ) => {
     if (!trait) return String(value);
+    const t = trait.toLowerCase();
 
-    const normalisedTrait = trait.toLowerCase();
-    if (BOOLEAN_ATTRIBUTES.has(normalisedTrait)) {
-      if (value === "1" || value === 1) {
-        return "Yes";
-      }
-      if (value === "0" || value === 0) {
-        return "No";
-      }
+    if (BOOLEAN_ATTRIBUTES.has(t)) {
+      if (value === "1" || value === 1) return "Yes";
+      if (value === "0" || value === 0) return "No";
     }
 
-    if (UNIX_TIMESTAMP_ATTRIBUTES.has(normalisedTrait)) {
-      const numeric = typeof value === "number" ? value : Number(value);
-      if (Number.isFinite(numeric) && numeric > 0) {
-        const date = new Date(numeric * 1000);
-        if (!Number.isNaN(date.getTime())) {
-          return date.toLocaleString();
-        }
+    if (UNIX_TIMESTAMP_ATTRIBUTES.has(t)) {
+      const n = typeof value === "number" ? value : Number(value);
+      if (Number.isFinite(n) && n > 0) {
+        const d = new Date(n * 1000);
+        if (!Number.isNaN(d.getTime())) return d.toLocaleString();
       }
     }
 
     return String(value);
   };
 
-  const imageWrapperClasses =
+  const imageClasses =
     imageSize === "detail"
-      ? "items-center justify-center overflow-hidden rounded-2xl"
-      : "items-center justify-center overflow-hidden rounded-2xl";
-
-  const cardClassName =
-    imageSize === "detail" ? "inline-block" : "inline-block align-top";
+      ? "block h-[30rem] w-auto max-w-[520px] object-contain sm:h-[32rem]"
+      : "block max-h-[28rem] w-auto object-contain align-top";
 
   const fallbackBoxClasses =
     imageSize === "detail"
-      ? "flex h-[32rem] w-[520px] items-center justify-center bg-black/70 px-6 text-gray-600 sm:h-[34rem]"
+      ? "flex h-[30rem] w-[520px] items-center justify-center bg-black/70 px-6 text-gray-600 sm:h-[32rem]"
       : "flex h-72 w-72 items-center justify-center bg-black/70 px-6 text-gray-600";
-
-  const imageClasses =
-    imageSize === "detail"
-      ? "block h-[32rem] w-auto max-w-[520px] object-contain sm:h-[34rem]"
-      : "block max-h-[28rem] w-auto object-contain align-top";
 
   return (
     <div className="grid gap-6 md:grid-cols-5">
-      <div className="md:col-span-3 flex flex-col items-center gap-4">
-        <CometCard className={cardClassName}>
-          <div
-            className={`${
-              imageSize === "detail"
-                ? "inline-flex h-[32rem] w-auto max-w-[520px] sm:h-[34rem]"
-                : "inline-flex"
-            } ${imageWrapperClasses}`.trim()}
-          >
-            {beast.image ? (
-              <img
-                src={beast.image}
-                alt={beast.name}
-                className={imageClasses}
-              />
-            ) : (
-              <div className={fallbackBoxClasses}>
-                No image available
-              </div>
-            )}
-          </div>
+      <div className="md:col-span-3 flex items-start justify-center">
+        <CometCard>
+          {beast.image ? (
+            <img src={beast.image} alt={beast.name} className={imageClasses} />
+          ) : (
+            <div className={fallbackBoxClasses}>No image available</div>
+          )}
         </CometCard>
-        <div className="w-full text-center text-xs text-gray-400 md:text-left">
-          <p>
-            {beast.owner ? (
-              <>
-                Owned by{" "}
-                <Link
-                  to={`/account/${encodeURIComponent(accountIdentifier)}`}
-                  className="text-lsGold hover:underline"
-                >
-                  {ownerLabel}
-                </Link>
-              </>
-            ) : (
-              "Not owned"
-            )}
-          </p>
-        </div>
       </div>
+
       <div className="md:col-span-2 flex w-full flex-col gap-3">
-        {attributes.length > 0 ? (
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-            {attributes.map((attr, idx) => (
-              <div
-                key={`${attr.trait_type}-${attr.value}-${idx}`}
-                className="rounded-md border border-gray-800 bg-black/40 px-2 py-1.5"
+        <section className="rounded-xl border border-gray-800 bg-black/40 p-4">
+          <h2 className="mb-3 text-sm font-semibold text-lsGold uppercase tracking-wide">
+            Attributes
+          </h2>
+          {attributes.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {attributes.map((attr, idx) => (
+                <div
+                  key={`${attr.trait_type}-${attr.value}-${idx}`}
+                  className="rounded-md border border-gray-800 bg-black/50 px-2 py-1.5"
+                >
+                  <p className="text-[9px] uppercase tracking-wide text-gray-500">
+                    {attr.trait_type}
+                  </p>
+                  <p className="truncate text-[12px] text-gray-200">
+                    {formatAttributeValue(attr.trait_type, attr.value)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">
+              No metadata attributes available for this beast.
+            </p>
+          )}
+        </section>
+
+        {/* Owned by */}
+        <section className="rounded-xl border border-gray-800 bg-black/40 p-4 text-xs text-gray-400">
+          {beast.owner ? (
+            <p>
+              Owned by{" "}
+              <Link
+                to={`/account/${encodeURIComponent(accountIdentifier)}`}
+                className="text-lsGold hover:underline"
               >
-                <p className="text-[8px] uppercase tracking-[0.18em] text-gray-500">
-                  {attr.trait_type}
-                </p>
-                <p className="truncate text-[11px] text-gray-200">
-                  {formatAttributeValue(attr.trait_type, attr.value)}
-                </p>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-gray-500">
-            No metadata attributes available for this beast.
-          </p>
-        )}
-        {actionSlot ? <div className="pt-2">{actionSlot}</div> : null}
+                {ownerLabel}
+              </Link>
+            </p>
+          ) : (
+            <p>Not owned</p>
+          )}
+        </section>
+
+        {actionSlot ? <div>{actionSlot}</div> : null}
       </div>
     </div>
   );
