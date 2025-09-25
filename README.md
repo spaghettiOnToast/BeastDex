@@ -1,69 +1,59 @@
-# React + TypeScript + Vite
+# 🐉 BeastDex
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A **BeastDex** for [LootSurvivor.io](https://lootsurvivor.io/) — browse, track, and analyze all beast varieties with rarity filters, collection stats, and player profiles.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## ✨ Features
 
-## Expanding the ESLint configuration
+- 📚 Browse all beast varieties with rarity tabs (Standard, Shiny, Animated, Animated Shiny)
+- 🧾 Collection tracking with owned/missing placeholders
+- 🔎 Search and filter beasts by attributes
+- 📊 Player profiles with collection stats & highlights
+- 🏆 Power ranking and K:D ratio tracking
+- 💻 Built with **React + TypeScript + TailwindCSS** and powered by **bun**
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+---
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## 🚀 Getting Started
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Prerequisites
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- [bun](https://bun.sh/) (preferred) or [npm](https://nodejs.org/)
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Installation
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```bash
+# Clone the repo
+git clone https://github.com/spaghettiOnToast/BeastDex.git
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Navigate into project
+cd BeastDex
+
+# Install dependencies
+bun install
+Run the Dev Server
+bash
+Copy code
+bun dev
+The app will be available at http://localhost:5173 (or similar).
+
+🛠️ Tech Stack
+⚡ React + TypeScript
+
+🎨 TailwindCSS
+
+🍞 bun package manager
+
+🌐 Starknet APIs & LootSurvivor data
+
+📸 Screenshots
+(coming soon)
+
+🤝 Contributing
+Contributions, issues, and feature requests are welcome!
+Feel free to check out the issues page.
+
+📜 License
+This project is licensed under the MIT License. See the LICENSE file for details.
 ```
