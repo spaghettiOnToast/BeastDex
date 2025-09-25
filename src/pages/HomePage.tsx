@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import SortDropdown from "../components/sort/SortDropdown";
+import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
 import { useSearchParams } from "react-router-dom";
 import TopBar from "../components/header/TopBar";
 import StatsPanel from "../components/stats/StatsPanel";
@@ -24,7 +24,15 @@ import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { getErrorMessage } from "../utils/error";
 import { config } from "../config";
 
-const HIDDEN_FILTER_TRAITS = new Set<string>();
+const HIDDEN_FILTER_TRAITS = new Set<string>([
+  "adventurerkilledcount",
+  "adventurer killed count",
+  "adventurers killed",
+  "lastkilledby",
+  "last killed by",
+  "lastdeathtimestamp",
+  "last death timestamp"
+]);
 const PAGE_SIZE = config.pagination.defaultPageSize;
 
 function HomePage() {
@@ -44,7 +52,7 @@ function HomePage() {
   const [highlightsLoading, setHighlightsLoading] = useState(true);
   const [highlightsError, setHighlightsError] = useState<string | null>(null);
   const [selectedBeast, setSelectedBeast] = useState<Beast | null>(null);
-  const [sortOption, setSortOption] = useState<"default" | "beast">("default");
+  const [sortOption, setSortOption] = useState<SortOption>("default");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [searchParams] = useSearchParams();
 
@@ -79,11 +87,12 @@ function HomePage() {
         if (!mounted) return;
         const filteredEntries = (
           Object.entries(filters) as Array<[string, string[]]>
-        ).filter(([trait]) => !HIDDEN_FILTER_TRAITS.has(trait));
+        ).filter(([trait]) => !HIDDEN_FILTER_TRAITS.has(trait.toLowerCase()));
         const cleanedFilters = Object.fromEntries(
           filteredEntries
         ) as BeastAttributeFilters;
         setAvailableFilters(cleanedFilters);
+        console.log("🔍 Available filters loaded:", Object.keys(cleanedFilters));
         setAttributeFilters((prev: BeastAttributeFilters) => {
           const nextEntries = (
             Object.entries(prev) as Array<[string, string[]]>
@@ -177,20 +186,23 @@ function HomePage() {
   }, []);
 
   const handleFilterChange = useCallback((trait: string, value: string) => {
+    console.log("🔍 Filter change:", { trait, value });
     setPage(1);
     setAttributeFilters((prev) => {
       const newFilters = { ...prev };
-      if (value) {
+      if (value && value.trim()) {
         newFilters[trait] = [value];
       } else {
         delete newFilters[trait];
       }
+      console.log("🔍 New filters:", newFilters);
       return newFilters;
     });
   }, []);
 
   const handleBooleanFilterToggle = useCallback(
     (trait: string, values: string[]) => {
+      console.log("🔍 Boolean filter toggle:", { trait, values });
       setPage(1);
       setAttributeFilters((prev) => {
         const newFilters = { ...prev };
@@ -199,6 +211,7 @@ function HomePage() {
         } else {
           delete newFilters[trait];
         }
+        console.log("🔍 New filters (boolean):", newFilters);
         return newFilters;
       });
     },

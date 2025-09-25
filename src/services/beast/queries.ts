@@ -8,7 +8,7 @@ type BuildBeastsQueryOptions = {
   attributeFilters?: AttributeFilterInput;
   ownerAddresses?: string[];
   page?: number;
-  sort?: "default" | "beast";
+  sort?: "default" | "beast" | "tier";
 };
 
 function escapeSqlLiteral(value: string) {
@@ -149,18 +149,40 @@ export function buildBeastsQuery({
         AND json_extract(beast_attr.value, '$.trait_type') IS NOT NULL
         AND json_extract(beast_attr.value, '$.value') IS NOT NULL`
       : "";
+
+  const tierJoin =
+    sort === "tier"
+      ? `LEFT JOIN json_each(
+          CASE
+            WHEN json_valid(t.metadata) = 1 THEN t.metadata
+            ELSE '{"attributes":[]}'
+          END,
+          '$.attributes'
+        ) tier_attr
+         ON json_valid(t.metadata) = 1
+        AND json_extract(tier_attr.value, '$.trait_type') = 'Tier'
+        AND json_extract(tier_attr.value, '$.trait_type') IS NOT NULL
+        AND json_extract(tier_attr.value, '$.value') IS NOT NULL`
+      : "";
   const beastSelect =
     sort === "beast"
       ? ", json_extract(beast_attr.value, '$.value') AS beast_value"
       : ", NULL AS beast_value";
+
+  const tierSelect =
+    sort === "tier"
+      ? ", CAST(json_extract(tier_attr.value, '$.value') AS INTEGER) AS tier_value"
+      : ", NULL AS tier_value";
   // Only compute power when sorting by power (default sort)
   const needsPower = sort === "default";
   const orderClause =
     sort === "beast"
       ? "ORDER BY COALESCE(beast_value, '') COLLATE NOCASE ASC, CAST(id AS INTEGER) ASC"
-      : needsPower
-        ? "ORDER BY power DESC, CAST(id AS INTEGER) ASC"
-        : "ORDER BY CAST(id AS INTEGER) ASC";
+      : sort === "tier"
+        ? "ORDER BY COALESCE(tier_value, 999) ASC, CAST(id AS INTEGER) ASC"
+        : needsPower
+          ? "ORDER BY power DESC, CAST(id AS INTEGER) ASC"
+          : "ORDER BY CAST(id AS INTEGER) ASC";
 
   return `
     WITH filtered_tokens AS (
@@ -170,11 +192,13 @@ export function buildBeastsQuery({
         b.account_address,
         ${buildOptimizedPowerFragment(needsPower)}
         ${beastSelect}
+        ${tierSelect}
       FROM tokens t
       JOIN token_balances b
         ON t.id = b.token_id
       AND t.contract_address = b.contract_address
       ${beastJoin}
+      ${tierJoin}
           WHERE t.contract_address = '${CONTRACT_ADDRESS}'
             AND b.balance > '${ZERO_BALANCE}'
             AND json_valid(t.metadata) = 1 

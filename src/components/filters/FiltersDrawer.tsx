@@ -129,7 +129,9 @@ export function FiltersDrawer({
                   ]);
 
                   const REMOVED_TRAITS = new Set([
-                    "last death timestamp", "lastdeathtimestamp"
+                    "last death timestamp", "lastdeathtimestamp",
+                    "adventurerkilledcount", "adventurer killed count",
+                    "adventurers killed", "lastkilledby", "last killed by"
                   ]);
 
                   // Skip removed traits

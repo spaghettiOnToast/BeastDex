@@ -13,7 +13,7 @@ type UseBeastsOptions = {
   attributeFilters?: AttributeFilterInput;
   ownerAddresses?: string[];
   page?: number;
-  sort?: "default" | "beast";
+  sort?: "default" | "beast" | "tier";
   enabled?: boolean;
 };
 
@@ -61,7 +61,7 @@ export function useBeasts({
 
         setBeasts(result);
         setTotal(totalCount);
-        console.log(`✅ Finished loading beasts (page size: ${result.length}, total: ${totalCount})`);
+        console.log(`✅ Finished loading beasts (page ${page}: ${result.length} beasts, total: ${totalCount})`);
       } catch (error: unknown) {
         if (signal?.aborted) return;
         console.error("❌ Failed to fetch beasts:", error);
@@ -88,6 +88,7 @@ export function useBeasts({
     return () => controller.abort();
   }, [enabled, load]);
 
+  // More accurate hasMore calculation - if we got a full page, there might be more
   const hasMore = total > page * limit;
 
   return { beasts, total, hasMore, loading, error, reload: load };

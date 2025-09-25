@@ -48,8 +48,6 @@ export async function fetchBeasts({
 
   return apiCache.get("beast-query", params, async () => {
     const query = buildBeastsQuery(params);
-    console.log(query);
-
     const rows = await runBeastSql<BeastRow[]>(query, "fetchBeasts");
     const beasts = rows.map(mapBeastRow);
     const total =

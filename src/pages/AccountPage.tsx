@@ -162,6 +162,7 @@ function AccountPage() {
     enabled: Boolean(resolvedAddress),
   });
 
+
   const ownerLookupAddresses = useMemo(() => {
     const unique = new Set<string>();
     if (resolvedAddress) {
@@ -180,19 +181,17 @@ function AccountPage() {
       return beasts;
     }
 
-    return beasts.slice().sort((a, b) => {
-      const traitA = a.attributes.find(
-        (attribute) => attribute.trait_type?.toLowerCase() === "beast"
-      );
-      const traitB = b.attributes.find(
-        (attribute) => attribute.trait_type?.toLowerCase() === "beast"
-      );
+    // Cache trait extraction to avoid repeated attribute searches
+    const beastsWithTraits = beasts.map(beast => ({
+      beast,
+      traitValue: beast.attributes.find(
+        attr => attr.trait_type?.toLowerCase() === "beast"
+      )?.value ?? "",
+    }));
 
-      const valueA = traitA?.value != null ? String(traitA.value) : "";
-      const valueB = traitB?.value != null ? String(traitB.value) : "";
-
-      return valueA.localeCompare(valueB);
-    });
+    return beastsWithTraits
+      .sort((a, b) => String(a.traitValue).localeCompare(String(b.traitValue)))
+      .map(item => item.beast);
   }, [beasts, sortOption]);
 
   const {
@@ -288,31 +287,45 @@ function AccountPage() {
     setSummaryError(null);
 
     try {
-      const limit = PAGE_SIZE;
-      let pageIndex = 1;
+      const limit = 120; // Larger batch size for fewer requests
+      const MAX_INITIAL_PAGES = 3; // Limit initial pages for faster loading
       let accumulated: Beast[] = [];
       let totalCount = 0;
 
-      while (true) {
-        const { beasts: batch, total: batchTotal } = await fetchBeasts({
-          limit,
-          page: pageIndex,
-          ownerAddresses: [resolvedAddress],
-          sort: "default",
-        });
+      // Load first batch to get total count
+      const { beasts: firstBatch, total: batchTotal } = await fetchBeasts({
+        limit,
+        page: 1,
+        ownerAddresses: [resolvedAddress],
+        sort: "default",
+      });
 
-        if (summaryRequestRef.current !== requestId) {
-          return;
+      if (summaryRequestRef.current !== requestId) {
+        return;
+      }
+
+      accumulated = [...firstBatch];
+      totalCount = batchTotal;
+
+      // Load additional pages up to limit (sequential for better caching)
+      if (totalCount > firstBatch.length) {
+        const totalPages = Math.ceil(totalCount / limit);
+        const pagesToLoad = Math.min(totalPages, MAX_INITIAL_PAGES);
+
+        for (let p = 2; p <= pagesToLoad; p++) {
+          try {
+            const result = await fetchBeasts({
+              limit,
+              page: p,
+              ownerAddresses: [resolvedAddress],
+              sort: "default",
+            });
+            accumulated = accumulated.concat(result.beasts);
+          } catch (error) {
+            console.warn(`Failed to load page ${p}:`, error);
+            // Continue with partial data rather than fail completely
+          }
         }
-
-        accumulated = accumulated.concat(batch);
-        totalCount = batchTotal;
-
-        if (accumulated.length >= totalCount || batch.length < limit) {
-          break;
-        }
-
-        pageIndex += 1;
       }
 
       const [deaths, ranking] = await Promise.all([
@@ -330,9 +343,15 @@ function AccountPage() {
         return;
       }
 
-      setCollectionStats(computeBeastCollectionStats(accumulated));
+      // Use totalCount first, only compute stats with sample for speed
       setCollectionTotal(totalCount || accumulated.length);
-      setCollectionPower(calculateTotalPower(accumulated));
+
+      // Compute stats with available sample (partial data is better than slow loading)
+      const stats = computeBeastCollectionStats(accumulated);
+      const power = calculateTotalPower(accumulated);
+
+      setCollectionStats(stats);
+      setCollectionPower(power);
       setAccountDeaths(deaths);
       setAccountRanking(ranking);
     } catch (err: unknown) {
@@ -378,6 +397,11 @@ function AccountPage() {
     if (!resolvedAddress) {
       return;
     }
+    // Clear existing data to show loading state immediately
+    setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
+    setCollectionTotal(0);
+    setCollectionPower(0);
+
     void reload();
     void loadSummary();
   }, [loadSummary, reload, resolvedAddress]);
@@ -530,7 +554,9 @@ function AccountPage() {
                   "{mostPowerfulTitle}"
                 </div>
               ) : null}
-              <div className="space-y-1">
+
+              {/* Username + Trophy side by side */}
+              <div className="flex items-center gap-3">
                 <h1 className="text-xl md:text-2xl font-bold text-primary tracking-wide">
                   <span
                     className={`${displayAddressClass}`}
@@ -539,15 +565,30 @@ function AccountPage() {
                     {displayAddress}
                   </span>
                 </h1>
-                {usernamesError ? (
-                  <p className="text-xs text-destructive">{usernamesError}</p>
-                ) : usernamesLoading &&
-                  Object.keys(ownerUsernames).length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    Loading usernames...
-                  </p>
-                ) : null}
+
+                <div className="flex items-center gap-2 ml-4 text-sm">
+                  <span className="text-lg">🏆</span>
+                  <span className="uppercase tracking-wider text-muted-foreground font-medium">
+                    Total
+                  </span>
+                  <span className="font-bold text-primary">
+                    {collectionStats.uniqueBeastTypes}
+                  </span>
+                  <span className="text-muted-foreground">
+                    / {TOTAL_BEAST_VARIETIES} types
+                  </span>
+                </div>
               </div>
+
+              {/* Username loading/error states */}
+              {usernamesError ? (
+                <p className="text-xs text-destructive">{usernamesError}</p>
+              ) : usernamesLoading &&
+                Object.keys(ownerUsernames).length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Loading usernames...
+                </p>
+              ) : null}
             </div>
 
             {/* Action Buttons */}
@@ -563,19 +604,7 @@ function AccountPage() {
                     View Collection
                   </Link>
                 ) : null}
-                
-                <div className="flex items-center gap-2 text-center">
-                  <span className="text-lg">🏆</span>
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                    Total
-                  </p>
-                  <p className="text-lg font-bold text-primary leading-none">
-                    {collectionStats.uniqueBeastTypes}
-                  </p>
-                  <p className="text-xs text-muted-foreground leading-none">
-                    {TOTAL_BEAST_VARIETIES} types
-                  </p>
-                </div>
+
                 <button
                   type="button"
                   onClick={handleRefresh}
@@ -641,6 +670,7 @@ function AccountPage() {
             <p className="text-sm font-medium text-destructive">❌ {error}</p>
           </div>
         ) : null}
+
 
         {/* Beast Grid */}
         <BeastGrid

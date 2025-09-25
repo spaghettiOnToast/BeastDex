@@ -21,7 +21,7 @@ export const BeastGrid = memo(function BeastGrid({
 }: BeastGridProps) {
   if (loading && beasts.length === 0) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 place-items-center">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-5 gap-6 place-items-center">
         {[...Array(20)].map((_, i) => (
           <BeastCardSkeleton key={i} />
         ))}
@@ -40,7 +40,7 @@ export const BeastGrid = memo(function BeastGrid({
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 place-items-center animate-in fade-in duration-500">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-5 gap-6 animate-in fade-in duration-500">
       {beasts.map((beast) => (
         <BeastCard
           key={beast.id}
