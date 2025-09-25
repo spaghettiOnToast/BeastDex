@@ -23,32 +23,30 @@ export function SortDropdown({ value, onChange }: SortDropdownProps) {
   const currentOption = OPTIONS.find(option => option.value === value) || OPTIONS[0];
 
   return (
-    <div className="inline-flex items-center gap-2 text-[11px] text-gray-400">
-      <span className="uppercase tracking-wide text-[10px] text-gray-500">Sort</span>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 border-gray-700 bg-black px-2 text-[11px] text-gray-200 hover:bg-gray-800 hover:text-gray-100 focus-visible:ring-lsGreen"
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="font-medium"
+        >
+          <span className="text-muted-foreground mr-1.5">Sort:</span>
+          {currentOption.label}
+          <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[140px]">
+        {OPTIONS.map((option) => (
+          <DropdownMenuItem
+            key={option.value}
+            onClick={() => onChange(option.value)}
+            className="cursor-pointer font-medium"
           >
-            {currentOption.label}
-            <ChevronDown className="ml-1 h-3 w-3" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-[120px] border-gray-700 bg-black">
-          {OPTIONS.map((option) => (
-            <DropdownMenuItem
-              key={option.value}
-              onClick={() => onChange(option.value)}
-              className="text-[11px] text-gray-200 focus:bg-gray-800 focus:text-gray-100 cursor-pointer"
-            >
-              {option.label}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+            {option.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

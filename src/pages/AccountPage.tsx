@@ -511,101 +511,112 @@ function AccountPage() {
 
   return (
     <AppLayout topBar={topBar}>
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col items-center text-center text-xs text-gray-400">
-          {mostPowerfulTitle ? (
-            <span className="bg-gradient-to-r from-[#ff7cf7] via-[#7dfbff] to-[#8bff72] bg-clip-text text-3xl font-bold uppercase tracking-[0.4em] text-transparent">
-              {mostPowerfulTitle}
-            </span>
-          ) : null}
-          <span
-            className="pt-2 relative inline-block bg-gradient-to-r from-[#f9e08a] via-[#fbdc5e] to-[#39ff14] bg-clip-text text-4xl font-semibold uppercase tracking-[0.4em]"
-            style={{ WebkitTextFillColor: "#fbeaa0" }}
-          >
-            <span
-              className={`${displayAddressClass} uppercase`}
-              title={normalisedAccountAddress || undefined}
-            >
-              {displayAddress}
-            </span>
-          </span>
-          {usernamesError ? (
-            <span className="text-[11px] text-red-400">{usernamesError}</span>
-          ) : usernamesLoading && Object.keys(ownerUsernames).length === 0 ? (
-            <span className="text-[11px] text-gray-400">
-              Loading usernames...
-            </span>
-          ) : null}
-        </div>
-
-        <div className="flex items-center justify-between">
-          {/* Left side: View + Refresh */}
-          <div className="flex items-center gap-3">
-            {collectionRouteIdentifier ? (
-              <Link
-                to={`/collection/${encodeURIComponent(
-                  collectionRouteIdentifier
-                )}`}
-                className="inline-flex items-center rounded-md border border-lsGold/30 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-lsGold hover:bg-gray-900"
-              >
-                View Beast Collection
-              </Link>
-            ) : null}
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={anyLoading || !resolvedAddress}
-              className="inline-flex items-center gap-2 rounded-md border border-lsGold px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-lsGold hover:bg-gray-900 disabled:opacity-50"
-            >
-              {anyLoading ? (
-                <span className="h-3 w-3 animate-spin rounded-full border-2 border-lsGold border-t-transparent" />
+      <div className="space-y-4">
+        {/* Hero Section with Action Bar */}
+        <div className="bg-card/20 backdrop-blur-sm rounded-md border border-muted/40 p-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            {/* Hero Content */}
+            <div className="flex flex-col items-start space-y-2">
+              {mostPowerfulTitle ? (
+                <div className="bg-gradient-to-r from-pink-500 via-cyan-400 to-green-400 bg-clip-text text-lg md:text-xl font-bold uppercase tracking-wider text-transparent">
+                  {mostPowerfulTitle}
+                </div>
               ) : null}
-              <span>Refresh</span>
-            </button>
-          </div>
+              <div className="space-y-1">
+                <h1 className="text-xl md:text-2xl font-bold text-primary tracking-wide">
+                  <span
+                    className={`${displayAddressClass}`}
+                    title={normalisedAccountAddress || undefined}
+                  >
+                    {displayAddress}
+                  </span>
+                </h1>
+                {usernamesError ? (
+                  <p className="text-xs text-destructive">{usernamesError}</p>
+                ) : usernamesLoading && Object.keys(ownerUsernames).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Loading usernames...</p>
+                ) : null}
+              </div>
+            </div>
 
-          {/* Right side: Back to BeastDex */}
-          <Link
-            to="/"
-            onClick={handleBackToHome}
-            className="text-xs uppercase tracking-wide text-lsGold hover:underline"
-          >
-            ← Back to BeastDex
-          </Link>
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div className="flex items-center gap-2">
+                {collectionRouteIdentifier ? (
+                  <Link
+                    to={`/collection/${encodeURIComponent(collectionRouteIdentifier)}`}
+                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium bg-primary/10 text-primary border border-primary/20 rounded-md hover:bg-primary/20 transition-colors"
+                  >
+                    View Collection
+                  </Link>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={handleRefresh}
+                  disabled={anyLoading || !resolvedAddress}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 disabled:opacity-50 transition-colors"
+                >
+                  {anyLoading ? (
+                    <div className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
+                  ) : null}
+                  <span>Refresh</span>
+                </button>
+              </div>
+              <Link
+                to="/"
+                onClick={handleBackToHome}
+                className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+              >
+                ← Back to BeastDex
+              </Link>
+            </div>
+          </div>
         </div>
 
-        {/* Error below the row so it doesn’t push buttons apart */}
+        {/* Error Display */}
         {identifierError ? (
-          <p className="text-center text-[11px] uppercase tracking-wide text-red-400">
-            {identifierError}
-          </p>
+          <div className="text-center p-2 bg-destructive/10 border border-destructive/20 rounded-md">
+            <p className="text-sm font-medium text-destructive">{identifierError}</p>
+          </div>
         ) : null}
 
+        {/* Overview Cards */}
         <OverviewCards cards={overviewCards} />
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        {/* Collection Stats */}
+        <div className="grid gap-6 lg:grid-cols-2">
           <BeastCollectionTile {...collectionStats} />
           <HighlightsTile {...collectionStats} />
         </div>
 
+        {/* Summary Error */}
         {summaryError ? (
-          <p className="text-xs text-red-400">❌ {summaryError}</p>
+          <div className="p-2 bg-destructive/10 border border-destructive/20 rounded-md">
+            <p className="text-xs font-medium text-destructive">❌ {summaryError}</p>
+          </div>
         ) : null}
 
-        <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400">
-          <span className="text-base font-semibold text-lsGold">
+        {/* Beasts Section Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-card/10 backdrop-blur-sm rounded-md border border-muted/30">
+          <h2 className="text-lg font-bold text-primary">
             {loading && total === 0
               ? "Loading…"
-              : `${total.toLocaleString()} Beasts collected`}
-          </span>
-          <div className="flex flex-1 items-center justify-end gap-2">
+              : `${total.toLocaleString()} Beasts Collected`}
+          </h2>
+          <div className="flex items-center gap-2">
             <SortDropdown value={sortOption} onChange={setSortOption} />
             {filtersControl}
           </div>
         </div>
 
-        {error ? <p className="text-xs text-red-400">❌ {error}</p> : null}
+        {/* Error Display */}
+        {error ? (
+          <div className="p-2 bg-destructive/10 border border-destructive/20 rounded-md">
+            <p className="text-sm font-medium text-destructive">❌ {error}</p>
+          </div>
+        ) : null}
 
+        {/* Beast Grid */}
         <BeastGrid
           beasts={sortedBeasts}
           ownerUsernames={ownerUsernames}
@@ -615,21 +626,25 @@ function AccountPage() {
           loadingMessage="Loading account beasts..."
         />
 
-        <PaginationControls
-          page={page}
-          totalPages={totalPages}
-          disablePrevious={page === 1 || loading}
-          disableNext={loading || isLastPage}
-          loading={loading}
-          onRefresh={reload}
-          onPrevious={() => setPage((prev) => Math.max(prev - 1, 1))}
-          onNext={() => {
-            if (!loading && hasMore) {
-              setPage((prev) => prev + 1);
-            }
-          }}
-        />
+        {/* Pagination */}
+        <div className="flex justify-center pb-4">
+          <PaginationControls
+            page={page}
+            totalPages={totalPages}
+            disablePrevious={page === 1 || loading}
+            disableNext={loading || isLastPage}
+            loading={loading}
+            onRefresh={reload}
+            onPrevious={() => setPage((prev) => Math.max(prev - 1, 1))}
+            onNext={() => {
+              if (!loading && hasMore) {
+                setPage((prev) => prev + 1);
+              }
+            }}
+          />
+        </div>
 
+        {/* Beast Modal */}
         <BeastModal
           beast={selectedBeast}
           ownerUsernames={ownerUsernames}

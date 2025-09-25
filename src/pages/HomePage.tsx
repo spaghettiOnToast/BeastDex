@@ -7,6 +7,7 @@ import BeastGrid from "../components/beast/BeastGrid";
 import BeastModal from "../components/beast/BeastModal";
 import PaginationControls from "../components/pagination/PaginationControls";
 import { FiltersButton } from "../components/filters/FiltersButton";
+import { FiltersDrawer } from "../components/filters/FiltersDrawer";
 import { AppLayout } from "../components/layout/AppLayout";
 import { useBeasts } from "../hooks/useBeasts";
 import {
@@ -44,6 +45,7 @@ function HomePage() {
   const [highlightsError, setHighlightsError] = useState<string | null>(null);
   const [selectedBeast, setSelectedBeast] = useState<Beast | null>(null);
   const [sortOption, setSortOption] = useState<"default" | "beast">("default");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [searchParams] = useSearchParams();
 
   const { beasts, loading, error, reload, total } = useBeasts({
@@ -166,6 +168,14 @@ function HomePage() {
     setSelectedBeast(null);
   }, []);
 
+  const handleOpenFilters = useCallback(() => {
+    setFiltersOpen(true);
+  }, []);
+
+  const handleCloseFilters = useCallback(() => {
+    setFiltersOpen(false);
+  }, []);
+
   const handleFilterChange = useCallback((trait: string, value: string) => {
     setPage(1);
     setAttributeFilters((prev) => {
@@ -252,13 +262,8 @@ function HomePage() {
 
   const filtersControl = (
     <FiltersButton
-      availableFilters={availableFilters}
       attributeFilters={attributeFilters}
-      filtersLoading={filtersLoading}
-      filtersError={filtersError}
-      onFilterChange={handleFilterChange}
-      onBooleanFilterToggle={handleBooleanFilterToggle}
-      onResetFilters={handleResetFilters}
+      onClick={handleOpenFilters}
     />
   );
 
@@ -327,6 +332,17 @@ function HomePage() {
           onClose={handleCloseModal}
         />
       </div>
+      <FiltersDrawer
+        open={filtersOpen}
+        onClose={handleCloseFilters}
+        availableFilters={availableFilters}
+        attributeFilters={attributeFilters}
+        filtersLoading={filtersLoading}
+        filtersError={filtersError}
+        onFilterChange={handleFilterChange}
+        onBooleanFilterToggle={handleBooleanFilterToggle}
+        onResetFilters={handleResetFilters}
+      />
     </AppLayout>
   );
 }

@@ -2,6 +2,11 @@ import { type ReactNode } from "react";
 import CompletionTracker from "../CompletionTracker";
 import StatsCarousel from "../StatsCarousel";
 import { TOTAL_BEAST_SUPPLY } from "../../services/beast";
+import { Card, CardContent } from "../ui/card";
+import { Button } from "../ui/button";
+import { Alert, AlertDescription } from "../ui/alert";
+import { Separator } from "../ui/separator";
+import { RefreshCw } from "lucide-react";
 
 type HighlightItem = {
   title: string;
@@ -34,54 +39,68 @@ export function StatsPanel({
   filtersControl,
 }: StatsPanelProps) {
   return (
-    <div className="flex flex-col gap-4">
-      {/* Top row with completion tracker and refresh */}
-      <div className="flex flex-wrap items-center justify-between gap-4 text-[11px] text-gray-400">
-        <div className="flex flex-col gap-1">
-          <CompletionTracker
-            owned={mintedCount}
-            total={TOTAL_BEAST_SUPPLY}
-            loading={mintedLoading}
-            error={mintedError}
-            align="left"
-            className="mb-0"
-            uniqueOwners={uniqueOwners}
-          />
-          {!mintedLoading && mintedError ? (
-            <span className="text-red-400">{mintedError}</span>
-          ) : null}
+    <Card className="backdrop-blur-sm bg-card/50 border-muted/50 shadow-2xl overflow-hidden">
+      <CardContent className="p-0">
+        <div className="flex flex-col">
+          {/* Top section with gradient background */}
+          <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-col gap-2">
+                <CompletionTracker
+                  owned={mintedCount}
+                  total={TOTAL_BEAST_SUPPLY}
+                  loading={mintedLoading}
+                  error={mintedError}
+                  align="left"
+                  className="mb-0"
+                  uniqueOwners={uniqueOwners}
+                />
+                {!mintedLoading && mintedError ? (
+                  <Alert variant="destructive" className="py-1.5 px-3 bg-destructive/10 border-destructive/30">
+                    <AlertDescription className="text-xs font-medium">{mintedError}</AlertDescription>
+                  </Alert>
+                ) : null}
+              </div>
+
+              <Button
+                onClick={onRefresh}
+                disabled={refreshing}
+                variant="ghost"
+                size="default"
+                className="hover:bg-primary/10 font-semibold"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </Button>
+            </div>
+          </div>
+
+          <Separator className="opacity-50" />
+
+          {/* Bottom section with carousel and filters */}
+          <div className="p-6 bg-gradient-to-b from-background/50 to-background">
+            <div className="flex items-center gap-4">
+              <div className="flex-1 overflow-hidden">
+                <StatsCarousel
+                  items={highlightItems}
+                  loading={highlightsLoading}
+                />
+              </div>
+              {filtersControl ? (
+                <div className="shrink-0">{filtersControl}</div>
+              ) : null}
+            </div>
+
+            {/* Error display */}
+            {highlightsError ? (
+              <Alert variant="destructive" className="mt-4 bg-destructive/10 border-destructive/30">
+                <AlertDescription className="font-medium">{highlightsError}</AlertDescription>
+              </Alert>
+            ) : null}
+          </div>
         </div>
-
-        <button
-          onClick={onRefresh}
-          disabled={refreshing}
-          className="px-3 py-1.5 bg-lsGold text-black font-roboto rounded-md hover:opacity-80 flex items-center space-x-2 disabled:opacity-50"
-        >
-          {refreshing ? (
-            <span className="animate-spin h-3 w-3 border-2 border-black border-t-transparent rounded-full"></span>
-          ) : null}
-          <span className="text-xs uppercase">Refresh</span>
-        </button>
-      </div>
-
-      {/* Full-width carousel with filters on the right */}
-      <div className="flex items-center gap-4">
-        <div className="flex-1">
-          <StatsCarousel
-            items={highlightItems}
-            loading={highlightsLoading}
-          />
-        </div>
-        {filtersControl ? (
-          <div className="shrink-0">{filtersControl}</div>
-        ) : null}
-      </div>
-
-      {/* Error display */}
-      {highlightsError ? (
-        <span className="text-xs text-red-400">{highlightsError}</span>
-      ) : null}
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 

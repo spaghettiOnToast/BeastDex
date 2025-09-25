@@ -2,6 +2,9 @@ import { memo } from "react";
 import { Link } from "react-router-dom";
 import type { Beast } from "../services/beast";
 import { LazyImage } from "./ui/LazyImage";
+import { Card, CardContent, CardFooter } from "./ui/card";
+import { Badge } from "./ui/badge";
+import { cn } from "@/lib/utils";
 
 type Props = {
   beast: Beast;
@@ -26,11 +29,11 @@ const BeastCard = memo(function BeastCard({
 
   const renderOwner = () => {
     if (missing) {
-      return <span>{overlayLabel}</span>;
+      return <Badge variant="secondary" className="text-xs font-normal w-full justify-center">{overlayLabel}</Badge>;
     }
 
     if (!owned || !owner) {
-      return <span>Not Owned</span>;
+      return <Badge variant="outline" className="text-xs font-normal w-full justify-center">Unowned</Badge>;
     }
 
     const address = owner.toLowerCase();
@@ -42,56 +45,62 @@ const BeastCard = memo(function BeastCard({
       : address;
 
     return (
-      <span>
-        Owned by{" "}
+      <div className="flex items-center justify-center gap-1 text-xs">
+        <span className="text-muted-foreground text-xs">Owner:</span>
         <Link
           to={`/account/${encodeURIComponent(accountIdentifier)}`}
-          className="text-lsGold hover:underline"
+          className="text-primary hover:text-primary/80 font-medium underline underline-offset-2 decoration-primary/50 hover:decoration-primary transition-all truncate text-xs"
           onClick={(event) => event.stopPropagation()}
         >
           {label}
         </Link>
-      </span>
+      </div>
     );
   };
 
   return (
-    <button
-      type="button"
+    <Card
+      className={cn(
+        "w-full max-w-[280px] overflow-hidden cursor-pointer transition-all duration-300 group border-0 ring-0 hover:ring-0",
+        "hover:shadow-2xl hover:-translate-y-1",
+        "bg-card/50 backdrop-blur-sm",
+        missing && "opacity-50 cursor-not-allowed",
+        disabled && "pointer-events-none opacity-50"
+      )}
       onClick={() => {
         if (!disabled && !missing) {
           onSelect?.(beast);
         }
       }}
-      disabled={disabled || missing}
-      className="w-56 flex flex-col items-center focus:outline-none"
     >
-      <div className={`relative bg-black rounded-lg overflow-hidden shadow-lg w-full h-80 border border-gray-800 transition ${missing ? "border-dashed border-gray-700" : "hover:border-lsGreen"}`}>
-        {image ? (
-          <LazyImage
-            src={image}
-            alt={name}
-            className="object-contain w-full h-full"
-            placeholder="No image"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-gray-600 text-sm">
-            No image
-          </div>
-        )}
-        {missing ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/70">
-            <span className="rounded-full border border-lsGold/40 bg-black/60 px-3 py-1 text-xs uppercase tracking-widest text-gray-200">
-              {overlayLabel}
-            </span>
-          </div>
-        ) : null}
-      </div>
-      <div className="mt-2 text-center">
-        <p className="font-bold text-lsGold text-sm truncate">{name}</p>
-        <p className="text-xs text-gray-400">{renderOwner()}</p>
-      </div>
-    </button>
+      <CardContent className="p-0">
+        <div className="relative aspect-square bg-gradient-to-br from-secondary/20 to-background rounded-t-lg overflow-hidden">
+          {image ? (
+            <LazyImage
+              src={image}
+              alt={name}
+              className="object-contain w-full h-full"
+              placeholder="No image"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-muted-foreground text-sm">
+              No image
+            </div>
+          )}
+          {missing && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/90 backdrop-blur-sm">
+              <Badge variant="outline" className="px-4 py-1.5 text-xs font-semibold uppercase tracking-widest border-2">
+                {overlayLabel}
+              </Badge>
+            </div>
+          )}
+        </div>
+      </CardContent>
+      <CardFooter className="flex flex-col items-center gap-1.5 px-0 py-3 bg-gradient-to-b from-background/50 to-background">
+        <p className="font-medium text-sm truncate w-full text-center">{name}</p>
+        <div className="w-full text-center">{renderOwner()}</div>
+      </CardFooter>
+    </Card>
   );
 });
 

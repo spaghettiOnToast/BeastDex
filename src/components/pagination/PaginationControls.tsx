@@ -1,5 +1,7 @@
 import { RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "../ui/button";
+import { Card } from "../ui/card";
+import { Badge } from "../ui/badge";
 
 type PaginationControlsProps = {
   page: number;
@@ -23,43 +25,45 @@ export function PaginationControls({
   onNext,
 }: PaginationControlsProps) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-      <Button
-        onClick={onRefresh}
-        disabled={loading}
-        className="self-start sm:self-auto bg-lsGold text-black font-roboto hover:bg-lsGold/80 disabled:opacity-50"
-      >
-        {loading ? (
-          <RefreshCw className="h-4 w-4 animate-spin" />
-        ) : (
-          <RefreshCw className="h-4 w-4" />
-        )}
-        <span>{loading ? "Refreshing..." : "Refresh"}</span>
-      </Button>
-      <div className="flex items-center gap-3">
+    <Card className="p-3 sm:p-4 backdrop-blur-sm bg-card/50 border-muted/50 shadow-lg">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <Button
-          variant="outline"
+          onClick={onRefresh}
+          disabled={loading}
+          variant="ghost"
           size="sm"
-          onClick={onPrevious}
-          disabled={disablePrevious}
-          className="text-xs uppercase tracking-wide border-gray-700 text-gray-300 hover:border-lsGreen hover:text-gray-100 disabled:opacity-40"
+          className="hover:bg-muted/50"
         >
-          <ChevronLeft className="h-3 w-3" />
-          Previous
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          <span className="font-medium">{loading ? "Refreshing..." : "Refresh"}</span>
         </Button>
-        <span className="text-xs text-gray-500 px-2">Page {page} of {totalPages}</span>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onNext}
-          disabled={disableNext}
-          className="text-xs uppercase tracking-wide border-gray-700 text-gray-300 hover:border-lsGreen hover:text-gray-100 disabled:opacity-40"
-        >
-          Next
-          <ChevronRight className="h-3 w-3" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onPrevious}
+            disabled={disablePrevious}
+            className="h-9 w-9 hover:bg-muted/50"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="px-4 py-1.5 rounded-md bg-muted/50 border border-border/50">
+            <span className="text-sm font-medium">
+              {page} / {totalPages}
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onNext}
+            disabled={disableNext}
+            className="h-9 w-9 hover:bg-muted/50"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
