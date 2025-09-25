@@ -59,9 +59,6 @@ export function HighlightsTile({
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
-          🌟 Highlights
-        </h3>
         <Separator className="flex-1 opacity-50" />
       </div>
 
@@ -79,8 +76,10 @@ export function HighlightsTile({
                 </p>
               </div>
               <div className="flex-1 flex items-center justify-center">
-                <p className={`text-sm font-bold ${card.textColor} text-center leading-tight break-words px-1`} 
-                   title={card.value}>
+                <p
+                  className={`text-sm font-bold ${card.textColor} text-center leading-tight break-words px-1`}
+                  title={card.value}
+                >
                   {card.value}
                 </p>
               </div>

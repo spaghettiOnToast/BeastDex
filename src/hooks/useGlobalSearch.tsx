@@ -4,6 +4,14 @@ import { normaliseStarknetAddress } from "../utils/address";
 import { lookupControllerAddresses } from "../services/controller";
 import { config } from "../config";
 
+function isValidHexAddress(value: string): boolean {
+  if (!value.startsWith("0x") || value.length < 3) {
+    return false;
+  }
+  const hexPart = value.slice(2);
+  return /^[0-9a-fA-F]+$/.test(hexPart);
+}
+
 interface GlobalSearchContextType {
   searchValue: string;
   setSearchValue: (value: string) => void;
@@ -26,6 +34,8 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
 
     setIsSearching(true);
     try {
+      // Clear search value after successful search like normal search bars
+      setSearchValue("");
       // Check if it's a numeric ID (beast search)
       const numericId = Number.parseInt(searchQuery, 10);
       if (!Number.isNaN(numericId) && searchQuery === String(numericId)) {
@@ -33,9 +43,9 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Check if it's a Starknet address
+      // Check if it's a valid Starknet address (must be hex after 0x)
       const normalizedAddress = normaliseStarknetAddress(searchQuery);
-      if (normalizedAddress && normalizedAddress.startsWith("0x")) {
+      if (normalizedAddress && normalizedAddress.startsWith("0x") && isValidHexAddress(searchQuery)) {
         navigate(`/account/${encodeURIComponent(normalizedAddress)}`);
         return;
       }

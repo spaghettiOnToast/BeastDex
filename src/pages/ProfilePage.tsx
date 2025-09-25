@@ -241,7 +241,7 @@ function ProfilePage() {
         <div className="flex flex-col items-center text-center text-xs text-gray-400">
           {displayTitle ? (
             <p className="bg-gradient-to-r from-[#ff7cf7] via-[#7dfbff] to-[#8bff72] bg-clip-text text-3xl font-semibold uppercase tracking-[0.35em] text-transparent">
-              {displayTitle}
+              "{displayTitle}"
             </p>
           ) : null}
           <span
@@ -289,14 +289,13 @@ function ProfilePage() {
           </Link>
         </div>
 
-        {/* Overview cards */}
-        <OverviewCards cards={overviewCards} />
-
         {/* Collection + Highlights */}
         <div className="grid gap-4 sm:grid-cols-2">
           <BeastCollectionTile {...stats} />
           <HighlightsTile {...stats} />
         </div>
+        {/* Overview cards */}
+        <OverviewCards cards={overviewCards} />
 
         {/* Status + errors */}
         {usernamesLoading ? (

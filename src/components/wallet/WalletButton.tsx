@@ -86,7 +86,7 @@ export function WalletButton() {
             console.error("Failed to connect Starknet wallet", error);
           }
         }}
-        className="ml-auto text-xs font-semibold uppercase tracking-wide border-lsGold text-lsGold hover:bg-gray-900 hover:text-lsGold"
+        className="ml-auto text-xs font-semibold uppercase tracking-wide border-lsGold text-lsGold hover:bg-gray-900 hover:text-lsGold min-w-[140px] h-10"
       >
         <Wallet className="h-4 w-4" />
         Connect Wallet
@@ -97,11 +97,11 @@ export function WalletButton() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button className="ml-auto bg-[#fbcb4a] text-black text-xs font-semibold uppercase tracking-wide hover:bg-[#f0b833] hover:text-black">
+        <Button className="ml-auto bg-[#fbcb4a] text-black text-xs font-semibold uppercase tracking-wide hover:bg-[#f0b833] hover:text-black min-w-[140px] h-10">
           <span className="inline-flex h-4 w-4 items-center justify-center">
             <img src={controllerIcon} alt="Controller" className="h-4 w-4" />
           </span>
-          <span>{username}</span>
+          <span className="truncate max-w-[80px]">{username}</span>
           <ChevronDown className="h-3 w-3 text-gray-700" />
         </Button>
       </DropdownMenuTrigger>

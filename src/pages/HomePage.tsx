@@ -276,61 +276,60 @@ function HomePage() {
 
   return (
     <AppLayout topBar={topBar}>
-      <div className="space-y-6">
-        <StatsPanel
-          mintedCount={beastStats?.mintedCount || 0}
-          uniqueOwners={beastStats?.uniqueOwners || 0}
-          mintedLoading={mintedLoading}
-          mintedError={mintedError}
-          highlightItems={highlightItems}
-          highlightsLoading={highlightsLoading}
-          highlightsError={highlightsError}
-          onRefresh={() => reload()}
-          refreshing={loading}
-          filtersControl={filtersAndSortControls}
-        />
+      <StatsPanel
+        mintedCount={beastStats?.mintedCount || 0}
+        uniqueOwners={beastStats?.uniqueOwners || 0}
+        mintedLoading={mintedLoading}
+        mintedError={mintedError}
+        highlightItems={highlightItems}
+        highlightsLoading={highlightsLoading}
+        highlightsError={highlightsError}
+        onRefresh={() => reload()}
+        refreshing={loading}
+        filtersControl={filtersAndSortControls}
+      />
 
-        <BeastGrid
-          beasts={beasts}
-          ownerUsernames={ownerUsernames}
-          onSelect={handleSelectBeast}
-          loading={loading}
-          emptyMessage={config.ui.emptyMessages.beasts}
-        />
+      <BeastGrid
+        beasts={beasts}
+        ownerUsernames={ownerUsernames}
+        onSelect={handleSelectBeast}
+        loading={loading}
+        emptyMessage={config.ui.emptyMessages.beasts}
+      />
 
-        {error && (
-          <div className="text-center text-red-400">
-            <p>❌ {error}</p>
-            <button
-              onClick={() => reload()}
-              type="button"
-              className="mt-2 text-lsGold hover:underline"
-            >
-              Try again
-            </button>
-          </div>
-        )}
-
-        {/* Pagination at bottom */}
-        <div className="flex justify-center">
-          <PaginationControls
-            page={page}
-            totalPages={Math.ceil((total || 0) / PAGE_SIZE)}
-            disablePrevious={page <= 1}
-            disableNext={page >= Math.ceil((total || 0) / PAGE_SIZE)}
-            loading={loading}
-            onRefresh={() => reload()}
-            onPrevious={() => setPage((prev) => Math.max(1, prev - 1))}
-            onNext={() => setPage((prev) => prev + 1)}
-          />
+      {error && (
+        <div className="text-center text-red-400">
+          <p>❌ {error}</p>
+          <button
+            onClick={() => reload()}
+            type="button"
+            className="mt-2 text-lsGold hover:underline"
+          >
+            Try again
+          </button>
         </div>
+      )}
 
-        <BeastModal
-          beast={selectedBeast}
-          ownerUsernames={ownerUsernames}
-          onClose={handleCloseModal}
+      {/* Pagination at bottom */}
+      <div className="flex justify-center">
+        <PaginationControls
+          page={page}
+          totalPages={Math.ceil((total || 0) / PAGE_SIZE)}
+          disablePrevious={page <= 1}
+          disableNext={page >= Math.ceil((total || 0) / PAGE_SIZE)}
+          loading={loading}
+          onRefresh={() => reload()}
+          onPrevious={() => setPage((prev) => Math.max(1, prev - 1))}
+          onNext={() => setPage((prev) => prev + 1)}
         />
       </div>
+
+      <BeastModal
+        beast={selectedBeast}
+        ownerUsernames={ownerUsernames}
+        onClose={handleCloseModal}
+      />
+
       <FiltersDrawer
         open={filtersOpen}
         onClose={handleCloseFilters}

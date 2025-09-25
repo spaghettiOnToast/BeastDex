@@ -39,6 +39,14 @@ import {
 } from "../utils/beastCollection";
 import { normaliseStarknetAddress } from "../utils/address";
 
+function isValidHexAddress(value: string): boolean {
+  if (!value.startsWith("0x") || value.length < 3) {
+    return false;
+  }
+  const hexPart = value.slice(2);
+  return /^[0-9a-fA-F]+$/.test(hexPart);
+}
+
 const PAGE_SIZE = 50;
 
 function AccountPage() {
@@ -75,7 +83,7 @@ function AccountPage() {
   const initialAddressCandidate = useMemo(() => {
     if (!trimmedIdentifier) return "";
     const normalised = normaliseStarknetAddress(trimmedIdentifier);
-    if (normalised && normalised.startsWith("0x")) {
+    if (normalised && normalised.startsWith("0x") && isValidHexAddress(trimmedIdentifier)) {
       return normalised;
     }
     return "";
@@ -225,7 +233,6 @@ function AccountPage() {
       cancelled = true;
     };
   }, []);
-
 
   const handleFilterChange = useCallback((trait: string, value: string) => {
     setPage(1);
@@ -519,7 +526,7 @@ function AccountPage() {
             <div className="flex flex-col items-start space-y-2">
               {mostPowerfulTitle ? (
                 <div className="bg-gradient-to-r from-pink-500 via-cyan-400 to-green-400 bg-clip-text text-lg md:text-xl font-bold uppercase tracking-wider text-transparent">
-                  {mostPowerfulTitle}
+                  "{mostPowerfulTitle}"
                 </div>
               ) : null}
               <div className="space-y-1">
@@ -533,8 +540,11 @@ function AccountPage() {
                 </h1>
                 {usernamesError ? (
                   <p className="text-xs text-destructive">{usernamesError}</p>
-                ) : usernamesLoading && Object.keys(ownerUsernames).length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Loading usernames...</p>
+                ) : usernamesLoading &&
+                  Object.keys(ownerUsernames).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Loading usernames...
+                  </p>
                 ) : null}
               </div>
             </div>
@@ -544,7 +554,9 @@ function AccountPage() {
               <div className="flex items-center gap-2">
                 {collectionRouteIdentifier ? (
                   <Link
-                    to={`/collection/${encodeURIComponent(collectionRouteIdentifier)}`}
+                    to={`/collection/${encodeURIComponent(
+                      collectionRouteIdentifier
+                    )}`}
                     className="inline-flex items-center px-3 py-1.5 text-sm font-medium bg-primary/10 text-primary border border-primary/20 rounded-md hover:bg-primary/20 transition-colors"
                   >
                     View Collection
@@ -576,7 +588,9 @@ function AccountPage() {
         {/* Error Display */}
         {identifierError ? (
           <div className="text-center p-2 bg-destructive/10 border border-destructive/20 rounded-md">
-            <p className="text-sm font-medium text-destructive">{identifierError}</p>
+            <p className="text-sm font-medium text-destructive">
+              {identifierError}
+            </p>
           </div>
         ) : null}
 
@@ -592,7 +606,9 @@ function AccountPage() {
         {/* Summary Error */}
         {summaryError ? (
           <div className="p-2 bg-destructive/10 border border-destructive/20 rounded-md">
-            <p className="text-xs font-medium text-destructive">❌ {summaryError}</p>
+            <p className="text-xs font-medium text-destructive">
+              ❌ {summaryError}
+            </p>
           </div>
         ) : null}
 

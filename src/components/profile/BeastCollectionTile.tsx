@@ -11,10 +11,12 @@ const shimmerStyles = `
 `;
 
 // Inject styles
-if (typeof document !== 'undefined') {
-  const styleElement = document.getElementById('shimmer-styles') || document.createElement('style');
-  if (!document.getElementById('shimmer-styles')) {
-    styleElement.id = 'shimmer-styles';
+if (typeof document !== "undefined") {
+  const styleElement =
+    document.getElementById("shimmer-styles") ||
+    document.createElement("style");
+  if (!document.getElementById("shimmer-styles")) {
+    styleElement.id = "shimmer-styles";
     styleElement.textContent = shimmerStyles;
     document.head.appendChild(styleElement);
   }
@@ -65,10 +67,12 @@ export function BeastCollectionTile({
       mainValue: `${animatedShinyCount}`,
       subValue: `${uniqueAnimatedShinyTypes} types`,
       color: "rgb(236, 72, 153)",
-      bgGradient: "bg-gradient-to-br from-pink-500/15 via-purple-500/10 to-blue-500/5 animate-pulse",
+      bgGradient:
+        "bg-gradient-to-br from-pink-500/15 via-purple-500/10 to-blue-500/5 animate-pulse",
       borderColor: "border-pink-400/30",
       icon: "✨",
-      glisten: "before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-white/10 before:to-transparent before:translate-x-[-200%] before:animate-[shimmer_3s_ease-in-out_infinite] before:skew-x-12",
+      glisten:
+        "before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-white/10 before:to-transparent before:translate-x-[-200%] before:animate-[shimmer_3s_ease-in-out_infinite] before:skew-x-12",
     },
     {
       key: "animated",
@@ -81,7 +85,8 @@ export function BeastCollectionTile({
       bgGradient: "bg-gradient-to-br from-sky-500/15 to-sky-500/5",
       borderColor: "border-sky-400/30",
       icon: "⚡",
-      glisten: "before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-cyan-400/20 before:to-transparent before:translate-x-[-200%] before:animate-[shimmer_2.5s_ease-in-out_infinite_1s] before:skew-x-12",
+      glisten:
+        "before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-cyan-400/20 before:to-transparent before:translate-x-[-200%] before:animate-[shimmer_2.5s_ease-in-out_infinite_1s] before:skew-x-12",
     },
     {
       key: "shiny",
@@ -94,7 +99,8 @@ export function BeastCollectionTile({
       bgGradient: "bg-gradient-to-br from-yellow-500/15 to-yellow-500/5",
       borderColor: "border-yellow-400/30",
       icon: "⭐",
-      glisten: "before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-yellow-300/30 before:to-transparent before:translate-x-[-200%] before:animate-[shimmer_2s_ease-in-out_infinite_0.5s] before:skew-x-12",
+      glisten:
+        "before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-yellow-300/30 before:to-transparent before:translate-x-[-200%] before:animate-[shimmer_2s_ease-in-out_infinite_0.5s] before:skew-x-12",
     },
     {
       key: "standard",
@@ -114,12 +120,12 @@ export function BeastCollectionTile({
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
+        {/* <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
           🏛️ Beast Collection
-        </h3>
+        </h3> */}
         <Separator className="flex-1 opacity-50" />
       </div>
-      
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {cards.map((card) => (
           <Card
@@ -134,7 +140,10 @@ export function BeastCollectionTile({
                 </p>
               </div>
               <div className="flex-1 flex flex-col justify-center text-center space-y-1">
-                <p className="text-lg font-bold leading-none" style={{ color: card.color }}>
+                <p
+                  className="text-lg font-bold leading-none"
+                  style={{ color: card.color }}
+                >
                   {card.mainValue}
                 </p>
                 <p className="text-xs text-muted-foreground leading-none">

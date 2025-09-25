@@ -38,31 +38,47 @@ export function StatsPanel({
   filtersControl,
 }: StatsPanelProps) {
   return (
-    <Card className="backdrop-blur-sm bg-card/50 border-muted/50 shadow-2xl overflow-hidden">
+    <Card className="backdrop-blur-md bg-card/60 border-0 shadow-lg overflow-hidden mb-6">
       <CardContent className="p-0">
-        <div className="flex flex-col gap-0">
-          {/* Top section: completion + carousel in same row */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-6 p-6 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
-            {/* Completion shrinks to fit */}
-            <div className="shrink-0">
+        <div className="flex flex-col">
+          {/* Top row: Carousel | Centered Completion | Controls */}
+          <div className="relative flex items-center px-2 py-2 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent min-h-[90px]">
+            {/* Left: Carousel (narrower) */}
+            <div className="order-1 max-w-sm flex-shrink">
+              <StatsCarousel
+                items={highlightItems}
+                loading={highlightsLoading}
+              />
+            </div>
+
+            {/* Center: Completion Tracker (absolutely centered, bigger) */}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 scale-110">
               <CompletionTracker
                 owned={mintedCount}
                 total={TOTAL_BEAST_SUPPLY}
                 loading={mintedLoading}
                 error={mintedError}
-                align="left"
-                className="mb-0"
+                align="center"
+                className="mt-12"
                 uniqueOwners={uniqueOwners}
               />
             </div>
 
-            {/* Carousel takes the rest of the row */}
-            <div className="flex-1 w-full">
-              <StatsCarousel
-                items={highlightItems}
-                loading={highlightsLoading}
-                className="w-full"
-              />
+            {/* Right: Controls */}
+            <div className="flex items-center gap-2 order-3 shrink-0 ml-auto">
+              <Button
+                onClick={onRefresh}
+                disabled={refreshing}
+                variant="ghost"
+                size="sm"
+                className="hover:bg-primary/10 font-semibold"
+              >
+                <RefreshCw
+                  className={`h-4 w-4 mr-1 ${refreshing ? "animate-spin" : ""}`}
+                />
+                Refresh
+              </Button>
+              {filtersControl ? <div>{filtersControl}</div> : null}
             </div>
           </div>
 
@@ -70,7 +86,7 @@ export function StatsPanel({
           {!mintedLoading && mintedError ? (
             <Alert
               variant="destructive"
-              className="mx-6 mt-2 mb-0 bg-destructive/10 border-destructive/30"
+              className="mx-4 mt-2 bg-destructive/10 border-destructive/30"
             >
               <AlertDescription className="text-xs font-medium">
                 {mintedError}
@@ -78,30 +94,11 @@ export function StatsPanel({
             </Alert>
           ) : null}
 
-          {/* Bottom controls row: Refresh + Filters */}
-          <div className="flex items-center justify-end gap-3 p-4 bg-gradient-to-b from-background/50 to-background">
-            <Button
-              onClick={onRefresh}
-              disabled={refreshing}
-              variant="ghost"
-              size="sm"
-              className="hover:bg-primary/10 font-semibold"
-            >
-              <RefreshCw
-                className={`h-4 w-4 mr-1 ${refreshing ? "animate-spin" : ""}`}
-              />
-              Refresh
-            </Button>
-            {filtersControl ? (
-              <div className="shrink-0">{filtersControl}</div>
-            ) : null}
-          </div>
-
           {/* Error display for highlights */}
           {highlightsError ? (
             <Alert
               variant="destructive"
-              className="mx-6 mb-4 bg-destructive/10 border-destructive/30"
+              className="mx-4 mb-3 bg-destructive/10 border-destructive/30"
             >
               <AlertDescription className="font-medium">
                 {highlightsError}

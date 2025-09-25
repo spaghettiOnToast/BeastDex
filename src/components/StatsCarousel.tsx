@@ -53,7 +53,7 @@ export default function StatsCarousel({
 
   return (
     <div
-      className={`flex items-center gap-4 text-xs md:text-sm text-gray-300 w-full px-4 py-3 rounded-xl border border-gray-800/60 bg-gradient-to-r from-pink-400/40 via-cyan-400/40 to-lime-400/40
+      className={`flex items-center gap-2 text-xs md:text-sm text-gray-300 w-full px-2 py-2 rounded-xl border border-gray-800/60 bg-gradient-to-r from-pink-400/40 via-cyan-400/40 to-lime-400/40
  backdrop-blur-sm ${className}`.trim()}
     >
       <span className="h-2.5 w-2.5 rounded-full bg-[#39ff14] shadow-[0_0_6px_#39ff14] animate-pulse" />

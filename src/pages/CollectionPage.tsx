@@ -671,8 +671,7 @@ function CollectionPage() {
           id: `${key}-shiny`,
           label,
           beast:
-            shinyOwned ??
-            findBestPlaceholder(key, sampleCategoryMaps, catalog),
+            shinyOwned ?? findBestPlaceholder(key, sampleCategoryMaps, catalog),
           missing: !shinyOwned,
           ownerUsername: resolveOwnerUsername(shinyOwned),
         });
@@ -711,8 +710,7 @@ function CollectionPage() {
           id: `${key}-all`,
           label,
           beast:
-            anyOwned ??
-            findBestPlaceholder(key, sampleCategoryMaps, catalog),
+            anyOwned ?? findBestPlaceholder(key, sampleCategoryMaps, catalog),
           missing: !anyOwned,
           ownerUsername: resolveOwnerUsername(anyOwned),
         });
@@ -807,7 +805,6 @@ function CollectionPage() {
         </div>
 
         <div className="flex items-center justify-between">
-          {/* Left link */}
           <Link
             to="/"
             className="text-xs uppercase tracking-wide text-lsGold hover:underline"
@@ -815,8 +812,7 @@ function CollectionPage() {
             ← Back to BeastDex
           </Link>
 
-          {/* Right group: Back to Account + Refresh */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 mt-2">
             <Link
               to={`/account/${encodeURIComponent(trimmedIdentifier)}`}
               className="text-xs uppercase tracking-wide text-lsGold hover:underline"
