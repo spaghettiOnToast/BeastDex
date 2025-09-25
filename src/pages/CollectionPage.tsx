@@ -168,6 +168,14 @@ function findBestPlaceholder(
     }
   }
 
+  // If no beast with image found, try any beast as last resort
+  for (const getSource of fallbackSources) {
+    const beast = getSource();
+    if (beast) {
+      return beast;
+    }
+  }
+
   return null;
 }
 
@@ -327,27 +335,24 @@ function CollectionPage() {
 
       if (total > firstBatch.length) {
         const totalPages = Math.ceil(total / limit);
-        const MAX_INITIAL_PAGES = 5;
+        const MAX_INITIAL_PAGES = 2; // Reduced from 5 to 2 for better performance
         const pagesToLoad = Math.min(totalPages, MAX_INITIAL_PAGES);
 
-        const promises = [];
+        // Load pages sequentially instead of all at once to reduce server load
         for (let p = 2; p <= pagesToLoad; p++) {
-          promises.push(
-            fetchBeasts({
+          try {
+            const result = await fetchBeasts({
               limit,
               page: p,
               ownerAddresses: [resolvedAddress],
               sort: "default",
-            })
-          );
-        }
-
-        const results = await Promise.allSettled(promises);
-        results.forEach((res) => {
-          if (res.status === "fulfilled") {
-            accumulated = accumulated.concat(res.value.beasts);
+            });
+            accumulated = accumulated.concat(result.beasts);
+          } catch (error) {
+            console.warn(`Failed to load page ${p}:`, error);
+            // Continue loading other pages even if one fails
           }
-        });
+        }
 
         if (totalPages > MAX_INITIAL_PAGES) {
           setHasMorePages(true);
@@ -518,13 +523,13 @@ function CollectionPage() {
           total > firstBatch.length
         ) {
           const foundCount = Object.keys(sampleRecords).length;
-          const maxPagesToLoad = Math.min(20, Math.ceil(total / limit));
+          const maxPagesToLoad = Math.min(15, Math.ceil(total / limit)); // Increased to ensure we get beasts with images
 
           console.log(
             `Loading catalog: Found ${foundCount}/${desiredCount} beast types, loading up to ${maxPagesToLoad} pages`
           );
 
-          const BATCH_SIZE = 4;
+          const BATCH_SIZE = 3; // Increased to load more beasts with images
           let currentPage = 2;
 
           while (
@@ -597,6 +602,15 @@ function CollectionPage() {
     [ownedBeasts]
   );
 
+  // Pre-compute placeholders for better performance
+  const placeholderCache = useMemo(() => {
+    const cache = new Map<string, Beast | null>();
+    beastTypes.forEach(({ key }) => {
+      cache.set(key, findBestPlaceholder(key, sampleCategoryMaps, catalog));
+    });
+    return cache;
+  }, [beastTypes, sampleCategoryMaps, catalog]);
+
   // Memoize the expensive tabEntries calculation
   const tabEntriesForCategory = useMemo(() => {
     // Pre-calculate commonly used values to avoid repeated work
@@ -607,10 +621,11 @@ function CollectionPage() {
       animatedOwned: categoryMaps.animated.get(key) ?? null,
       shinyOwned: categoryMaps.shiny.get(key) ?? null,
       standardOwned: categoryMaps.standard.get(key) ?? null,
+      placeholder: placeholderCache.get(key) ?? null,
     }));
 
     return precomputedData;
-  }, [beastTypes, categoryMaps]);
+  }, [beastTypes, categoryMaps, placeholderCache]);
 
   // Memoize the username resolver to avoid recreating it
   const resolveOwnerUsername = useCallback(
@@ -648,11 +663,10 @@ function CollectionPage() {
         animatedOwned,
         shinyOwned,
         standardOwned,
+        placeholder,
       }) => {
         // Standard tab
-        const standardPlaceholder =
-          standardOwned ??
-          findBestPlaceholder(key, sampleCategoryMaps, catalog);
+        const standardPlaceholder = standardOwned ?? placeholder;
         if (!standardPlaceholder) {
           console.warn(
             `No placeholder found for beast type: ${key} in standard tab`
@@ -670,8 +684,7 @@ function CollectionPage() {
         entries.shiny.push({
           id: `${key}-shiny`,
           label,
-          beast:
-            shinyOwned ?? findBestPlaceholder(key, sampleCategoryMaps, catalog),
+          beast: shinyOwned ?? placeholder,
           missing: !shinyOwned,
           ownerUsername: resolveOwnerUsername(shinyOwned),
         });
@@ -680,9 +693,7 @@ function CollectionPage() {
         entries.animated.push({
           id: `${key}-animated`,
           label,
-          beast:
-            animatedOwned ??
-            findBestPlaceholder(key, sampleCategoryMaps, catalog),
+          beast: animatedOwned ?? placeholder,
           missing: !animatedOwned,
           ownerUsername: resolveOwnerUsername(animatedOwned),
         });
@@ -691,9 +702,7 @@ function CollectionPage() {
         entries.animatedShiny.push({
           id: `${key}-animatedShiny`,
           label,
-          beast:
-            animatedShinyOwned ??
-            findBestPlaceholder(key, sampleCategoryMaps, catalog),
+          beast: animatedShinyOwned ?? placeholder,
           missing: !animatedShinyOwned,
           ownerUsername: resolveOwnerUsername(animatedShinyOwned),
         });
@@ -709,8 +718,7 @@ function CollectionPage() {
         entries.all.push({
           id: `${key}-all`,
           label,
-          beast:
-            anyOwned ?? findBestPlaceholder(key, sampleCategoryMaps, catalog),
+          beast: anyOwned ?? placeholder,
           missing: !anyOwned,
           ownerUsername: resolveOwnerUsername(anyOwned),
         });
@@ -720,8 +728,6 @@ function CollectionPage() {
     return entries;
   }, [
     tabEntriesForCategory,
-    catalog,
-    sampleCategoryMaps,
     resolveOwnerUsername,
   ]);
 

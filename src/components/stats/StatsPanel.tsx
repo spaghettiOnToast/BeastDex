@@ -44,7 +44,7 @@ export function StatsPanel({
           {/* Top row: Carousel | Centered Completion | Controls */}
           <div className="relative flex items-center px-2 py-2 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent min-h-[90px]">
             {/* Left: Carousel (narrower) */}
-            <div className="order-1 max-w-sm flex-shrink">
+            <div className="order-1 max-w-sm flex-shrink w-full">
               <StatsCarousel
                 items={highlightItems}
                 loading={highlightsLoading}
