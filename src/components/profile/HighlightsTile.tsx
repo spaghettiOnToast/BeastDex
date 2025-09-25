@@ -62,14 +62,14 @@ export function HighlightsTile({
         <Separator className="flex-1 opacity-50" />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2">
         {cards.map((card) => (
           <Card
             key={card.key}
-            className={`${card.bgGradient} ${card.borderColor} backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-md min-h-[90px] flex flex-col`}
+            className={`${card.bgGradient} ${card.borderColor} backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-md min-h-[120px] flex flex-col`}
           >
-            <CardContent className="p-3 flex-1 flex flex-col">
-              <div className="flex items-center gap-1.5 mb-2 min-h-[20px]">
+            <CardContent className="p-4 flex-1 flex flex-col">
+              <div className="flex flex-col items-center text-center gap-1.5 mb-2 min-h-[20px]">
                 <span className="text-sm flex-shrink-0">{card.icon}</span>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium truncate">
                   {card.label}

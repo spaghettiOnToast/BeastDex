@@ -25,17 +25,14 @@ import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { lookupControllerAddresses } from "../services/controller";
 import { getErrorMessage } from "../utils/error";
 import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
-import BeastCollectionTile from "../components/profile/BeastCollectionTile";
-import HighlightsTile from "../components/profile/HighlightsTile";
-import {
-  OverviewCards,
-  type OverviewCard,
-} from "@/components/account/OverviewCards";
+import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
+import type { OverviewCard } from "@/components/account/OverviewCards";
 import {
   calculateKdRatio,
   calculateTotalPower,
   computeBeastCollectionStats,
   EMPTY_BEAST_COLLECTION_STATS,
+  TOTAL_BEAST_VARIETIES,
 } from "../utils/beastCollection";
 import { normaliseStarknetAddress } from "../utils/address";
 
@@ -83,7 +80,11 @@ function AccountPage() {
   const initialAddressCandidate = useMemo(() => {
     if (!trimmedIdentifier) return "";
     const normalised = normaliseStarknetAddress(trimmedIdentifier);
-    if (normalised && normalised.startsWith("0x") && isValidHexAddress(trimmedIdentifier)) {
+    if (
+      normalised &&
+      normalised.startsWith("0x") &&
+      isValidHexAddress(trimmedIdentifier)
+    ) {
       return normalised;
     }
     return "";
@@ -551,7 +552,7 @@ function AccountPage() {
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 {collectionRouteIdentifier ? (
                   <Link
                     to={`/collection/${encodeURIComponent(
@@ -562,6 +563,19 @@ function AccountPage() {
                     View Collection
                   </Link>
                 ) : null}
+                
+                <div className="flex items-center gap-2 text-center">
+                  <span className="text-lg">🏆</span>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                    Total
+                  </p>
+                  <p className="text-lg font-bold text-primary leading-none">
+                    {collectionStats.uniqueBeastTypes}
+                  </p>
+                  <p className="text-xs text-muted-foreground leading-none">
+                    {TOTAL_BEAST_VARIETIES} types
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={handleRefresh}
@@ -594,14 +608,10 @@ function AccountPage() {
           </div>
         ) : null}
 
-        {/* Overview Cards */}
-        <OverviewCards cards={overviewCards} />
-
-        {/* Collection Stats */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          <BeastCollectionTile {...collectionStats} />
-          <HighlightsTile {...collectionStats} />
-        </div>
+        <ThreeColumnStatsLayout
+          collectionStats={collectionStats}
+          overviewCards={overviewCards}
+        />
 
         {/* Summary Error */}
         {summaryError ? (

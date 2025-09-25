@@ -1,6 +1,5 @@
 import { TOTAL_BEAST_VARIETIES } from "../../utils/beastCollection";
 import { Card, CardContent } from "../ui/card";
-import { Separator } from "../ui/separator";
 
 // CSS injection for shimmer animation
 const shimmerStyles = `
@@ -117,23 +116,17 @@ export function BeastCollectionTile({
     },
   ];
 
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        {/* <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
-          🏛️ Beast Collection
-        </h3> */}
-        <Separator className="flex-1 opacity-50" />
-      </div>
+  const otherCards = cards.slice(1);
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {cards.map((card) => (
+  return (
+    <div className="grid gap-3 grid-cols-2">
+      {otherCards.map((card) => (
           <Card
             key={card.key}
             className={`${card.bgGradient} ${card.borderColor} ${card.glisten} backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-md min-h-[90px] flex flex-col relative overflow-hidden`}
           >
             <CardContent className="p-3 flex-1 flex flex-col relative z-10">
-              <div className="flex items-center gap-1.5 mb-2 min-h-[20px]">
+              <div className="flex flex-col items-center text-center gap-1.5 mb-2 min-h-[20px]">
                 <span className="text-sm flex-shrink-0">{card.icon}</span>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium truncate">
                   {card.label}
@@ -153,7 +146,6 @@ export function BeastCollectionTile({
             </CardContent>
           </Card>
         ))}
-      </div>
     </div>
   );
 }

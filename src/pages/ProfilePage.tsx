@@ -20,12 +20,8 @@ import {
 } from "../utils/beastCollection";
 import { normaliseStarknetAddress } from "../utils/address";
 
-import {
-  OverviewCards,
-  type OverviewCard,
-} from "@/components/account/OverviewCards";
-import BeastCollectionTile from "../components/profile/BeastCollectionTile";
-import HighlightsTile from "../components/profile/HighlightsTile";
+import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
+import type { OverviewCard } from "@/components/account/OverviewCards";
 
 const PAGE_SIZE = 50;
 
@@ -289,13 +285,11 @@ function ProfilePage() {
           </Link>
         </div>
 
-        {/* Collection + Highlights */}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <BeastCollectionTile {...stats} />
-          <HighlightsTile {...stats} />
-        </div>
-        {/* Overview cards */}
-        <OverviewCards cards={overviewCards} />
+        {/* Three Column Stats Layout */}
+        <ThreeColumnStatsLayout
+          collectionStats={stats}
+          overviewCards={overviewCards}
+        />
 
         {/* Status + errors */}
         {usernamesLoading ? (
