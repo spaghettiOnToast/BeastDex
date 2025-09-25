@@ -18,7 +18,7 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
   const [searchValue, setSearchValue] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const navigate = useNavigate();
-  const debounceTimeoutRef = useRef<NodeJS.Timeout>();
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleSearch = useCallback(async (query?: string) => {
     const searchQuery = (query ?? searchValue).trim();

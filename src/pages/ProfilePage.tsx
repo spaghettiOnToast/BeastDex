@@ -313,7 +313,6 @@ function ProfilePage() {
           onSelect={(beast) => setSelectedBeastId(beast.id)}
           loading={loading}
           emptyMessage="No beasts collected yet."
-          loadingMessage="Loading your beasts..."
         />
 
         {/* Modal */}

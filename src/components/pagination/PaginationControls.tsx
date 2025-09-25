@@ -1,7 +1,6 @@
 import { RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
-import { Badge } from "../ui/badge";
 
 type PaginationControlsProps = {
   page: number;

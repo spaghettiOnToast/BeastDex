@@ -35,7 +35,7 @@ function HomePage() {
     useState<BeastAttributeFilters>({});
   const [filtersLoading, setFiltersLoading] = useState(true);
   const [filtersError, setFiltersError] = useState<string | null>(null);
-  const [ownerAddressFilters, setOwnerAddressFilters] = useState<string[]>([]);
+  const [ownerAddressFilters] = useState<string[]>([]);
   const [beastStats, setBeastStats] = useState<BeastStats | null>(null);
   const [mintedLoading, setMintedLoading] = useState(true);
   const [mintedError, setMintedError] = useState<string | null>(null);
@@ -296,7 +296,6 @@ function HomePage() {
           onSelect={handleSelectBeast}
           loading={loading}
           emptyMessage={config.ui.emptyMessages.beasts}
-          loadingMessage={config.ui.loadingMessages.beasts}
         />
 
         {error && (

@@ -7,7 +7,6 @@ type ProfileStatsProps = {
   shinyCount: number;
   standardCount: number;
   mostPowerful?: Beast | null;
-  mostPowerfulTitle?: string | null;
   rarest?: Beast | null;
   highestRanked?: Beast | null;
   lastBeastKilled?: Beast | null;
@@ -26,7 +25,6 @@ export function ProfileStats({
   shinyCount,
   standardCount,
   mostPowerful,
-  mostPowerfulTitle,
   rarest,
   highestRanked,
   lastBeastKilled,

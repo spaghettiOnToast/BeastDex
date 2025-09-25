@@ -10,7 +10,6 @@ type BeastGridProps = {
   onSelect: (beast: Beast) => void;
   loading?: boolean;
   emptyMessage?: string;
-  loadingMessage?: string;
 };
 
 export const BeastGrid = memo(function BeastGrid({
@@ -19,7 +18,6 @@ export const BeastGrid = memo(function BeastGrid({
   onSelect,
   loading = false,
   emptyMessage = "No beasts found.",
-  loadingMessage = "Loading beasts...",
 }: BeastGridProps) {
   if (loading && beasts.length === 0) {
     return (

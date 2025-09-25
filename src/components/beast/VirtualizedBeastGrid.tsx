@@ -1,5 +1,5 @@
 import { memo, useMemo } from "react";
-import { FixedSizeGrid as Grid } from "react-window";
+import { Grid } from "react-window";
 import type { Beast } from "../../services/beast";
 import BeastCard from "../BeastCard";
 
@@ -18,7 +18,7 @@ const CARD_WIDTH = 224; // 56 * 4 (14rem)
 const CARD_HEIGHT = 360; // Approximate height including spacing
 const GAP = 32; // 8rem gap between cards
 
-interface CellProps {
+interface GridCellProps {
   columnIndex: number;
   rowIndex: number;
   style: React.CSSProperties;
@@ -30,7 +30,7 @@ interface CellProps {
   };
 }
 
-const Cell = memo(function Cell({ columnIndex, rowIndex, style, data }: CellProps) {
+const Cell = memo(function Cell({ columnIndex, rowIndex, style, data }: GridCellProps) {
   const { beasts, ownerUsernames, onSelect, columnsPerRow } = data;
   const itemIndex = rowIndex * columnsPerRow + columnIndex;
   const beast = beasts[itemIndex];
@@ -125,16 +125,16 @@ export const VirtualizedBeastGrid = memo(function VirtualizedBeastGrid({
   return (
     <div className="w-full">
       <Grid
+        cellComponent={Cell as any}
+        cellProps={gridData}
         columnCount={gridData.columnsPerRow}
         columnWidth={gridData.columnWidth}
-        height={containerHeight}
+        defaultHeight={containerHeight}
+        defaultWidth={containerWidth}
         rowCount={gridData.rowCount}
         rowHeight={CARD_HEIGHT}
-        width={containerWidth}
-        itemData={gridData}
-      >
-        {Cell}
-      </Grid>
+        style={{ height: containerHeight, width: containerWidth }}
+      />
     </div>
   );
 });

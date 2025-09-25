@@ -44,7 +44,7 @@ const PAGE_SIZE = 50;
 function AccountPage() {
   const { identifier = "" } = useParams<{ identifier: string }>();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const [availableFilters, setAvailableFilters] =
     useState<BeastAttributeFilters>({});
   const [attributeFilters, setAttributeFilters] =
@@ -623,7 +623,6 @@ function AccountPage() {
           onSelect={handleSelectBeast}
           loading={loading}
           emptyMessage="No beasts found for this account."
-          loadingMessage="Loading account beasts..."
         />
 
         {/* Pagination */}

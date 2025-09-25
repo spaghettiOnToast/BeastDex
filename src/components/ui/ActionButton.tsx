@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { Button, type ButtonProps } from "./button";
 import { cn } from "../../lib/utils";

@@ -1,12 +1,9 @@
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import { useApi } from "./useApi";
 import {
   fetchBeastStats,
   fetchBeastHighlights,
   fetchBeastAttributeFilters,
-  type BeastStats,
-  type BeastHighlights,
-  type BeastAttributeFilters,
 } from "../services/beast";
 
 export function useBeastStats(enabled: boolean = true) {

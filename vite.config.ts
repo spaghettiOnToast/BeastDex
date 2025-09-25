@@ -11,7 +11,7 @@ export default defineConfig({
     },
   },
   server: {
-    https: true,
+    https: {},
     proxy: {
       "/torii": {
         target: "https://api.cartridge.gg/x/pg-mainnet-3/torii",

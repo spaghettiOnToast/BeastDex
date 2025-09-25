@@ -140,7 +140,6 @@ function buildCategoryMaps(beasts: Beast[]): CategoryMaps {
 
 function findBestPlaceholder(
   typeKey: string,
-  targetCategory: TabKey,
   sampleCategoryMaps: CategoryMaps,
   catalog: CatalogRecord
 ): Beast | null {
@@ -653,7 +652,7 @@ function CollectionPage() {
         // Standard tab
         const standardPlaceholder =
           standardOwned ??
-          findBestPlaceholder(key, "standard", sampleCategoryMaps, catalog);
+          findBestPlaceholder(key, sampleCategoryMaps, catalog);
         if (!standardPlaceholder) {
           console.warn(
             `No placeholder found for beast type: ${key} in standard tab`
@@ -673,7 +672,7 @@ function CollectionPage() {
           label,
           beast:
             shinyOwned ??
-            findBestPlaceholder(key, "shiny", sampleCategoryMaps, catalog),
+            findBestPlaceholder(key, sampleCategoryMaps, catalog),
           missing: !shinyOwned,
           ownerUsername: resolveOwnerUsername(shinyOwned),
         });
@@ -684,7 +683,7 @@ function CollectionPage() {
           label,
           beast:
             animatedOwned ??
-            findBestPlaceholder(key, "animated", sampleCategoryMaps, catalog),
+            findBestPlaceholder(key, sampleCategoryMaps, catalog),
           missing: !animatedOwned,
           ownerUsername: resolveOwnerUsername(animatedOwned),
         });
@@ -695,12 +694,7 @@ function CollectionPage() {
           label,
           beast:
             animatedShinyOwned ??
-            findBestPlaceholder(
-              key,
-              "animatedShiny",
-              sampleCategoryMaps,
-              catalog
-            ),
+            findBestPlaceholder(key, sampleCategoryMaps, catalog),
           missing: !animatedShinyOwned,
           ownerUsername: resolveOwnerUsername(animatedShinyOwned),
         });
@@ -718,7 +712,7 @@ function CollectionPage() {
           label,
           beast:
             anyOwned ??
-            findBestPlaceholder(key, "all", sampleCategoryMaps, catalog),
+            findBestPlaceholder(key, sampleCategoryMaps, catalog),
           missing: !anyOwned,
           ownerUsername: resolveOwnerUsername(anyOwned),
         });
