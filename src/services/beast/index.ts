@@ -12,6 +12,9 @@ import type {
   BeastAttributeFilters,
   BeastPowerRank,
   FetchBeastsOptions,
+  FetchLeaderboardOptions,
+  PowerRankLeaderboard,
+  BeastCollectionLeaderboard,
 } from "./types";
 import { fetchBeastStats } from "./stats";
 import { fetchBeastHighlights } from "./highlights";
@@ -29,6 +32,10 @@ export type {
   BeastMetadata,
   BeastPowerRank,
   BeastStats,
+  LeaderboardEntry,
+  PowerRankLeaderboard,
+  BeastCollectionLeaderboard,
+  FetchLeaderboardOptions,
 } from "./types";
 
 export type FetchBeastsResponse = {
@@ -308,3 +315,121 @@ export async function fetchBeastPowerRank(
     };
   });
 }
+
+export async function fetchPowerRankLeaderboard({
+  limit = 10,
+  offset = 0,
+}: FetchLeaderboardOptions = {}): Promise<PowerRankLeaderboard> {
+  return apiCache.get("power-rank-leaderboard", { limit, offset }, async () => {
+    const query = `
+      WITH owner_powers AS (
+        SELECT
+          LOWER(b.account_address) as owner,
+          SUM(
+            COALESCE(
+              (
+                SELECT MAX(
+                  CAST(
+                    CASE
+                      WHEN json_type(attr.value, '$.value') IN ('text', 'integer', 'real')
+                        THEN json_extract(attr.value, '$.value')
+                      ELSE NULL
+                    END AS REAL
+                  )
+                )
+                FROM json_each(
+                  CASE
+                    WHEN json_valid(t.metadata) = 1 THEN t.metadata
+                    ELSE '{"attributes":[]}'
+                  END,
+                  '$.attributes'
+                ) attr
+                WHERE LOWER(json_extract(attr.value, '$.trait_type')) LIKE '%power%'
+                  AND json_extract(attr.value, '$.trait_type') IS NOT NULL
+                  AND json_extract(attr.value, '$.value') IS NOT NULL
+              ), 0
+            )
+          ) as total_power
+        FROM tokens t
+        JOIN token_balances b
+          ON t.id = b.token_id
+          AND t.contract_address = b.contract_address
+        WHERE t.contract_address = '${CONTRACT_ADDRESS}'
+          AND b.balance > '${ZERO_BALANCE}'
+          AND json_valid(t.metadata) = 1
+          AND b.account_address IS NOT NULL
+          AND b.account_address != ''
+        GROUP BY LOWER(b.account_address)
+        HAVING total_power > 0
+      )
+      SELECT
+        ROW_NUMBER() OVER (ORDER BY total_power DESC) as rank,
+        owner,
+        total_power as value
+      FROM owner_powers
+      ORDER BY total_power DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+
+    type PowerRankRow = {
+      rank: number;
+      owner: string;
+      value: number;
+    };
+
+    const rows = await runBeastSql<PowerRankRow[]>(query, "fetchPowerRankLeaderboard");
+    return rows.map(row => ({
+      rank: row.rank,
+      owner: row.owner,
+      username: null, // Will be resolved by username service
+      value: row.value,
+    }));
+  });
+}
+
+export async function fetchBeastCollectionLeaderboard({
+  limit = 10,
+  offset = 0,
+}: FetchLeaderboardOptions = {}): Promise<BeastCollectionLeaderboard> {
+  return apiCache.get("beast-collection-leaderboard", { limit, offset }, async () => {
+    const query = `
+      WITH owner_counts AS (
+        SELECT
+          LOWER(b.account_address) as owner,
+          COUNT(*) as beast_count
+        FROM tokens t
+        JOIN token_balances b
+          ON t.id = b.token_id
+          AND t.contract_address = b.contract_address
+        WHERE t.contract_address = '${CONTRACT_ADDRESS}'
+          AND b.balance > '${ZERO_BALANCE}'
+          AND json_valid(t.metadata) = 1
+          AND b.account_address IS NOT NULL
+          AND b.account_address != ''
+        GROUP BY LOWER(b.account_address)
+      )
+      SELECT
+        ROW_NUMBER() OVER (ORDER BY beast_count DESC) as rank,
+        owner,
+        beast_count as value
+      FROM owner_counts
+      ORDER BY beast_count DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+
+    type BeastCountRow = {
+      rank: number;
+      owner: string;
+      value: number;
+    };
+
+    const rows = await runBeastSql<BeastCountRow[]>(query, "fetchBeastCollectionLeaderboard");
+    return rows.map(row => ({
+      rank: row.rank,
+      owner: row.owner,
+      username: null, // Will be resolved by username service
+      value: row.value,
+    }));
+  });
+}
+

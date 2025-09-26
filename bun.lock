@@ -4,8 +4,8 @@
     "": {
       "name": "beastdex",
       "dependencies": {
-        "@cartridge/connector": "^0.10.5",
-        "@cartridge/controller": "^0.10.5",
+        "@cartridge/connector": "^0.10.1",
+        "@cartridge/controller": "^0.10.1",
         "@radix-ui/react-avatar": "^1.1.10",
         "@radix-ui/react-dialog": "^1.1.15",
         "@radix-ui/react-dropdown-menu": "^2.1.16",
@@ -96,9 +96,9 @@
 
     "@babel/types": ["@babel/types@7.28.4", "", { "dependencies": { "@babel/helper-string-parser": "^7.27.1", "@babel/helper-validator-identifier": "^7.27.1" } }, "sha512-bkFqkLhh3pMBUQQkpVgWDWq/lqzc2678eUyDlTBhRqhCHFguYYGM0Efga7tYk4TogG/3x0EEl66/OQ+WGbWB/Q=="],
 
-    "@cartridge/connector": ["@cartridge/connector@0.10.5", "", { "dependencies": { "@cartridge/controller": "0.10.5" }, "peerDependencies": { "@starknet-react/core": "^5.0.1" } }, "sha512-vJaPZK9yY1KpWEYzKhDKBjjFuoMS9FEmTPsteXn8uXgpK1IEXoS5SFA9PNNws0ZBDW4Vv9CGohJcKb2WMVTyCA=="],
+    "@cartridge/connector": ["@cartridge/connector@0.10.6", "", { "dependencies": { "@cartridge/controller": "0.10.6" }, "peerDependencies": { "@starknet-react/core": "^5.0.1" } }, "sha512-TLNmzyrkYY/H4po7QNzY+nA1d6bP1FcqCCJa+efrzyNzkB8O5CH1+E+qipNsIxn3vG6Xj9h+2cMqSN0UkQSf9g=="],
 
-    "@cartridge/controller": ["@cartridge/controller@0.10.5", "", { "dependencies": { "@cartridge/controller-wasm": "^0.3.6", "@cartridge/penpal": "^6.2.4", "@starknet-io/types-js": "0.9.1", "@telegram-apps/sdk": "^2.4.0", "@turnkey/sdk-browser": "^4.0.0", "@walletconnect/ethereum-provider": "^2.20.0", "bs58": "^6.0.0", "cbor-x": "^1.5.0", "ethers": "^6.13.5", "micro-sol-signer": "^0.5.0", "mipd": "^0.0.7", "open": "^10.1.0", "starknet": "^8.5.2" } }, "sha512-shOD3ADk5BMYGFDyYWNGyimOmkfpGWOHlPdnpyb22eutRN8Is88eUrTOO9Q54NGIkGmMUCiRXM9Ft0FyI+CQng=="],
+    "@cartridge/controller": ["@cartridge/controller@0.10.6", "", { "dependencies": { "@cartridge/controller-wasm": "^0.3.6", "@cartridge/penpal": "^6.2.4", "@starknet-io/types-js": "0.9.1", "@telegram-apps/sdk": "^2.4.0", "@turnkey/sdk-browser": "^4.0.0", "@walletconnect/ethereum-provider": "^2.20.0", "bs58": "^6.0.0", "cbor-x": "^1.5.0", "ethers": "^6.13.5", "micro-sol-signer": "^0.5.0", "mipd": "^0.0.7", "open": "^10.1.0", "starknet": "^8.5.2" } }, "sha512-ufpNeIcSVWcVqdtA8mTHLvJrNYjxytoGfvYB8RdpJZ7GwKNXoSuUptV/eIgbGdW8CeUst7u+HvrnnlLlP40s0Q=="],
 
     "@cartridge/controller-wasm": ["@cartridge/controller-wasm@0.3.7", "", {}, "sha512-ZZe4e9+saOols71fDBXD29Zs33Bwwk1jJB6dA2Y7lvrZF7ph4grit4tNlcr3mvixzyUjNpSP9d9NR0oPpBocbA=="],
 

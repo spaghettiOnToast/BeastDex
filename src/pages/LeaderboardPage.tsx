@@ -1,0 +1,74 @@
+import { useState } from "react";
+import TopBar from "../components/header/TopBar";
+import { AppLayout } from "../components/layout/AppLayout";
+import { RankLeaderboard } from "../components/leaderboard/RankLeaderboard";
+import { MostBeastsCollected } from "../components/leaderboard/MostBeastsCollected";
+
+type LeaderboardTab = "power" | "beasts";
+
+function LeaderboardPage() {
+  const [activeTab, setActiveTab] = useState<LeaderboardTab>("power");
+
+  const topBar = <TopBar />;
+
+  const tabs = [
+    { id: "power" as const, label: "Power Rank", description: "Top players by total power" },
+    { id: "beasts" as const, label: "Most Beasts", description: "Top collectors by beast count" },
+  ];
+
+  return (
+    <AppLayout topBar={topBar}>
+      <div className="flex flex-col gap-6">
+        {/* Title */}
+        <div className="flex flex-col items-center text-center">
+          <h1 className="bg-gradient-to-r from-[#ff7cf7] via-[#7dfbff] to-[#8bff72] bg-clip-text text-3xl font-semibold uppercase tracking-[0.35em] text-transparent">
+            Leaderboards
+          </h1>
+          <p className="text-[11px] uppercase tracking-[0.2em] text-gray-500 mt-2">
+            Global rankings and statistics
+          </p>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="flex justify-center">
+          <div className="flex bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-xl p-1.5 shadow-lg">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`
+                  px-6 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition-all duration-300 min-w-[140px]
+                  ${
+                    activeTab === tab.id
+                      ? "bg-gradient-to-r from-[#8bff72] to-[#39ff14] text-gray-900 shadow-[0_0_20px_rgba(139,255,114,0.4)] scale-105"
+                      : "text-gray-300 hover:text-lsGold hover:bg-gray-800/50 hover:scale-102"
+                  }
+                `}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Tab Description */}
+        <div className="text-center">
+          <p className="text-sm text-gray-400">
+            {tabs.find(tab => tab.id === activeTab)?.description}
+          </p>
+        </div>
+
+        {/* Tab Content */}
+        <div className="min-h-[400px] relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#8bff72]/5 via-transparent to-lsGold/5 rounded-2xl pointer-events-none"></div>
+          <div className="relative z-10">
+            {activeTab === "power" && <RankLeaderboard />}
+            {activeTab === "beasts" && <MostBeastsCollected />}
+          </div>
+        </div>
+      </div>
+    </AppLayout>
+  );
+}
+
+export default LeaderboardPage;

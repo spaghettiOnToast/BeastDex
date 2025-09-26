@@ -64,3 +64,20 @@ export type BeastPowerRank = {
   totalPower: number;
   totalOwners: number;
 };
+
+export type LeaderboardEntry = {
+  rank: number;
+  owner: string;
+  username: string | null;
+  value: number;
+};
+
+export type PowerRankLeaderboard = LeaderboardEntry[];
+
+export type BeastCollectionLeaderboard = LeaderboardEntry[];
+
+
+export type FetchLeaderboardOptions = {
+  limit?: number;
+  offset?: number;
+};
