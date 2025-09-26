@@ -29,6 +29,7 @@
         "react-window": "^2.1.1",
         "react-window-infinite-loader": "^2.0.0",
         "starknet": "^7.6.4",
+        "starknetid.js": "^5.0.0",
         "tailwind-merge": "^3.3.1",
       },
       "devDependencies": {
@@ -1106,6 +1107,8 @@
     "split2": ["split2@4.2.0", "", {}, "sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg=="],
 
     "starknet": ["starknet@7.6.4", "", { "dependencies": { "@noble/curves": "1.7.0", "@noble/hashes": "1.6.0", "@scure/base": "1.2.1", "@scure/starknet": "1.1.0", "@starknet-io/starknet-types-07": "npm:@starknet-io/types-js@~0.7.10", "@starknet-io/starknet-types-08": "npm:@starknet-io/types-js@~0.8.4", "abi-wan-kanabi": "2.2.4", "lossless-json": "^4.0.1", "pako": "^2.0.4", "ts-mixer": "^6.0.3" } }, "sha512-FB20IaLCDbh/XomkB+19f5jmNxG+RzNdRO7QUhm7nfH81UPIt2C/MyWAlHCYkbv2wznSEb73wpxbp9tytokTgQ=="],
+
+    "starknetid.js": ["starknetid.js@5.0.0", "", { "peerDependencies": { "@babel/core": "^7.0.0-0", "starknet": "8.5.2" } }, "sha512-STYaOAvNj8kwjhP09CRHavAqihYaa9wkNBrvQIN5K0EBaQNo8VD6SITy1FmuHicd+IjYo8PTpIZBPgzQSRkuvg=="],
 
     "stream-shift": ["stream-shift@1.0.3", "", {}, "sha512-76ORR0DO1o1hlKwTbi/DM3EXWGf3ZJYO8cXX5RJwnul2DEg2oyoZyjLNoQM8WsvZiFKCRfC1O0J7iCvie3RZmQ=="],
 

@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, useRef, useEffect, ty
 import { useNavigate } from "react-router-dom";
 import { normaliseStarknetAddress } from "../utils/address";
 import { lookupControllerAddresses } from "../services/controller";
+import { starknetIdService } from "../services/starknetId";
 import { config } from "../config";
 
 function isValidHexAddress(value: string): boolean {
@@ -50,11 +51,19 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Try to resolve as username
+      // Try to resolve as username (Cartridge first, then Starknet.id)
       try {
+        // First try Cartridge username
         const addresses = await lookupControllerAddresses([searchQuery]);
         const userAddresses = addresses[searchQuery.toLowerCase()] ?? [];
         if (userAddresses.length > 0) {
+          navigate(`/account/${encodeURIComponent(searchQuery)}`);
+          return;
+        }
+
+        // If no Cartridge username found, try Starknet.id
+        const starknetIdAddress = await starknetIdService.getAddressFromStarkName(searchQuery);
+        if (starknetIdAddress) {
           navigate(`/account/${encodeURIComponent(searchQuery)}`);
           return;
         }

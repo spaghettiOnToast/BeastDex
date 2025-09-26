@@ -24,6 +24,7 @@ import {
 } from "../services/beast";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { lookupControllerAddresses } from "../services/controller";
+import { starknetIdService } from "../services/starknetId";
 import { getErrorMessage } from "../utils/error";
 import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
 import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
@@ -120,14 +121,32 @@ function AccountPage() {
 
     const usernameKey = trimmedIdentifier.toLowerCase();
     setResolvingIdentifier(true);
+
+    // First try Cartridge username resolution
     lookupControllerAddresses([trimmedIdentifier])
-      .then((result) => {
+      .then(async (result) => {
         if (cancelled) return;
         const addresses = result[usernameKey] ?? [];
         if (addresses.length > 0) {
           setResolvedAddress(addresses[0]);
           setIdentifierError(null);
-        } else {
+          return;
+        }
+
+        // If no Cartridge username found, try Starknet.id
+        try {
+          const starknetIdAddress = await starknetIdService.getAddressFromStarkName(trimmedIdentifier);
+          if (starknetIdAddress && !cancelled) {
+            setResolvedAddress(starknetIdAddress);
+            setIdentifierError(null);
+            return;
+          }
+        } catch (starknetIdError) {
+          console.warn("Failed to resolve Starknet.id:", starknetIdError);
+        }
+
+        // If neither worked
+        if (!cancelled) {
           setResolvedAddress("");
           setIdentifierError(
             `No wallet address found for "${trimmedIdentifier}".`
