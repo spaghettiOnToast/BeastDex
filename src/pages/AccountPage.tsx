@@ -571,32 +571,47 @@ function AccountPage() {
                   </span>
                 </h1>
 
-                <div className={`flex items-center gap-2 ml-4 text-sm transition-all duration-500 ${
-                  collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                    ? "animate-pulse scale-105 drop-shadow-[0_0_15px_rgba(57,255,20,0.6)]"
-                    : ""
-                }`}>
-                  <span className={`text-lg transition-all duration-300 ${
+                <div
+                  className={`flex items-center gap-2 ml-4 text-sm transition-all duration-500 ${
                     collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                      ? "animate-bounce text-2xl"
+                      ? "animate-pulse scale-105 drop-shadow-[0_0_15px_rgba(57,255,20,0.6)]"
                       : ""
-                  }`}>
-                    {collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES ? "🎉" : "🏆"}
+                  }`}
+                >
+                  <span
+                    className={`text-lg transition-all duration-300 ${
+                      collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                        ? "animate-bounce text-2xl"
+                        : ""
+                    }`}
+                  >
+                    {collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                      ? "🎉"
+                      : "🏆"}
                   </span>
                   <span className="uppercase tracking-wider text-muted-foreground font-medium">
                     Total
                   </span>
-                  <span className={`font-bold transition-all duration-300 ${
-                    collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                      ? "text-[#39ff14] text-xl drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] animate-pulse"
-                      : "text-primary"
-                  }`}>
+                  <span
+                    className={`font-bold transition-all duration-300 ${
+                      collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                        ? "text-[#39ff14] text-xl drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] animate-pulse"
+                        : "text-primary"
+                    }`}
+                  >
                     {collectionStats.uniqueBeastTypes}
                   </span>
-                  <span className="text-muted-foreground">
-                    / {TOTAL_BEAST_VARIETIES} /Beasts
+                  <span
+                    className={`transition-all duration-300 ${
+                      collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                        ? "text-[#39ff14] font-bold drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] animate-pulse"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    / {TOTAL_BEAST_VARIETIES}
                   </span>
-                  {collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES && (
+                  {collectionStats.uniqueBeastTypes ===
+                    TOTAL_BEAST_VARIETIES && (
                     <span className="text-[#39ff14] font-bold animate-pulse ml-2">
                       COMPLETE! ✨
                     </span>
