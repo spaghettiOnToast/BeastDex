@@ -47,7 +47,7 @@ export function HighlightsTile({
     },
     {
       key: "lastBeastKilled",
-      label: "Last Killed",
+      label: "Last Collected",
       value: lastBeastKilledName ?? lastBeastKilled?.name ?? "Unknown",
       icon: "⚔️",
       bgGradient: "bg-gradient-to-br from-blue-500/15 to-cyan-500/5",
