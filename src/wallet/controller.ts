@@ -1,15 +1,11 @@
-import ControllerConnector from "@cartridge/connector";
+import { ControllerConnector } from "@cartridge/connector";
 import type { Connector } from "@starknet-react/core";
 import { mainnet } from "@starknet-react/chains";
 
 export const controllerConnector = new ControllerConnector({
-  rpc: mainnet.rpcUrls.cartridge.http[0],
-  policies: [
-    {
-      target: "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7",
-      method: "transfer",
-    },
-  ],
+  chains: [{ rpcUrl: mainnet.rpcUrls.cartridge.http[0] }],
+  defaultChainId: "0x534e5f4d41494e",
+  slot: "pg-mainnet-3",
 });
 
 // The current @starknet-react release expects additional methods.
@@ -26,7 +22,10 @@ if (typeof withCompat.externalDetectWallets !== "function") {
 if (typeof withCompat.request !== "function") {
   withCompat.request = async <T extends any>(call: any): Promise<T> => {
     // Delegate to the controller's request method if available, or return a dummy response
-    if ('request' in controllerConnector && typeof controllerConnector.request === 'function') {
+    if (
+      "request" in controllerConnector &&
+      typeof controllerConnector.request === "function"
+    ) {
       return await (controllerConnector as any).request(call);
     }
     throw new Error(`Request method not implemented: ${call.type}`);

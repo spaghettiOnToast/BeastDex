@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
+import { ControllerConnector } from "@cartridge/connector";
 
 type ControllerProfile = {
   username?: string | null;
@@ -34,7 +35,6 @@ export function WalletButton() {
     );
   }, [connectors]);
 
-
   useEffect(() => {
     let cancelled = false;
 
@@ -55,7 +55,9 @@ export function WalletButton() {
           profile?.account?.name ??
           null;
         const resolved =
-          nameFromState ?? (await (activeConnector as any).username?.()) ?? null;
+          nameFromState ??
+          (await (activeConnector as ControllerConnector).username?.()) ??
+          null;
         if (!cancelled) {
           setUsername(resolved);
         }
@@ -80,7 +82,9 @@ export function WalletButton() {
         onClick={async () => {
           try {
             await connectAsync({ connector: activeConnector as any });
-            const name = await (activeConnector as any).username?.();
+            const name = await (
+              activeConnector as ControllerConnector
+            ).username?.();
             setUsername(name ?? null);
           } catch (error) {
             console.error("Failed to connect Starknet wallet", error);
@@ -112,7 +116,9 @@ export function WalletButton() {
         <DropdownMenuItem
           onClick={() => {
             try {
-              (activeConnector as any).controller?.openProfile?.();
+              (
+                activeConnector as ControllerConnector
+              ).controller?.openProfile();
             } catch (error) {
               console.error("Failed to open wallet dashboard", error);
             }

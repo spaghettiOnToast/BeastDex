@@ -241,16 +241,16 @@ export function buildBeastsQuery({
     sort === "beast"
       ? "ORDER BY COALESCE(beast_value, '') COLLATE NOCASE ASC, CAST(id AS INTEGER) ASC"
       : sort === "tier"
-        ? "ORDER BY COALESCE(tier_value, 999) ASC, CAST(id AS INTEGER) ASC"
-        : sort === "health"
-          ? "ORDER BY COALESCE(health_value, 0) DESC, CAST(id AS INTEGER) ASC"
-          : sort === "rank"
-            ? "ORDER BY COALESCE(rank_value, 999999) ASC, CAST(id AS INTEGER) ASC"
-            : sort === "last-death"
-              ? "ORDER BY COALESCE(death_timestamp_value, 0) DESC, CAST(id AS INTEGER) ASC"
-              : needsPower
-                ? "ORDER BY power DESC, CAST(id AS INTEGER) ASC"
-                : "ORDER BY CAST(id AS INTEGER) ASC";
+      ? "ORDER BY COALESCE(tier_value, 999) ASC, CAST(id AS INTEGER) ASC"
+      : sort === "health"
+      ? "ORDER BY COALESCE(health_value, 0) DESC, CAST(id AS INTEGER) ASC"
+      : sort === "rank"
+      ? "ORDER BY COALESCE(rank_value, 999999) ASC, CAST(id AS INTEGER) ASC"
+      : sort === "last-death"
+      ? "ORDER BY COALESCE(death_timestamp_value, 0) DESC, CAST(id AS INTEGER) ASC"
+      : needsPower
+      ? "ORDER BY power DESC, CAST(id AS INTEGER) ASC"
+      : "ORDER BY CAST(id AS INTEGER) ASC";
 
   return `
     WITH filtered_tokens AS (
@@ -341,7 +341,7 @@ export function buildBeastByIdQuery(id: string, tokenHex?: string) {
     ? `LOWER(
           CASE
             WHEN instr(t.id, ':') > 0 THEN substr(t.id, instr(t.id, ':') + 1)
-            ELSE t.id
+            ELSE t.token_id
           END
         ) = '${escapedHex}'`
     : "";

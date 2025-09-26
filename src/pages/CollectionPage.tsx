@@ -1,10 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+
+// CSS injection for shimmer animation
+const shimmerStyles = `
+  @keyframes shimmer {
+    0% { transform: translateX(-200%) skewX(12deg); }
+    100% { transform: translateX(200%) skewX(12deg); }
+  }
+`;
+
+// Inject styles
+if (typeof document !== "undefined") {
+  const styleElement =
+    document.getElementById("shimmer-styles-collection") ||
+    document.createElement("style");
+  if (!document.getElementById("shimmer-styles-collection")) {
+    styleElement.id = "shimmer-styles-collection";
+    styleElement.textContent = shimmerStyles;
+    document.head.appendChild(styleElement);
+  }
+}
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import BeastCard from "../components/BeastCard";
 import BeastModal from "../components/beast/BeastModal";
-import BeastCollectionTile from "../components/profile/BeastCollectionTile";
 import {
   fetchBeastAttributeFilters,
   fetchBeasts,
@@ -14,14 +33,15 @@ import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import {
   computeBeastCollectionStats,
   EMPTY_BEAST_COLLECTION_STATS,
+  TOTAL_BEAST_VARIETIES,
 } from "../utils/beastCollection";
 import { normaliseStarknetAddress } from "../utils/address";
 import { lookupControllerAddresses } from "../services/controller";
 import { getErrorMessage } from "../utils/error";
-import { config } from "../config";
 import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
-
-const PAGE_SIZE = config.pagination.defaultPageSize;
+import { getBeastTemplate } from "../data/beastTemplates";
+import { runBeastSql } from "../services/beast/sqlClient";
+import { mapBeastRow } from "../services/beast/helpers";
 
 const TABS = [
   { key: "all", label: "All" },
@@ -139,47 +159,6 @@ function buildCategoryMaps(beasts: Beast[]): CategoryMaps {
   return maps;
 }
 
-function findBestPlaceholder(
-  typeKey: string,
-  sampleCategoryMaps: CategoryMaps,
-  catalog: CatalogRecord
-): Beast | null {
-  const fallbackSources = [
-    () => catalog[typeKey],
-
-    () => sampleCategoryMaps.standard.get(typeKey),
-    () => sampleCategoryMaps.animated.get(typeKey),
-    () => sampleCategoryMaps.shiny.get(typeKey),
-    () => sampleCategoryMaps.animatedShiny.get(typeKey),
-
-    () => {
-      for (const beast of Object.values(catalog)) {
-        if (beast && getBeastTypeKey(beast) === typeKey) {
-          return beast;
-        }
-      }
-      return null;
-    },
-  ];
-
-  for (const getSource of fallbackSources) {
-    const beast = getSource();
-    if (beast && beast.image) {
-      return beast;
-    }
-  }
-
-  // If no beast with image found, try any beast as last resort
-  for (const getSource of fallbackSources) {
-    const beast = getSource();
-    if (beast) {
-      return beast;
-    }
-  }
-
-  return null;
-}
-
 function CollectionPage() {
   const { identifier = "" } = useParams<{ identifier: string }>();
 
@@ -196,20 +175,15 @@ function CollectionPage() {
   const [resolvingIdentifier, setResolvingIdentifier] = useState(false);
 
   const [ownedBeasts, setOwnedBeasts] = useState<Beast[]>([]);
-  const [hasMorePages, setHasMorePages] = useState(false);
-  const [remainingPages, setRemainingPages] = useState(0);
-  const [loadingMore, setLoadingMore] = useState(false);
 
   const [beastTypes, setBeastTypes] = useState<TypeEntry[]>([]);
   const [catalog, setCatalog] = useState<CatalogRecord>({});
-  const [sampleCategoryMaps, setSampleCategoryMaps] = useState<CategoryMaps>({
-    animatedShiny: new Map(),
-    animated: new Map(),
-    shiny: new Map(),
-    standard: new Map(),
-  });
   const [catalogLoading, setCatalogLoading] = useState(true);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [catalogError] = useState<string | null>(null);
+  const [genesisLoading] = useState(false);
+  const [genesisCache, setGenesisCache] = useState<Map<string, Beast>>(
+    new Map()
+  );
 
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [sortOption, setSortOption] = useState<SortOption>("default");
@@ -320,54 +294,60 @@ function CollectionPage() {
     setSummaryError(null);
 
     try {
-      const limit = PAGE_SIZE;
+      console.log("Loading user collection for address:", resolvedAddress);
 
-      const { beasts: firstBatch, total } = await fetchBeasts({
-        limit,
-        page: 1,
-        ownerAddresses: [resolvedAddress],
-        sort: sortOption,
-      });
+      // Load ALL user's beasts efficiently (we only need their collection, not random samples)
+      const limit = 150; // Larger batch since we're only getting user's beasts
+      let allUserBeasts: Beast[] = [];
+      let currentPage = 1;
+      let hasMoreData = true;
 
-      if (summaryRequestRef.current !== requestId) {
-        return;
-      }
+      // Load user's collection in batches
+      while (hasMoreData && allUserBeasts.length < 1000) {
+        // Safety limit
+        const { beasts: batch, total } = await fetchBeasts({
+          limit,
+          page: currentPage,
+          ownerAddresses: [resolvedAddress],
+          sort: sortOption,
+        });
 
-      let accumulated = [...firstBatch];
-
-      if (total > firstBatch.length) {
-        const totalPages = Math.ceil(total / limit);
-        const MAX_INITIAL_PAGES = 2; // Reduced from 5 to 2 for better performance
-        const pagesToLoad = Math.min(totalPages, MAX_INITIAL_PAGES);
-
-        // Load pages sequentially instead of all at once to reduce server load
-        for (let p = 2; p <= pagesToLoad; p++) {
-          try {
-            const result = await fetchBeasts({
-              limit,
-              page: p,
-              ownerAddresses: [resolvedAddress],
-              sort: sortOption,
-            });
-            accumulated = accumulated.concat(result.beasts);
-          } catch (error) {
-            console.warn(`Failed to load page ${p}:`, error);
-            // Continue loading other pages even if one fails
-          }
+        if (summaryRequestRef.current !== requestId) {
+          return;
         }
 
-        if (totalPages > MAX_INITIAL_PAGES) {
-          setHasMorePages(true);
-          setRemainingPages(totalPages - MAX_INITIAL_PAGES);
+        allUserBeasts = [...allUserBeasts, ...batch];
+
+        // Update UI immediately with current data
+        setOwnedBeasts(allUserBeasts);
+        setCollectionStats(computeBeastCollectionStats(allUserBeasts));
+
+        // Check if we have more data
+        hasMoreData = batch.length === limit && allUserBeasts.length < total;
+        currentPage++;
+
+        console.log(
+          `Loaded page ${currentPage - 1}: ${
+            batch.length
+          } beasts from API, total accumulated: ${
+            allUserBeasts.length
+          }/${total}`
+        );
+
+        // Early break if we have all the data
+        if (allUserBeasts.length >= total || batch.length < limit) {
+          hasMoreData = false;
+        }
+
+        // Add small delay between requests to prevent overwhelming the server
+        if (hasMoreData) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
         }
       }
 
-      if (summaryRequestRef.current !== requestId) {
-        return;
-      }
-
-      setOwnedBeasts(accumulated);
-      setCollectionStats(computeBeastCollectionStats(accumulated));
+      console.log(
+        `Collection loading complete: ${allUserBeasts.length} beasts loaded`
+      );
     } catch (err: unknown) {
       if (summaryRequestRef.current !== requestId) {
         return;
@@ -383,71 +363,95 @@ function CollectionPage() {
     }
   }, [identifierError, resolvedAddress, resolvingIdentifier, sortOption]);
 
-  const loadMoreBeasts = useCallback(async () => {
-    if (loadingMore || remainingPages <= 0) return;
-
-    setLoadingMore(true);
-    try {
-      const limit = 120;
-      const MAX_LOAD_MORE_PAGES = 3;
-      const pagesToLoad = Math.min(remainingPages, MAX_LOAD_MORE_PAGES);
-      const startPage = Math.ceil(ownedBeasts.length / limit) + 1;
-
-      const promises = [];
-      for (let p = startPage; p < startPage + pagesToLoad; p++) {
-        promises.push(
-          fetchBeasts({
-            limit,
-            page: p,
-            ownerAddresses: [resolvedAddress],
-            sort: sortOption,
-          })
-        );
-      }
-
-      const results = await Promise.allSettled(promises);
-      const newBeasts: Beast[] = [];
-      results.forEach((res) => {
-        if (res.status === "fulfilled") {
-          newBeasts.push(...res.value.beasts);
-        }
-      });
-
-      if (newBeasts.length > 0) {
-        setOwnedBeasts((prev) => [...prev, ...newBeasts]);
-        setRemainingPages((prev) => Math.max(0, prev - pagesToLoad));
-
-        if (remainingPages <= pagesToLoad) {
-          setHasMorePages(false);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to load more beasts", err);
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [loadingMore, remainingPages, ownedBeasts.length, resolvedAddress]);
+  // Removed loadMoreBeasts - we now load all user beasts upfront
 
   useEffect(() => {
     void loadSummary();
   }, [loadSummary]);
 
-  // Reset pagination state
+  // Clean up state when address changes
   useEffect(() => {
-    setHasMorePages(false);
-    setRemainingPages(0);
-    setLoadingMore(false);
+    setOwnedBeasts([]);
+    setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
   }, [resolvedAddress]);
+
+  // Helper function to format beast ID as u256
+  const formatBeastId = useCallback((id: number): string => {
+    return `0x${id.toString(16).padStart(64, "0")}`;
+  }, []);
+
+  // Function to get Genesis beast type key
+  const getGenesisBeastTypeKey = useCallback((beast: Beast): string => {
+    const attribute = beast.attributes.find(
+      (attr) => attr.trait_type?.toLowerCase() === "beast"
+    );
+    return String(attribute?.value ?? "")
+      .trim()
+      .toLowerCase();
+  }, []);
+
+  // Load all Genesis beasts with a single SQL query
+  const loadAllGenesisBeasts = useCallback(async (): Promise<
+    Map<string, Beast>
+  > => {
+    try {
+      console.log("Loading all Genesis beasts with single SQL query...");
+
+      // Generate all Genesis beast IDs (1-75) as u256 format
+      const genesisIds = Array.from({ length: 75 }, (_, i) =>
+        formatBeastId(i + 1)
+      );
+
+      // Build a simple SQL query to fetch all Genesis beasts at once
+      const escapedIds = genesisIds.map((id) => `"${id}"`).join(", ");
+
+      const query = `SELECT * FROM tokens WHERE contract_address = "0x46da8955829adf2bda310099a0063451923f02e648cf25a1203aac6335cf0e4" AND token_id IN (${escapedIds}) LIMIT 1000;`;
+
+      const rows = await runBeastSql(query, "loadAllGenesisBeasts");
+      const beasts = (rows as any[]).map(mapBeastRow);
+
+      console.log(`Fetched ${beasts.length} Genesis beasts with single query`);
+
+      const genesisMap = new Map<string, Beast>();
+
+      beasts.forEach((beast: any) => {
+        if (beast) {
+          const typeKey = getGenesisBeastTypeKey(beast);
+          if (typeKey && !genesisMap.has(typeKey)) {
+            genesisMap.set(typeKey, beast);
+            console.log(
+              `Found Genesis ${beast.name} (ID: ${beast.id}) for type: ${typeKey}`
+            );
+          }
+        }
+      });
+
+      console.log(
+        `Loaded ${genesisMap.size} Genesis beasts with single SQL query`
+      );
+      return genesisMap;
+    } catch (error) {
+      console.error("Failed to load Genesis beasts:", error);
+      return new Map();
+    }
+  }, [formatBeastId, getGenesisBeastTypeKey]);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadFilters() {
+    async function loadFiltersAndGenesis() {
       try {
         setFiltersError(null);
-        const filters = await fetchBeastAttributeFilters();
+
+        // Load both filters and Genesis beasts in parallel
+        const [filters, genesisMap] = await Promise.all([
+          fetchBeastAttributeFilters(),
+          loadAllGenesisBeasts(),
+        ]);
+
         if (cancelled) return;
 
+        // Process beast types
         const beastTrait = Object.keys(filters).find(
           (trait) => trait.toLowerCase() === "beast"
         );
@@ -462,156 +466,107 @@ function CollectionPage() {
           uniqueEntries.push({ key, label });
         });
         uniqueEntries.sort((a, b) => a.label.localeCompare(b.label));
+
+        // Update both states at the same time
         setBeastTypes(uniqueEntries);
+        setGenesisCache(genesisMap);
+
+        console.log(
+          `Loaded ${uniqueEntries.length} beast types and ${genesisMap.size} Genesis beasts together`
+        );
       } catch (err: unknown) {
         if (cancelled) return;
         setFiltersError(getErrorMessage(err, "Failed to load beast list"));
-      } finally {
-        // no-op
       }
     }
 
-    void loadFilters();
+    void loadFiltersAndGenesis();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadAllGenesisBeasts]);
 
+  // Build catalog using Genesis beasts + fallback templates
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadCatalog() {
-      try {
-        setCatalogLoading(true);
-        setCatalogError(null);
-
-        if (beastTypes.length === 0) {
-          setCatalog({});
-          setSampleCategoryMaps({
-            animatedShiny: new Map(),
-            animated: new Map(),
-            shiny: new Map(),
-            standard: new Map(),
-          });
-          setCatalogLoading(false);
-          return;
-        }
-
-        const sampleRecords: CatalogRecord = {};
-        const sampleBeastCollector = new Map<string, Beast>();
-        const desiredCount = beastTypes.length;
-        const limit = 120;
-
-        // Add more comprehensive sampling to ensure we have all variant types
-        const { beasts: firstBatch, total } = await fetchBeasts({
-          limit,
-          page: 1,
-          sort: sortOption,
-        });
-
-        if (cancelled) return;
-
-        firstBatch.forEach((sample) => {
-          const typeKey = getBeastTypeKey(sample);
-          if (!typeKey) return;
-          if (!sampleRecords[typeKey]) sampleRecords[typeKey] = sample;
-          if (!sampleBeastCollector.has(typeKey)) {
-            sampleBeastCollector.set(typeKey, sample);
-          }
-        });
-
-        if (
-          Object.keys(sampleRecords).length < desiredCount &&
-          total > firstBatch.length
-        ) {
-          const foundCount = Object.keys(sampleRecords).length;
-          const maxPagesToLoad = Math.min(15, Math.ceil(total / limit)); // Increased to ensure we get beasts with images
-
-          console.log(
-            `Loading catalog: Found ${foundCount}/${desiredCount} beast types, loading up to ${maxPagesToLoad} pages`
-          );
-
-          const BATCH_SIZE = 3; // Increased to load more beasts with images
-          let currentPage = 2;
-
-          while (
-            currentPage <= maxPagesToLoad &&
-            Object.keys(sampleRecords).length < desiredCount
-          ) {
-            const batchEnd = Math.min(
-              currentPage + BATCH_SIZE - 1,
-              maxPagesToLoad
-            );
-            const promises = [];
-
-            for (let p = currentPage; p <= batchEnd; p++) {
-              promises.push(fetchBeasts({ limit, page: p, sort: sortOption }));
-            }
-
-            const results = await Promise.allSettled(promises);
-            results.forEach((res) => {
-              if (res.status === "fulfilled") {
-                res.value.beasts.forEach((sample) => {
-                  const typeKey = getBeastTypeKey(sample);
-                  if (!typeKey) return;
-                  if (!sampleRecords[typeKey]) sampleRecords[typeKey] = sample;
-                  if (!sampleBeastCollector.has(typeKey)) {
-                    sampleBeastCollector.set(typeKey, sample);
-                  }
-                });
-              }
-            });
-
-            currentPage = batchEnd + 1;
-
-            console.log(
-              `Loaded pages ${currentPage - BATCH_SIZE} to ${
-                batchEnd - 1
-              }, now have ${
-                Object.keys(sampleRecords).length
-              }/${desiredCount} beast types`
-            );
-
-            if (Object.keys(sampleRecords).length >= desiredCount) {
-              break;
-            }
-          }
-        }
-
-        if (!cancelled) {
-          setCatalog(sampleRecords);
-          setSampleCategoryMaps(
-            buildCategoryMaps(Array.from(sampleBeastCollector.values()))
-          );
-        }
-      } catch (err: unknown) {
-        if (cancelled) return;
-        setCatalogError(getErrorMessage(err, "Failed to load beast catalog"));
-      } finally {
-        if (!cancelled) setCatalogLoading(false);
-      }
+    if (beastTypes.length === 0) {
+      setCatalog({});
+      setCatalogLoading(false);
+      return;
     }
 
-    void loadCatalog();
+    const templateCatalog: CatalogRecord = {};
 
-    return () => {
-      cancelled = true;
-    };
-  }, [beastTypes]);
+    beastTypes.forEach(({ key, label }) => {
+      // Check if we have a Genesis beast cached for this type
+      const cachedGenesis = genesisCache.get(key);
+
+      if (cachedGenesis) {
+        // Use cached Genesis beast
+        templateCatalog[key] = {
+          ...cachedGenesis,
+          id: `genesis-template-${key}`,
+        };
+      } else {
+        // Use static template as fallback
+        const template = getBeastTemplate(key);
+        templateCatalog[key] = {
+          id: `template-${key}`,
+          numericId: 0,
+          name: label,
+          image: template.placeholderImage,
+          owner: null,
+          attributes: [
+            {
+              trait_type: "beast",
+              value: label,
+            },
+          ],
+          metadata: { attributes: [] },
+          power: null,
+        };
+      }
+    });
+
+    setCatalog(templateCatalog);
+    setCatalogLoading(false);
+
+    const genesisCount = Object.values(templateCatalog).filter((beast) =>
+      beast?.id?.startsWith("genesis-template-")
+    ).length;
+
+    console.log(
+      `Catalog ready with ${
+        beastTypes.length
+      } beast types (${genesisCount} from Genesis, ${
+        beastTypes.length - genesisCount
+      } from templates)`
+    );
+    console.log(
+      "Template catalog sample:",
+      Object.fromEntries(
+        Object.entries(templateCatalog)
+          .slice(0, 3)
+          .map(([k, v]) => [
+            k,
+            { name: v?.name, image: v?.image ? "YES" : "NO" },
+          ])
+      )
+    );
+  }, [beastTypes, genesisCache]); // Build catalog when beast types or Genesis cache change
 
   const categoryMaps = useMemo(
     () => buildCategoryMaps(ownedBeasts),
     [ownedBeasts]
   );
 
-  // Pre-compute placeholders for better performance
+  // Use template-based placeholders - much faster!
   const placeholderCache = useMemo(() => {
     const cache = new Map<string, Beast | null>();
     beastTypes.forEach(({ key }) => {
-      cache.set(key, findBestPlaceholder(key, sampleCategoryMaps, catalog));
+      cache.set(key, catalog[key] || null);
     });
     return cache;
-  }, [beastTypes, sampleCategoryMaps, catalog]);
+  }, [beastTypes, catalog]);
 
   // Memoize the expensive tabEntries calculation
   const tabEntriesForCategory = useMemo(() => {
@@ -730,7 +685,10 @@ function CollectionPage() {
     return entries;
   }, [tabEntriesForCategory, resolveOwnerUsername]);
 
-  const anyLoading = summaryLoading || catalogLoading || resolvingIdentifier;
+  console.log(genesisCache);
+
+  const anyLoading =
+    summaryLoading || catalogLoading || resolvingIdentifier || genesisLoading;
 
   const normalisedAccountAddress = useMemo(
     () =>
@@ -817,14 +775,146 @@ function CollectionPage() {
             ← Back to BeastDex
           </Link>
 
-          <div className="flex items-center gap-3 mt-2">
-            <SortDropdown value={sortOption} onChange={setSortOption} />
-            <Link
-              to={`/account/${encodeURIComponent(trimmedIdentifier)}`}
-              className="text-xs uppercase tracking-wide text-lsGold hover:underline"
+          <Link
+            to={`/account/${encodeURIComponent(trimmedIdentifier)}`}
+            className="text-xs uppercase tracking-wide text-lsGold hover:underline"
+          >
+            ← Back to Account
+          </Link>
+        </div>
+
+        <div className="flex flex-wrap gap-4 justify-center">
+          {[
+            {
+              key: "collected",
+              label: "Total",
+              count: collectionStats.uniqueBeastTypes,
+              total: TOTAL_BEAST_VARIETIES,
+              mainValue: `${collectionStats.uniqueBeastTypes}`,
+              subValue: `${TOTAL_BEAST_VARIETIES} types`,
+              color: "hsl(var(--primary))",
+              bgGradient: "bg-gradient-to-br from-primary/15 to-primary/5",
+              borderColor: "border-primary/30",
+              icon: "🏆",
+              glisten: "",
+            },
+            {
+              key: "animatedShiny",
+              label: "Animated Shiny",
+              count: collectionStats.animatedShinyCount,
+              unique: collectionStats.uniqueAnimatedShinyTypes,
+              mainValue: `${collectionStats.animatedShinyCount}`,
+              subValue: `${collectionStats.uniqueAnimatedShinyTypes} types`,
+              color: "rgb(236, 72, 153)",
+              bgGradient:
+                "bg-gradient-to-br from-pink-500/15 via-purple-500/10 to-blue-500/5 animate-pulse",
+              borderColor: "border-pink-400/30",
+              icon: "✨",
+              glisten:
+                "before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-white/10 before:to-transparent before:translate-x-[-200%] before:animate-[shimmer_3s_ease-in-out_infinite] before:skew-x-12",
+            },
+            {
+              key: "animated",
+              label: "Animated",
+              count: collectionStats.animatedCount,
+              unique: collectionStats.uniqueAnimatedTypes,
+              mainValue: `${collectionStats.animatedCount}`,
+              subValue: `${collectionStats.uniqueAnimatedTypes} types`,
+              color: "rgb(125, 211, 252)",
+              bgGradient: "bg-gradient-to-br from-sky-500/15 to-sky-500/5",
+              borderColor: "border-sky-400/30",
+              icon: "⚡",
+              glisten:
+                "before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-cyan-400/20 before:to-transparent before:translate-x-[-200%] before:animate-[shimmer_2.5s_ease-in-out_infinite_1s] before:skew-x-12",
+            },
+            {
+              key: "shiny",
+              label: "Shiny",
+              count: collectionStats.shinyCount,
+              unique: collectionStats.uniqueShinyTypes,
+              mainValue: `${collectionStats.shinyCount}`,
+              subValue: `${collectionStats.uniqueShinyTypes} types`,
+              color: "rgb(253, 224, 71)",
+              bgGradient:
+                "bg-gradient-to-br from-yellow-500/15 to-yellow-500/5",
+              borderColor: "border-yellow-400/30",
+              icon: "⭐",
+              glisten:
+                "before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-yellow-300/30 before:to-transparent before:translate-x-[-200%] before:animate-[shimmer_2s_ease-in-out_infinite_0.5s] before:skew-x-12",
+            },
+            {
+              key: "standard",
+              label: "Standard",
+              count: collectionStats.standardCount,
+              unique: collectionStats.uniqueStandardTypes,
+              mainValue: `${collectionStats.standardCount}`,
+              subValue: `${collectionStats.uniqueStandardTypes} types`,
+              color: "rgb(34, 197, 94)",
+              bgGradient: "bg-gradient-to-br from-green-500/15 to-green-500/5",
+              borderColor: "border-green-400/30",
+              icon: "🐾",
+              glisten: "",
+            },
+          ].map((card) => (
+            <div
+              key={card.key}
+              className={`${card.bgGradient} ${card.borderColor} ${card.glisten} backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-md min-h-[120px] flex flex-col relative overflow-hidden rounded-lg border p-4 min-w-[160px]`}
             >
-              ← Back to Account
-            </Link>
+              <div className="flex flex-col items-center text-center gap-1.5 mb-2 min-h-[20px] relative z-10">
+                <span className="text-sm flex-shrink-0">{card.icon}</span>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium truncate">
+                  {card.label}
+                </p>
+              </div>
+              <div className="flex-1 flex flex-col justify-center text-center space-y-1 relative z-10">
+                <p
+                  className="text-lg font-bold leading-none"
+                  style={{ color: card.color }}
+                >
+                  {card.mainValue}
+                </p>
+                <p className="text-xs text-muted-foreground leading-none">
+                  {card.subValue}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {summaryError ? (
+          <p className="text-xs text-red-400">❌ {summaryError}</p>
+        ) : null}
+        {catalogError ? (
+          <p className="text-xs text-red-400">❌ {catalogError}</p>
+        ) : null}
+        {filtersError ? (
+          <p className="text-xs text-red-400">❌ {filtersError}</p>
+        ) : null}
+
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 my-6">
+          <div className="flex flex-wrap items-center gap-2">
+            {TABS.map((tab) => {
+              const styles = TAB_STYLES[tab.key];
+              const isActive = activeTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`rounded-full border px-3 py-1 text-xs uppercase tracking-wide transition ${
+                    isActive
+                      ? styles.active
+                      : `${styles.inactive} bg-gray/40 text-gray-400 hover:border-lsGold/40`
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <SortDropdown value={sortOption} onChange={setSortOption} />
             <button
               type="button"
               onClick={() => void loadSummary()}
@@ -837,39 +927,6 @@ function CollectionPage() {
               <span>Refresh</span>
             </button>
           </div>
-        </div>
-
-        <BeastCollectionTile {...collectionStats} />
-
-        {summaryError ? (
-          <p className="text-xs text-red-400">❌ {summaryError}</p>
-        ) : null}
-        {catalogError ? (
-          <p className="text-xs text-red-400">❌ {catalogError}</p>
-        ) : null}
-        {filtersError ? (
-          <p className="text-xs text-red-400">❌ {filtersError}</p>
-        ) : null}
-
-        <div className="flex flex-wrap items-center gap-2">
-          {TABS.map((tab) => {
-            const styles = TAB_STYLES[tab.key];
-            const isActive = activeTab === tab.key;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveTab(tab.key)}
-                className={`rounded-full border px-3 py-1 text-xs uppercase tracking-wide transition ${
-                  isActive
-                    ? styles.active
-                    : `${styles.inactive} bg-gray/40 text-gray-400 hover:border-lsGold/40`
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
         </div>
 
         {catalogLoading ? (
@@ -899,30 +956,6 @@ function CollectionPage() {
                 onSelect={(beast) => setSelectedBeast(beast)}
               />
             ))}
-          </div>
-        )}
-
-        {/* Load More Button */}
-        {hasMorePages && !summaryLoading && (
-          <div className="flex justify-center mt-6">
-            <button
-              onClick={loadMoreBeasts}
-              disabled={loadingMore}
-              className="px-6 py-3 bg-lsGold text-black font-semibold rounded-lg hover:bg-lsGold/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {loadingMore ? (
-                <span className="flex items-center gap-2">
-                  <span className="animate-spin h-4 w-4 border-2 border-black border-t-transparent rounded-full"></span>
-                  Loading {remainingPages > 3 ? 3 : remainingPages} more
-                  pages...
-                </span>
-              ) : (
-                <span>
-                  Load More ({remainingPages} page
-                  {remainingPages !== 1 ? "s" : ""} remaining)
-                </span>
-              )}
-            </button>
           </div>
         )}
 
