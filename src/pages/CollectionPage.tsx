@@ -772,7 +772,7 @@ function CollectionPage() {
             to="/"
             className="text-xs uppercase tracking-wide text-lsGold hover:underline"
           >
-            ← Back to BeastDex
+            ← Back to Home
           </Link>
 
           <Link
@@ -786,12 +786,24 @@ function CollectionPage() {
         <div className="flex flex-wrap gap-4 justify-center">
           {[
             {
+              key: "total",
+              label: "Total Collected",
+              count: ownedBeasts.length,
+              mainValue: `${ownedBeasts.length}`,
+              subValue: `All Beasts`,
+              color: "rgb(59, 130, 246)",
+              bgGradient: "bg-gradient-to-br from-blue-500/15 to-blue-500/5",
+              borderColor: "border-blue-400/30",
+              icon: "📦",
+              glisten: "",
+            },
+            {
               key: "collected",
-              label: "Total",
+              label: "Unique Beasts",
               count: collectionStats.uniqueBeastTypes,
               total: TOTAL_BEAST_VARIETIES,
               mainValue: `${collectionStats.uniqueBeastTypes}`,
-              subValue: `${TOTAL_BEAST_VARIETIES} types`,
+              subValue: `${TOTAL_BEAST_VARIETIES} Unique Beasts`,
               color: "hsl(var(--primary))",
               bgGradient: "bg-gradient-to-br from-primary/15 to-primary/5",
               borderColor: "border-primary/30",
@@ -804,7 +816,7 @@ function CollectionPage() {
               count: collectionStats.animatedShinyCount,
               unique: collectionStats.uniqueAnimatedShinyTypes,
               mainValue: `${collectionStats.animatedShinyCount}`,
-              subValue: `${collectionStats.uniqueAnimatedShinyTypes} types`,
+              subValue: `${collectionStats.uniqueAnimatedShinyTypes} Unique Beasts`,
               color: "rgb(236, 72, 153)",
               bgGradient:
                 "bg-gradient-to-br from-pink-500/15 via-purple-500/10 to-blue-500/5 animate-pulse",
@@ -819,7 +831,7 @@ function CollectionPage() {
               count: collectionStats.animatedCount,
               unique: collectionStats.uniqueAnimatedTypes,
               mainValue: `${collectionStats.animatedCount}`,
-              subValue: `${collectionStats.uniqueAnimatedTypes} types`,
+              subValue: `${collectionStats.uniqueAnimatedTypes} Unique Beasts`,
               color: "rgb(125, 211, 252)",
               bgGradient: "bg-gradient-to-br from-sky-500/15 to-sky-500/5",
               borderColor: "border-sky-400/30",
@@ -833,7 +845,7 @@ function CollectionPage() {
               count: collectionStats.shinyCount,
               unique: collectionStats.uniqueShinyTypes,
               mainValue: `${collectionStats.shinyCount}`,
-              subValue: `${collectionStats.uniqueShinyTypes} types`,
+              subValue: `${collectionStats.uniqueShinyTypes} Unique Beasts`,
               color: "rgb(253, 224, 71)",
               bgGradient:
                 "bg-gradient-to-br from-yellow-500/15 to-yellow-500/5",
@@ -848,7 +860,7 @@ function CollectionPage() {
               count: collectionStats.standardCount,
               unique: collectionStats.uniqueStandardTypes,
               mainValue: `${collectionStats.standardCount}`,
-              subValue: `${collectionStats.uniqueStandardTypes} types`,
+              subValue: `${collectionStats.uniqueStandardTypes} Unique Beasts`,
               color: "rgb(34, 197, 94)",
               bgGradient: "bg-gradient-to-br from-green-500/15 to-green-500/5",
               borderColor: "border-green-400/30",

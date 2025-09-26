@@ -5,13 +5,20 @@ import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import BeastGrid from "../components/beast/BeastGrid";
 import BeastModal from "../components/beast/BeastModal";
+import PaginationControls from "../components/pagination/PaginationControls";
+import { FiltersButton } from "../components/filters/FiltersButton";
+import { FiltersDrawer } from "../components/filters/FiltersDrawer";
+import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
+import { useBeasts } from "../hooks/useBeasts";
 import {
-  fetchBeasts,
+  fetchBeastAttributeFilters,
   fetchAdventurerDeaths,
   fetchBeastPowerRank,
+  fetchBeasts,
   type Beast,
   type BeastPowerRank,
+  type BeastAttributeFilters,
 } from "../services/beast";
 import {
   calculateKdRatio,
@@ -19,6 +26,7 @@ import {
   computeBeastCollectionStats,
 } from "../utils/beastCollection";
 import { normaliseStarknetAddress } from "../utils/address";
+import { getErrorMessage } from "../utils/error";
 
 import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
 import type { OverviewCard } from "@/components/account/OverviewCards";
@@ -30,49 +38,39 @@ function ProfilePage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [selectedBeastId, setSelectedBeastId] = useState<string | null>(null);
-  const [beasts, setBeasts] = useState<Beast[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [availableFilters, setAvailableFilters] = useState<BeastAttributeFilters>({});
+  const [attributeFilters, setAttributeFilters] = useState<BeastAttributeFilters>({});
+  const [filtersLoading, setFiltersLoading] = useState(true);
+  const [filtersError, setFiltersError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [sortOption, setSortOption] = useState<SortOption>("default");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [deaths, setDeaths] = useState(0);
   const [powerRanking, setPowerRanking] = useState<BeastPowerRank | null>(null);
 
   const ownerAddress = useMemo(() => address ?? "", [address]);
 
-  const loadBeasts = useCallback(async () => {
+  const ownerAddresses = useMemo(
+    () => (ownerAddress ? [ownerAddress] : []),
+    [ownerAddress]
+  );
+
+  const { beasts, total, hasMore, loading, error, reload } = useBeasts({
+    limit: PAGE_SIZE,
+    attributeFilters,
+    ownerAddresses,
+    page,
+    sort: sortOption,
+  });
+
+  const loadAdditionalData = useCallback(async () => {
     if (!ownerAddress) {
-      setBeasts([]);
-      setTotal(0);
-      setLoading(false);
-      setError(null);
       setDeaths(0);
       setPowerRanking(null);
       return;
     }
-    setLoading(true);
-    setError(null);
-    try {
-      const limit = PAGE_SIZE;
-      let page = 1;
-      let accumulated: Beast[] = [];
-      let totalCount = 0;
-      while (true) {
-        const { beasts: batch, total } = await fetchBeasts({
-          limit,
-          page,
-          ownerAddresses: [ownerAddress],
-          sort: "default",
-        });
-        accumulated = accumulated.concat(batch);
-        totalCount = total;
-        if (accumulated.length >= total || batch.length < limit) {
-          break;
-        }
-        page += 1;
-      }
-      setBeasts(accumulated);
-      setTotal(totalCount || accumulated.length);
 
+    try {
       const [deathCount, ranking] = await Promise.all([
         fetchAdventurerDeaths(ownerAddress),
         fetchBeastPowerRank(ownerAddress).catch((rankError) => {
@@ -84,10 +82,7 @@ function ProfilePage() {
       setDeaths(deathCount);
       setPowerRanking(ranking);
     } catch (err: unknown) {
-      console.error("Failed to load profile beasts", err);
-      setError((err as Error)?.message ?? "Failed to load beasts");
-    } finally {
-      setLoading(false);
+      console.error("Failed to load additional profile data", err);
     }
   }, [ownerAddress]);
 
@@ -107,26 +102,123 @@ function ProfilePage() {
     [beasts, selectedBeastId]
   );
 
+  // Load filters
   useEffect(() => {
-    loadBeasts();
-  }, [loadBeasts]);
+    let mounted = true;
+    async function loadFilters() {
+      try {
+        setFiltersLoading(true);
+        setFiltersError(null);
+        const filters = await fetchBeastAttributeFilters();
+        if (!mounted) return;
+        setAvailableFilters(filters);
+      } catch (error) {
+        if (mounted) {
+          setFiltersError(getErrorMessage(error, "Failed to load filters"));
+        }
+      } finally {
+        if (mounted) {
+          setFiltersLoading(false);
+        }
+      }
+    }
+    loadFilters();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-  const reload = useCallback(() => {
-    loadBeasts();
-  }, [loadBeasts]);
+  // Load additional data
+  useEffect(() => {
+    loadAdditionalData();
+  }, [loadAdditionalData]);
+
+  // Filter and sort handlers
+  const handleFilterChange = useCallback((trait: string, value: string) => {
+    setAttributeFilters(prev => {
+      const currentValues = prev[trait] || [];
+      const newValues = currentValues.includes(value)
+        ? currentValues.filter(v => v !== value)
+        : [...currentValues, value];
+
+      if (newValues.length === 0) {
+        const { [trait]: removed, ...rest } = prev;
+        return rest;
+      }
+
+      return {
+        ...prev,
+        [trait]: newValues
+      };
+    });
+    setPage(1); // Reset to first page when filters change
+  }, []);
+
+  const handleResetFilters = useCallback(() => {
+    setAttributeFilters({});
+    setPage(1);
+  }, []);
+
+  const handleOpenFilters = useCallback(() => {
+    setFiltersOpen(true);
+  }, []);
+
+  const handleCloseFilters = useCallback(() => {
+    setFiltersOpen(false);
+  }, []);
+
+  const handleSortChange = useCallback((newSort: SortOption) => {
+    setSortOption(newSort);
+    setPage(1); // Reset to first page when sort changes
+  }, []);
+
+  const handlePageChange = useCallback((newPage: number) => {
+    setPage(newPage);
+  }, []);
 
   const handleBackToHome = useCallback(() => {
     navigate("/");
   }, [navigate]);
 
-  const stats = useMemo(() => computeBeastCollectionStats(beasts), [beasts]);
-  const totalPower = useMemo(() => calculateTotalPower(beasts), [beasts]);
+  // For collection stats, we need all beasts, not just the paginated ones
+  const [allBeasts, setAllBeasts] = useState<Beast[]>([]);
 
-  const visibleBeasts = beasts;
+  useEffect(() => {
+    // Load all beasts for collection stats when filters change or on initial load
+    if (!ownerAddress) {
+      setAllBeasts([]);
+      return;
+    }
+
+    let mounted = true;
+    async function loadAllBeasts() {
+      try {
+        const { beasts: allUserBeasts } = await fetchBeasts({
+          limit: 1000, // High limit to get all beasts
+          ownerAddresses: [ownerAddress],
+          attributeFilters,
+          sort: "default",
+        });
+        if (mounted) {
+          setAllBeasts(allUserBeasts);
+        }
+      } catch (error) {
+        console.error("Failed to load all beasts for stats:", error);
+      }
+    }
+
+    loadAllBeasts();
+    return () => {
+      mounted = false;
+    };
+  }, [ownerAddress, attributeFilters]);
+
+  const stats = useMemo(() => computeBeastCollectionStats(allBeasts), [allBeasts]);
+  const totalPower = useMemo(() => calculateTotalPower(allBeasts), [allBeasts]);
 
   const kdRatio = useMemo(
-    () => calculateKdRatio(total, deaths),
-    [deaths, total]
+    () => calculateKdRatio(allBeasts.length, deaths),
+    [deaths, allBeasts.length]
   );
 
   const topBar = <TopBar />;
@@ -144,13 +236,13 @@ function ProfilePage() {
         icon: "⚔️",
         label: "K:D Ratio",
         value: kdRatio,
-        sub: `${total.toLocaleString()} K / ${deaths.toLocaleString()} D`,
+        sub: `${allBeasts.length.toLocaleString()} K / ${deaths.toLocaleString()} D`,
       },
       {
         key: "beasts",
         icon: "🐾",
         label: "Beasts Collected",
-        value: total.toLocaleString(),
+        value: allBeasts.length.toLocaleString(),
       },
       {
         key: "power",
@@ -166,7 +258,7 @@ function ProfilePage() {
         sub: rankSubheading || "Global leaderboard",
       },
     ],
-    [deaths, kdRatio, rankDisplay, rankSubheading, total, totalPower]
+    [deaths, kdRatio, rankDisplay, rankSubheading, allBeasts.length, totalPower]
   );
 
   const displayTitle = useMemo(() => {
@@ -266,7 +358,10 @@ function ProfilePage() {
             ) : null}
             <button
               type="button"
-              onClick={() => reload()}
+              onClick={() => {
+                reload();
+                loadAdditionalData();
+              }}
               disabled={loading}
               className="inline-flex items-center gap-2 rounded-md border border-lsGold px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-lsGold hover:bg-gray-900 disabled:opacity-50"
             >
@@ -281,7 +376,7 @@ function ProfilePage() {
             onClick={handleBackToHome}
             className="text-xs uppercase tracking-wide text-lsGold hover:underline"
           >
-            ← Back to BeastDex
+            ← Back to Home
           </Link>
         </div>
 
@@ -298,14 +393,61 @@ function ProfilePage() {
           <p className="text-[11px] text-red-400">{usernamesError}</p>
         ) : null}
         {error ? <p className="text-xs text-red-400">❌ {error}</p> : null}
+        {filtersError ? <p className="text-xs text-red-400">❌ {filtersError}</p> : null}
+
+        {/* Filters and Sort Controls */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="text-xs text-muted-foreground">
+            {loading ? "Loading..." : `${total.toLocaleString()} beasts`}
+          </div>
+          <div className="flex items-center gap-3">
+            <FiltersButton
+              attributeFilters={attributeFilters}
+              onClick={handleOpenFilters}
+            />
+            <SortDropdown
+              value={sortOption}
+              onChange={handleSortChange}
+            />
+          </div>
+        </div>
 
         {/* Grid */}
         <BeastGrid
-          beasts={visibleBeasts}
+          beasts={beasts}
           ownerUsernames={ownerUsernames}
           onSelect={(beast) => setSelectedBeastId(beast.id)}
           loading={loading}
-          emptyMessage="No beasts collected yet."
+          emptyMessage="No beasts found with current filters."
+        />
+
+        {/* Pagination */}
+        {!loading && total > PAGE_SIZE && (
+          <PaginationControls
+            page={page}
+            totalPages={Math.ceil(total / PAGE_SIZE)}
+            disablePrevious={page <= 1}
+            disableNext={!hasMore}
+            loading={loading}
+            onRefresh={() => {
+              reload();
+              loadAdditionalData();
+            }}
+            onPrevious={() => handlePageChange(page - 1)}
+            onNext={() => handlePageChange(page + 1)}
+          />
+        )}
+
+        {/* Filters Drawer */}
+        <FiltersDrawer
+          open={filtersOpen}
+          onClose={handleCloseFilters}
+          availableFilters={availableFilters}
+          attributeFilters={attributeFilters}
+          filtersLoading={filtersLoading}
+          filtersError={filtersError}
+          onFilterChange={handleFilterChange}
+          onResetFilters={handleResetFilters}
         />
 
         {/* Modal */}

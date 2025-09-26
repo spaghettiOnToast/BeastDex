@@ -23,7 +23,7 @@ export function FiltersDrawer({
   onResetFilters,
 }: FiltersDrawerProps) {
   const hasFiltersApplied = useMemo(
-    () => Object.keys(attributeFilters).length > 0,
+    () => Object.keys(attributeFilters || {}).length > 0,
     [attributeFilters]
   );
 
@@ -62,7 +62,7 @@ export function FiltersDrawer({
             <h2 className="text-base font-semibold text-lsGold">Filters</h2>
             <p className="text-xs text-gray-400">
               {hasFiltersApplied
-                ? `${Object.keys(attributeFilters).length} active`
+                ? `${Object.keys(attributeFilters || {}).length} active`
                 : "No filters applied"}
             </p>
           </div>
@@ -105,7 +105,7 @@ export function FiltersDrawer({
             <p className="text-xs text-gray-400">Loading filters...</p>
           ) : (
             <div className="space-y-3">
-              {(Object.entries(availableFilters) as Array<[string, string[]]>)
+              {(Object.entries(availableFilters || {}) as Array<[string, string[]]>)
                 .sort(([a], [b]) => a.localeCompare(b))
                 .map(([trait, values]) => {
                   const normalisedTrait = trait.toLowerCase();
@@ -247,7 +247,7 @@ export function FiltersDrawer({
                     </div>
                   );
                 }).filter(Boolean)}
-              {Object.keys(availableFilters).length === 0 && (
+              {Object.keys(availableFilters || {}).length === 0 && (
                 <p className="text-xs text-gray-400">
                   No metadata filters available.
                 </p>

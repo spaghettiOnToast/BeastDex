@@ -135,7 +135,8 @@ function AccountPage() {
 
         // If no Cartridge username found, try Starknet.id
         try {
-          const starknetIdAddress = await starknetIdService.getAddressFromStarkName(trimmedIdentifier);
+          const starknetIdAddress =
+            await starknetIdService.getAddressFromStarkName(trimmedIdentifier);
           if (starknetIdAddress && !cancelled) {
             setResolvedAddress(starknetIdAddress);
             setIdentifierError(null);
@@ -196,7 +197,6 @@ function AccountPage() {
     });
     return Array.from(unique).filter(Boolean);
   }, [resolvedAddress, beasts]);
-
 
   const {
     usernames: ownerUsernames,
@@ -580,7 +580,7 @@ function AccountPage() {
                     {collectionStats.uniqueBeastTypes}
                   </span>
                   <span className="text-muted-foreground">
-                    / {TOTAL_BEAST_VARIETIES} types
+                    / {TOTAL_BEAST_VARIETIES} /Beasts
                   </span>
                 </div>
               </div>
@@ -627,7 +627,7 @@ function AccountPage() {
                 onClick={handleBackToHome}
                 className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
               >
-                ← Back to BeastDex
+                ← Back to Home
               </Link>
             </div>
           </div>

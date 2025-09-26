@@ -7,7 +7,7 @@ type AppLayoutProps = {
 
 export function AppLayout({ topBar, children }: AppLayoutProps) {
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-black text-white overflow-x-hidden">
       <header className="fixed inset-x-0 top-0 z-40 border-b border-gray-900 bg-[#050505]/95 backdrop-blur">
         <div className="mx-auto max-w-7xl px-6 py-4">{topBar}</div>
       </header>

@@ -68,8 +68,22 @@ export default function Logo({ scale = "md" }: LogoProps) {
             strokeWidth="4"
           />
 
-          <circle cx="110" cy="80" r="36" fill="url(#bdex-core)" stroke="#102c1c" strokeWidth="4" />
-          <circle cx="110" cy="80" r="20" fill="#062a12" stroke="#39ff14" strokeWidth="3" />
+          <circle
+            cx="110"
+            cy="80"
+            r="36"
+            fill="url(#bdex-core)"
+            stroke="#102c1c"
+            strokeWidth="4"
+          />
+          <circle
+            cx="110"
+            cy="80"
+            r="20"
+            fill="#062a12"
+            stroke="#39ff14"
+            strokeWidth="3"
+          />
           <circle cx="110" cy="80" r="10" fill="#39ff14" />
           <circle cx="110" cy="80" r="4" fill="#2ce0ff" />
 

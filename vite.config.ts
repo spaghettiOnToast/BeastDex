@@ -14,7 +14,7 @@ export default defineConfig({
     https: {},
     proxy: {
       "/torii": {
-        target: "https://api.cartridge.gg/x/pg-mainnet-3/torii",
+        target: "https://api.cartridge.gg/x/pg-mainnet-5/torii",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/torii/, ""),
       },

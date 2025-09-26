@@ -21,7 +21,10 @@ export default function SearchBar({ value, onChange, onSubmit }: Props) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex justify-start w-full max-w-3xl">
+    <form
+      onSubmit={handleSubmit}
+      className="flex justify-start w-full max-w-3xl"
+    >
       <div className="relative flex-1">
         <Input
           type="text"
@@ -34,7 +37,7 @@ export default function SearchBar({ value, onChange, onSubmit }: Props) {
           type="submit"
           size="sm"
           aria-label="Search beasts"
-          className="absolute inset-y-0 right-2 my-auto h-8 w-8 bg-gray-800 text-gray-300 hover:bg-gray-700 focus:ring-lsGreen"
+          className="absolute inset-y-0 right-2 my-auto h-8 w-8  text-gray-300 hover:bg-gray-700 focus:ring-lsGreen"
         >
           <Search className="h-4 w-4" />
         </Button>

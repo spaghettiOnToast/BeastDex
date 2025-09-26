@@ -30,17 +30,14 @@ export function OverviewCards({ cards }: OverviewCardsProps) {
                 {card.label}
               </p>
               <div className="m-1">
-                <p className="text-2xl font-bold text-primary leading-tight">
-                  {card.value}{" "}
-                  <span>
-                    {" "}
-                    {card.sub ? (
-                      <p className="text-xs text-gray-500 text-muted-foreground font-medium leading-tight">
-                        {card.sub}
-                      </p>
-                    ) : null}
-                  </span>
-                </p>
+                <div className="text-2xl font-bold text-primary leading-tight">
+                  {card.value}
+                </div>
+                {card.sub ? (
+                  <div className="text-xs text-gray-500 text-muted-foreground font-medium leading-tight">
+                    {card.sub}
+                  </div>
+                ) : null}
               </div>
             </div>
           </CardContent>
