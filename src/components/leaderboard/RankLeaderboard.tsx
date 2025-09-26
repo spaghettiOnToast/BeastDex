@@ -197,10 +197,7 @@ export function RankLeaderboard() {
                 Loading More...
               </span>
             ) : (
-              <span className="flex items-center gap-2">
-                <span>Load More</span>
-                <span className="text-lg">⬇️</span>
-              </span>
+              "Load More"
             )}
           </button>
         </div>
