@@ -804,11 +804,17 @@ function CollectionPage() {
               total: TOTAL_BEAST_VARIETIES,
               mainValue: `${collectionStats.uniqueBeastTypes}`,
               subValue: `${TOTAL_BEAST_VARIETIES} Unique Beasts`,
-              color: "hsl(var(--primary))",
-              bgGradient: "bg-gradient-to-br from-primary/15 to-primary/5",
-              borderColor: "border-primary/30",
-              icon: "🏆",
-              glisten: "",
+              color: collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES ? "rgb(57, 255, 20)" : "hsl(var(--primary))",
+              bgGradient: collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                ? "bg-gradient-to-br from-[#39ff14]/25 via-[#8bff72]/15 to-[#39ff14]/10 animate-pulse shadow-[0_0_30px_rgba(57,255,20,0.3)]"
+                : "bg-gradient-to-br from-primary/15 to-primary/5",
+              borderColor: collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                ? "border-[#39ff14]/50 shadow-[0_0_20px_rgba(57,255,20,0.2)]"
+                : "border-primary/30",
+              icon: collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES ? "🎉" : "🏆",
+              glisten: collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                ? "animate-[shimmer_2s_ease-in-out_infinite]"
+                : "",
             },
             {
               key: "animatedShiny",

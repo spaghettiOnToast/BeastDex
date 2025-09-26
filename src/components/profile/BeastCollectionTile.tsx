@@ -47,16 +47,22 @@ export function BeastCollectionTile({
   const cards = [
     {
       key: "collected",
-      label: "Total",
+      label: uniqueBeastTypes === TOTAL_BEAST_VARIETIES ? "COMPLETE! 🎉" : "Total",
       count: uniqueBeastTypes,
       total: TOTAL_BEAST_VARIETIES,
       mainValue: `${uniqueBeastTypes}`,
       subValue: `${TOTAL_BEAST_VARIETIES} Unique Beasts`,
-      color: "hsl(var(--primary))",
-      bgGradient: "bg-gradient-to-br from-primary/15 to-primary/5",
-      borderColor: "border-primary/30",
-      icon: "🏆",
-      animations: "",
+      color: uniqueBeastTypes === TOTAL_BEAST_VARIETIES ? "rgb(57, 255, 20)" : "hsl(var(--primary))",
+      bgGradient: uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+        ? "bg-gradient-to-br from-[#39ff14]/25 via-[#8bff72]/15 to-[#39ff14]/10 animate-pulse shadow-[0_0_30px_rgba(57,255,20,0.3)]"
+        : "bg-gradient-to-br from-primary/15 to-primary/5",
+      borderColor: uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+        ? "border-[#39ff14]/50 shadow-[0_0_20px_rgba(57,255,20,0.2)]"
+        : "border-primary/30",
+      icon: uniqueBeastTypes === TOTAL_BEAST_VARIETIES ? "🎉" : "🏆",
+      animations: uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+        ? "animate-[shimmer_2s_ease-in-out_infinite] scale-105"
+        : "",
     },
     {
       key: "animatedShiny",
