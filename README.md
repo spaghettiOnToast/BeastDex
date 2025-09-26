@@ -47,8 +47,6 @@ The app will be available at http://localhost:5173 (or similar).
 
 🌐 Starknet APIs & LootSurvivor data
 
-📸 Screenshots
-(coming soon)
 
 🤝 Contributing
 Contributions, issues, and feature requests are welcome!
