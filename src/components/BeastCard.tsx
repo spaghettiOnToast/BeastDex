@@ -14,6 +14,7 @@ type Props = {
   missing?: boolean;
   overlayLabel?: string;
   disabled?: boolean;
+  duplicateCount?: number;
 };
 
 const BeastCard = memo(function BeastCard({
@@ -24,6 +25,7 @@ const BeastCard = memo(function BeastCard({
   missing = false,
   overlayLabel = "Need to hunt",
   disabled = false,
+  duplicateCount,
 }: Props) {
   const { image, name, owner } = beast;
 
@@ -104,6 +106,11 @@ const BeastCard = memo(function BeastCard({
           ) : (
             <div className="flex h-full w-full items-center justify-center text-muted-foreground text-sm">
               No image
+            </div>
+          )}
+          {duplicateCount && duplicateCount > 1 && !missing && (
+            <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-lg border border-primary/20">
+              {duplicateCount}
             </div>
           )}
           {missing && (

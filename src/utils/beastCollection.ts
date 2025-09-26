@@ -287,4 +287,21 @@ export function calculateKdRatio(total: number, deaths: number): string {
   return (total / deaths).toFixed(2);
 }
 
+export function calculateDuplicateCounts(beasts: Beast[]): Map<string, number> {
+  const duplicateCounts = new Map<string, number>();
+
+  beasts.forEach((beast) => {
+    const typeAttribute = beast.attributes.find(
+      (attr) => attr.trait_type?.toLowerCase() === "beast"
+    )?.value;
+    const beastTypeKey = typeAttribute ? String(typeAttribute).trim().toLowerCase() : "";
+
+    if (beastTypeKey) {
+      duplicateCounts.set(beastTypeKey, (duplicateCounts.get(beastTypeKey) || 0) + 1);
+    }
+  });
+
+  return duplicateCounts;
+}
+
 export { DEFAULT_STATS as EMPTY_BEAST_COLLECTION_STATS };

@@ -34,6 +34,7 @@ import {
   computeBeastCollectionStats,
   EMPTY_BEAST_COLLECTION_STATS,
   TOTAL_BEAST_VARIETIES,
+  calculateDuplicateCounts,
 } from "../utils/beastCollection";
 import { normaliseStarknetAddress } from "../utils/address";
 import { lookupControllerAddresses } from "../services/controller";
@@ -559,6 +560,11 @@ function CollectionPage() {
     [ownedBeasts]
   );
 
+  const duplicateCounts = useMemo(
+    () => calculateDuplicateCounts(ownedBeasts),
+    [ownedBeasts]
+  );
+
   // Use template-based placeholders - much faster!
   const placeholderCache = useMemo(() => {
     const cache = new Map<string, Beast | null>();
@@ -603,6 +609,7 @@ function CollectionPage() {
         beast: Beast | null;
         missing: boolean;
         ownerUsername: string | null;
+        duplicateCount: number;
       }>
     > = {
       all: [],
@@ -635,6 +642,7 @@ function CollectionPage() {
           beast: standardPlaceholder,
           missing: !standardOwned,
           ownerUsername: resolveOwnerUsername(standardOwned),
+          duplicateCount: duplicateCounts.get(key) || 0,
         });
 
         // Shiny tab
@@ -644,6 +652,7 @@ function CollectionPage() {
           beast: shinyOwned ?? placeholder,
           missing: !shinyOwned,
           ownerUsername: resolveOwnerUsername(shinyOwned),
+          duplicateCount: duplicateCounts.get(key) || 0,
         });
 
         // Animated tab
@@ -653,6 +662,7 @@ function CollectionPage() {
           beast: animatedOwned ?? placeholder,
           missing: !animatedOwned,
           ownerUsername: resolveOwnerUsername(animatedOwned),
+          duplicateCount: duplicateCounts.get(key) || 0,
         });
 
         // Animated Shiny tab
@@ -662,6 +672,7 @@ function CollectionPage() {
           beast: animatedShinyOwned ?? placeholder,
           missing: !animatedShinyOwned,
           ownerUsername: resolveOwnerUsername(animatedShinyOwned),
+          duplicateCount: duplicateCounts.get(key) || 0,
         });
 
         // All tab → pick *one* (any rarity)
@@ -678,12 +689,96 @@ function CollectionPage() {
           beast: anyOwned ?? placeholder,
           missing: !anyOwned,
           ownerUsername: resolveOwnerUsername(anyOwned),
+          duplicateCount: duplicateCounts.get(key) || 0,
         });
       }
     );
 
-    return entries;
-  }, [tabEntriesForCategory, resolveOwnerUsername]);
+    // Apply sorting to entries based on sortOption
+    const sortedEntries: typeof entries = {
+      all: [...entries.all],
+      standard: [...entries.standard],
+      animated: [...entries.animated],
+      shiny: [...entries.shiny],
+      animatedShiny: [...entries.animatedShiny],
+    };
+
+    if (sortOption !== "default") {
+      Object.keys(sortedEntries).forEach((tabKey) => {
+        const tabEntries = sortedEntries[tabKey as TabKey];
+
+        switch (sortOption) {
+          case "beast":
+            tabEntries.sort((a, b) => a.label.localeCompare(b.label));
+            break;
+          case "tier":
+            tabEntries.sort((a, b) => {
+              const getTier = (entry: typeof tabEntries[0]) => {
+                if (!entry.beast) return 999;
+                const tierAttr = entry.beast.attributes.find(
+                  attr => attr.trait_type?.toLowerCase() === "tier"
+                );
+                return tierAttr?.value ? Number(tierAttr.value) : 999;
+              };
+              const tierA = getTier(a);
+              const tierB = getTier(b);
+              // If tiers are the same, put missing beasts after owned ones
+              if (tierA === tierB) {
+                if (a.missing && !b.missing) return 1;
+                if (!a.missing && b.missing) return -1;
+                return 0;
+              }
+              return tierA - tierB;
+            });
+            break;
+          case "health":
+            tabEntries.sort((a, b) => {
+              const getHealth = (entry: typeof tabEntries[0]) => {
+                if (!entry.beast || entry.missing) return 0;
+                const healthAttr = entry.beast.attributes.find(
+                  attr => attr.trait_type?.toLowerCase() === "health"
+                );
+                return healthAttr?.value ? Number(healthAttr.value) : 0;
+              };
+              const healthA = getHealth(a);
+              const healthB = getHealth(b);
+              return healthB - healthA; // High to low
+            });
+            break;
+          case "rank":
+            tabEntries.sort((a, b) => {
+              const getRank = (entry: typeof tabEntries[0]) => {
+                if (!entry.beast || entry.missing) return 999999;
+                const rankAttr = entry.beast.attributes.find(
+                  attr => attr.trait_type?.toLowerCase() === "rank"
+                );
+                return rankAttr?.value ? Number(rankAttr.value) : 999999;
+              };
+              const rankA = getRank(a);
+              const rankB = getRank(b);
+              return rankA - rankB; // Low to high
+            });
+            break;
+          case "last-death":
+            tabEntries.sort((a, b) => {
+              const getLastDeath = (entry: typeof tabEntries[0]) => {
+                if (!entry.beast || entry.missing) return 0;
+                const deathAttr = entry.beast.attributes.find(
+                  attr => attr.trait_type?.toLowerCase() === "last death timestamp"
+                );
+                return deathAttr?.value ? Number(deathAttr.value) : 0;
+              };
+              const deathA = getLastDeath(a);
+              const deathB = getLastDeath(b);
+              return deathB - deathA; // Recent first
+            });
+            break;
+        }
+      });
+    }
+
+    return sortedEntries;
+  }, [tabEntriesForCategory, resolveOwnerUsername, duplicateCounts, sortOption]);
 
   console.log(genesisCache);
 
@@ -971,6 +1066,7 @@ function CollectionPage() {
                 missing={entry.missing}
                 overlayLabel="Need to hunt"
                 disabled={entry.missing}
+                duplicateCount={entry.duplicateCount}
                 onSelect={(beast) => setSelectedBeast(beast)}
               />
             ))}
