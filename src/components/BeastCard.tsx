@@ -29,18 +29,37 @@ const BeastCard = memo(function BeastCard({
 
   const renderOwner = () => {
     if (missing) {
-      return <Badge variant="secondary" className="text-xs font-normal w-full justify-center">{overlayLabel}</Badge>;
+      return (
+        <Badge
+          variant="secondary"
+          className="text-xs font-normal w-full justify-center"
+        >
+          {overlayLabel}
+        </Badge>
+      );
     }
 
     if (!owned || !owner) {
-      return <Badge variant="outline" className="text-xs font-normal w-full justify-center">Unowned</Badge>;
+      return (
+        <Badge
+          variant="outline"
+          className="text-xs font-normal w-full justify-center"
+        >
+          Unowned
+        </Badge>
+      );
     }
 
     const address = owner.toLowerCase();
-    const label = ownerUsername
+    
+    // Check if ownerUsername is actually a truncated address (not a real username)
+    const isRealUsername = ownerUsername && !ownerUsername.match(/^0x[a-fA-F0-9]{4}\.{3}[a-fA-F0-9]{4}$/);
+    
+    const label = isRealUsername
       ? ownerUsername
       : `${owner.slice(0, 6)}…${owner.slice(-4)}`;
-    const accountIdentifier = ownerUsername
+      
+    const accountIdentifier = isRealUsername
       ? ownerUsername.trim().toLowerCase()
       : address;
 
@@ -89,7 +108,10 @@ const BeastCard = memo(function BeastCard({
           )}
           {missing && (
             <div className="absolute inset-0 flex items-center justify-center bg-background/90 backdrop-blur-sm">
-              <Badge variant="outline" className="px-4 py-1.5 text-xs font-semibold uppercase tracking-widest border-2">
+              <Badge
+                variant="outline"
+                className="px-4 py-1.5 text-xs font-semibold uppercase tracking-widest border-2"
+              >
                 {overlayLabel}
               </Badge>
             </div>
@@ -97,7 +119,9 @@ const BeastCard = memo(function BeastCard({
         </div>
       </CardContent>
       <CardFooter className="flex flex-col items-center gap-1.5 px-0 py-3 bg-gradient-to-b from-background/50 to-background">
-        <p className="font-medium text-sm truncate w-full text-center">{name}</p>
+        <p className="font-medium text-sm truncate w-full text-center">
+          {name}
+        </p>
         <div className="w-full text-center">{renderOwner()}</div>
       </CardFooter>
     </Card>
