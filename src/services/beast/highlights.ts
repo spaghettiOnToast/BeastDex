@@ -9,6 +9,8 @@ import type { BeastHighlights } from "./types";
 
 const BOOLEAN_TRUE_VALUES = ["1", "true", "True", "TRUE"]; // coarse normalization
 
+const EXCLUDED_ADDRESS = "0x7bdeac5b256fa53c11b0bc0368af72916203987429032f37254465ee4ec078b";
+
 function buildBaseCte() {
   return `
     WITH base AS (
@@ -33,6 +35,7 @@ function buildBaseCte() {
         AND json_valid(t.metadata) = 1
         AND json_extract(attr.value, '$.trait_type') IS NOT NULL
         AND json_extract(attr.value, '$.value') IS NOT NULL
+        AND LOWER(b.account_address) != '${EXCLUDED_ADDRESS.toLowerCase()}'
     ),
     normalized AS (
       SELECT

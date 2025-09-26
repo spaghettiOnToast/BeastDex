@@ -19,6 +19,7 @@ import { normaliseStarknetAddress } from "../utils/address";
 import { lookupControllerAddresses } from "../services/controller";
 import { getErrorMessage } from "../utils/error";
 import { config } from "../config";
+import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
 
 const PAGE_SIZE = config.pagination.defaultPageSize;
 
@@ -211,6 +212,7 @@ function CollectionPage() {
   const [catalogError, setCatalogError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<TabKey>("all");
+  const [sortOption, setSortOption] = useState<SortOption>("default");
 
   const summaryRequestRef = useRef(0);
 
@@ -324,7 +326,7 @@ function CollectionPage() {
         limit,
         page: 1,
         ownerAddresses: [resolvedAddress],
-        sort: "default",
+        sort: sortOption,
       });
 
       if (summaryRequestRef.current !== requestId) {
@@ -345,7 +347,7 @@ function CollectionPage() {
               limit,
               page: p,
               ownerAddresses: [resolvedAddress],
-              sort: "default",
+              sort: sortOption,
             });
             accumulated = accumulated.concat(result.beasts);
           } catch (error) {
@@ -379,7 +381,7 @@ function CollectionPage() {
         setSummaryLoading(false);
       }
     }
-  }, [identifierError, resolvedAddress, resolvingIdentifier]);
+  }, [identifierError, resolvedAddress, resolvingIdentifier, sortOption]);
 
   const loadMoreBeasts = useCallback(async () => {
     if (loadingMore || remainingPages <= 0) return;
@@ -398,7 +400,7 @@ function CollectionPage() {
             limit,
             page: p,
             ownerAddresses: [resolvedAddress],
-            sort: "default",
+            sort: sortOption,
           })
         );
       }
@@ -504,7 +506,7 @@ function CollectionPage() {
         const { beasts: firstBatch, total } = await fetchBeasts({
           limit,
           page: 1,
-          sort: "default",
+          sort: sortOption,
         });
 
         if (cancelled) return;
@@ -543,7 +545,7 @@ function CollectionPage() {
             const promises = [];
 
             for (let p = currentPage; p <= batchEnd; p++) {
-              promises.push(fetchBeasts({ limit, page: p, sort: "default" }));
+              promises.push(fetchBeasts({ limit, page: p, sort: sortOption }));
             }
 
             const results = await Promise.allSettled(promises);
@@ -816,6 +818,7 @@ function CollectionPage() {
           </Link>
 
           <div className="flex items-center gap-3 mt-2">
+            <SortDropdown value={sortOption} onChange={setSortOption} />
             <Link
               to={`/account/${encodeURIComponent(trimmedIdentifier)}`}
               className="text-xs uppercase tracking-wide text-lsGold hover:underline"

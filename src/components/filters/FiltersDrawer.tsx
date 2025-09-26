@@ -9,7 +9,6 @@ type FiltersDrawerProps = {
   filtersLoading: boolean;
   filtersError: string | null;
   onFilterChange: (trait: string, value: string) => void;
-  onBooleanFilterToggle: (trait: string, values: string[]) => void;
   onResetFilters: () => void;
 };
 
@@ -21,7 +20,6 @@ export function FiltersDrawer({
   filtersLoading,
   filtersError,
   onFilterChange,
-  onBooleanFilterToggle,
   onResetFilters,
 }: FiltersDrawerProps) {
   const hasFiltersApplied = useMemo(
@@ -161,29 +159,40 @@ export function FiltersDrawer({
                       </span>
 
                       {isBoolean ? (
-                        <div className="flex items-center justify-end">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-gray-400">
+                            {currentValue === "1" ? "Yes" : currentValue === "0" ? "No" : "Any"}
+                          </span>
                           <button
                             type="button"
-                            onClick={() => onBooleanFilterToggle(trait, safeValues)}
+                            onClick={() => {
+                              // Cycle through: no filter → yes (1) → no (0) → no filter
+                              const nextValue =
+                                currentValue === "1" ? "0" :
+                                currentValue === "0" ? "" : "1";
+                              onFilterChange(trait, nextValue);
+                            }}
                             aria-pressed={currentValue === "1"}
                             aria-label={`${trait} filter: ${
                               currentValue === "1"
-                                ? "true"
+                                ? "Yes"
                                 : currentValue === "0"
-                                ? "false"
-                                : "any"
+                                ? "No"
+                                : "Any"
                             }`}
                             className="p-1 rounded-full border border-transparent hover:border-lsGreen focus:outline-none focus:ring-2 focus:ring-lsGreen"
                           >
                             <span
-                              className={`block h-4 w-4 rounded-full border transition ${
+                              className={`block h-4 w-4 rounded-full border transition flex items-center justify-center text-[8px] font-bold ${
                                 currentValue === "1"
-                                  ? "border-[#39ff14] bg-[#39ff14] shadow-[0_0_8px_#39ff14]"
+                                  ? "border-[#39ff14] bg-[#39ff14] shadow-[0_0_8px_#39ff14] text-black"
                                   : currentValue === "0"
-                                  ? "border-[#39ff14] bg-transparent"
-                                  : "border-gray-700"
+                                  ? "border-red-500 bg-red-500/20 text-red-500"
+                                  : "border-gray-700 bg-gray-800"
                               }`}
-                            />
+                            >
+                              {currentValue === "1" ? "✓" : currentValue === "0" ? "✗" : ""}
+                            </span>
                           </button>
                         </div>
                       ) : isSearchField ? (

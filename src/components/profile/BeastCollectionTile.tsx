@@ -119,13 +119,18 @@ export function BeastCollectionTile({
   const otherCards = cards.slice(1);
 
   return (
-    <div className="grid gap-3 grid-cols-2">
-      {otherCards.map((card) => (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <div className="flex-1 opacity-50 h-px bg-border" />
+      </div>
+
+      <div className="grid gap-3 grid-cols-2">
+        {otherCards.map((card) => (
           <Card
             key={card.key}
-            className={`${card.bgGradient} ${card.borderColor} ${card.glisten} backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-md min-h-[90px] flex flex-col relative overflow-hidden`}
+            className={`${card.bgGradient} ${card.borderColor} ${card.glisten} backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-md min-h-[120px] flex flex-col relative overflow-hidden`}
           >
-            <CardContent className="p-3 flex-1 flex flex-col relative z-10">
+            <CardContent className="p-4 flex-1 flex flex-col relative z-10">
               <div className="flex flex-col items-center text-center gap-1.5 mb-2 min-h-[20px]">
                 <span className="text-sm flex-shrink-0">{card.icon}</span>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium truncate">
@@ -146,6 +151,7 @@ export function BeastCollectionTile({
             </CardContent>
           </Card>
         ))}
+      </div>
     </div>
   );
 }

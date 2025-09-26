@@ -7,7 +7,7 @@ import {
 } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
 
-export type SortOption = "default" | "beast" | "tier";
+export type SortOption = "default" | "beast" | "tier" | "health" | "rank" | "last-death";
 
 type SortDropdownProps = {
   value: SortOption;
@@ -18,6 +18,9 @@ const OPTIONS: Array<{ label: string; value: SortOption }> = [
   { label: "Default", value: "default" },
   { label: "Beast (A → Z)", value: "beast" },
   { label: "Tier (1 → 5)", value: "tier" },
+  { label: "Health (High → Low)", value: "health" },
+  { label: "Rank (1 → ∞)", value: "rank" },
+  { label: "Last Death (Recent)", value: "last-death" },
 ];
 
 export function SortDropdown({ value, onChange }: SortDropdownProps) {

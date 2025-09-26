@@ -92,7 +92,6 @@ function HomePage() {
           filteredEntries
         ) as BeastAttributeFilters;
         setAvailableFilters(cleanedFilters);
-        console.log("🔍 Available filters loaded:", Object.keys(cleanedFilters));
         setAttributeFilters((prev: BeastAttributeFilters) => {
           const nextEntries = (
             Object.entries(prev) as Array<[string, string[]]>
@@ -186,7 +185,6 @@ function HomePage() {
   }, []);
 
   const handleFilterChange = useCallback((trait: string, value: string) => {
-    console.log("🔍 Filter change:", { trait, value });
     setPage(1);
     setAttributeFilters((prev) => {
       const newFilters = { ...prev };
@@ -195,28 +193,9 @@ function HomePage() {
       } else {
         delete newFilters[trait];
       }
-      console.log("🔍 New filters:", newFilters);
       return newFilters;
     });
   }, []);
-
-  const handleBooleanFilterToggle = useCallback(
-    (trait: string, values: string[]) => {
-      console.log("🔍 Boolean filter toggle:", { trait, values });
-      setPage(1);
-      setAttributeFilters((prev) => {
-        const newFilters = { ...prev };
-        if (values.length > 0) {
-          newFilters[trait] = values;
-        } else {
-          delete newFilters[trait];
-        }
-        console.log("🔍 New filters (boolean):", newFilters);
-        return newFilters;
-      });
-    },
-    []
-  );
 
   const handleResetFilters = useCallback(() => {
     setPage(1);
@@ -351,7 +330,6 @@ function HomePage() {
         filtersLoading={filtersLoading}
         filtersError={filtersError}
         onFilterChange={handleFilterChange}
-        onBooleanFilterToggle={handleBooleanFilterToggle}
         onResetFilters={handleResetFilters}
       />
     </AppLayout>

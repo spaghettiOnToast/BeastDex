@@ -32,7 +32,7 @@ export type FetchBeastsOptions = {
   attributeFilters?: AttributeFilterInput;
   ownerAddresses?: string[];
   page?: number;
-  sort?: "default" | "beast" | "tier";
+  sort?: "default" | "beast" | "tier" | "health" | "rank" | "last-death";
 };
 
 export type BeastStats = {

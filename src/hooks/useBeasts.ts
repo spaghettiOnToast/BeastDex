@@ -13,7 +13,7 @@ type UseBeastsOptions = {
   attributeFilters?: AttributeFilterInput;
   ownerAddresses?: string[];
   page?: number;
-  sort?: "default" | "beast" | "tier";
+  sort?: "default" | "beast" | "tier" | "health" | "rank" | "last-death";
   enabled?: boolean;
 };
 

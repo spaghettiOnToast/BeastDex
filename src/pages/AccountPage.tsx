@@ -8,7 +8,8 @@ import {
 import BeastGrid from "../components/beast/BeastGrid";
 import BeastModal from "../components/beast/BeastModal";
 import PaginationControls from "../components/pagination/PaginationControls";
-import AccountFiltersDropdown from "../components/filters/AccountFiltersDropdown";
+import { FiltersButton } from "../components/filters/FiltersButton";
+import { FiltersDrawer } from "../components/filters/FiltersDrawer";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import { useBeasts } from "../hooks/useBeasts";
@@ -59,6 +60,7 @@ function AccountPage() {
   const [page, setPage] = useState(1);
   const [selectedBeast, setSelectedBeast] = useState<Beast | null>(null);
   const [sortOption, setSortOption] = useState<SortOption>("default");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [collectionStats, setCollectionStats] = useState(
     EMPTY_BEAST_COLLECTION_STATS
   );
@@ -159,9 +161,9 @@ function AccountPage() {
     attributeFilters,
     ownerAddresses,
     page,
+    sort: sortOption,
     enabled: Boolean(resolvedAddress),
   });
-
 
   const ownerLookupAddresses = useMemo(() => {
     const unique = new Set<string>();
@@ -176,23 +178,6 @@ function AccountPage() {
     return Array.from(unique).filter(Boolean);
   }, [resolvedAddress, beasts]);
 
-  const sortedBeasts = useMemo(() => {
-    if (sortOption === "default") {
-      return beasts;
-    }
-
-    // Cache trait extraction to avoid repeated attribute searches
-    const beastsWithTraits = beasts.map(beast => ({
-      beast,
-      traitValue: beast.attributes.find(
-        attr => attr.trait_type?.toLowerCase() === "beast"
-      )?.value ?? "",
-    }));
-
-    return beastsWithTraits
-      .sort((a, b) => String(a.traitValue).localeCompare(String(b.traitValue)))
-      .map(item => item.beast);
-  }, [beasts, sortOption]);
 
   const {
     usernames: ownerUsernames,
@@ -250,8 +235,16 @@ function AccountPage() {
   }, []);
 
   const handleResetFilters = useCallback(() => {
-    setAttributeFilters({} as BeastAttributeFilters);
     setPage(1);
+    setAttributeFilters({});
+  }, []);
+
+  const handleOpenFilters = useCallback(() => {
+    setFiltersOpen(true);
+  }, []);
+
+  const handleCloseFilters = useCallback(() => {
+    setFiltersOpen(false);
   }, []);
 
   const handleSelectBeast = useCallback((beast: Beast) => {
@@ -379,13 +372,9 @@ function AccountPage() {
   const topBar = <TopBar />;
 
   const filtersControl = (
-    <AccountFiltersDropdown
-      availableFilters={availableFilters}
+    <FiltersButton
       attributeFilters={attributeFilters}
-      filtersLoading={filtersLoading}
-      filtersError={filtersError}
-      onFilterChange={handleFilterChange}
-      onResetFilters={handleResetFilters}
+      onClick={handleOpenFilters}
     />
   );
 
@@ -544,10 +533,8 @@ function AccountPage() {
   return (
     <AppLayout topBar={topBar}>
       <div className="space-y-4">
-        {/* Hero Section with Action Bar */}
         <div className="bg-card/20 backdrop-blur-sm rounded-md border border-muted/40 p-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            {/* Hero Content */}
             <div className="flex flex-col items-start space-y-2">
               {mostPowerfulTitle ? (
                 <div className="bg-gradient-to-r from-pink-500 via-cyan-400 to-green-400 bg-clip-text text-lg md:text-xl font-bold uppercase tracking-wider text-transparent">
@@ -555,7 +542,6 @@ function AccountPage() {
                 </div>
               ) : null}
 
-              {/* Username + Trophy side by side */}
               <div className="flex items-center gap-3">
                 <h1 className="text-xl md:text-2xl font-bold text-primary tracking-wide">
                   <span
@@ -671,10 +657,9 @@ function AccountPage() {
           </div>
         ) : null}
 
-
         {/* Beast Grid */}
         <BeastGrid
-          beasts={sortedBeasts}
+          beasts={beasts}
           ownerUsernames={ownerUsernames}
           onSelect={handleSelectBeast}
           loading={loading}
@@ -704,6 +689,17 @@ function AccountPage() {
           beast={selectedBeast}
           ownerUsernames={ownerUsernames}
           onClose={handleCloseModal}
+        />
+
+        <FiltersDrawer
+          open={filtersOpen}
+          onClose={handleCloseFilters}
+          availableFilters={availableFilters}
+          attributeFilters={attributeFilters}
+          filtersLoading={filtersLoading}
+          filtersError={filtersError}
+          onFilterChange={handleFilterChange}
+          onResetFilters={handleResetFilters}
         />
       </div>
     </AppLayout>

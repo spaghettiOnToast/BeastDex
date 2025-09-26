@@ -8,7 +8,7 @@ type BuildBeastsQueryOptions = {
   attributeFilters?: AttributeFilterInput;
   ownerAddresses?: string[];
   page?: number;
-  sort?: "default" | "beast" | "tier";
+  sort?: "default" | "beast" | "tier" | "health" | "rank" | "last-death";
 };
 
 function escapeSqlLiteral(value: string) {
@@ -164,6 +164,53 @@ export function buildBeastsQuery({
         AND json_extract(tier_attr.value, '$.trait_type') IS NOT NULL
         AND json_extract(tier_attr.value, '$.value') IS NOT NULL`
       : "";
+
+  const healthJoin =
+    sort === "health"
+      ? `LEFT JOIN json_each(
+          CASE
+            WHEN json_valid(t.metadata) = 1 THEN t.metadata
+            ELSE '{"attributes":[]}'
+          END,
+          '$.attributes'
+        ) health_attr
+         ON json_valid(t.metadata) = 1
+        AND json_extract(health_attr.value, '$.trait_type') = 'Health'
+        AND json_extract(health_attr.value, '$.trait_type') IS NOT NULL
+        AND json_extract(health_attr.value, '$.value') IS NOT NULL`
+      : "";
+
+  const rankJoin =
+    sort === "rank"
+      ? `LEFT JOIN json_each(
+          CASE
+            WHEN json_valid(t.metadata) = 1 THEN t.metadata
+            ELSE '{"attributes":[]}'
+          END,
+          '$.attributes'
+        ) rank_attr
+         ON json_valid(t.metadata) = 1
+        AND json_extract(rank_attr.value, '$.trait_type') = 'Rank'
+        AND json_extract(rank_attr.value, '$.trait_type') IS NOT NULL
+        AND json_extract(rank_attr.value, '$.value') IS NOT NULL`
+      : "";
+
+  const lastDeathJoin =
+    sort === "last-death"
+      ? `LEFT JOIN json_each(
+          CASE
+            WHEN json_valid(t.metadata) = 1 THEN t.metadata
+            ELSE '{"attributes":[]}'
+          END,
+          '$.attributes'
+        ) death_attr
+         ON json_valid(t.metadata) = 1
+        AND LOWER(json_extract(death_attr.value, '$.trait_type')) = 'last death timestamp'
+        AND json_extract(death_attr.value, '$.trait_type') IS NOT NULL
+        AND json_extract(death_attr.value, '$.value') IS NOT NULL
+        AND json_extract(death_attr.value, '$.value') != '0'`
+      : "";
+
   const beastSelect =
     sort === "beast"
       ? ", json_extract(beast_attr.value, '$.value') AS beast_value"
@@ -173,6 +220,21 @@ export function buildBeastsQuery({
     sort === "tier"
       ? ", CAST(json_extract(tier_attr.value, '$.value') AS INTEGER) AS tier_value"
       : ", NULL AS tier_value";
+
+  const healthSelect =
+    sort === "health"
+      ? ", CAST(json_extract(health_attr.value, '$.value') AS INTEGER) AS health_value"
+      : ", NULL AS health_value";
+
+  const rankSelect =
+    sort === "rank"
+      ? ", CAST(json_extract(rank_attr.value, '$.value') AS INTEGER) AS rank_value"
+      : ", NULL AS rank_value";
+
+  const lastDeathSelect =
+    sort === "last-death"
+      ? ", CAST(json_extract(death_attr.value, '$.value') AS INTEGER) AS death_timestamp_value"
+      : ", NULL AS death_timestamp_value";
   // Only compute power when sorting by power (default sort)
   const needsPower = sort === "default";
   const orderClause =
@@ -180,9 +242,15 @@ export function buildBeastsQuery({
       ? "ORDER BY COALESCE(beast_value, '') COLLATE NOCASE ASC, CAST(id AS INTEGER) ASC"
       : sort === "tier"
         ? "ORDER BY COALESCE(tier_value, 999) ASC, CAST(id AS INTEGER) ASC"
-        : needsPower
-          ? "ORDER BY power DESC, CAST(id AS INTEGER) ASC"
-          : "ORDER BY CAST(id AS INTEGER) ASC";
+        : sort === "health"
+          ? "ORDER BY COALESCE(health_value, 0) DESC, CAST(id AS INTEGER) ASC"
+          : sort === "rank"
+            ? "ORDER BY COALESCE(rank_value, 999999) ASC, CAST(id AS INTEGER) ASC"
+            : sort === "last-death"
+              ? "ORDER BY COALESCE(death_timestamp_value, 0) DESC, CAST(id AS INTEGER) ASC"
+              : needsPower
+                ? "ORDER BY power DESC, CAST(id AS INTEGER) ASC"
+                : "ORDER BY CAST(id AS INTEGER) ASC";
 
   return `
     WITH filtered_tokens AS (
@@ -193,12 +261,18 @@ export function buildBeastsQuery({
         ${buildOptimizedPowerFragment(needsPower)}
         ${beastSelect}
         ${tierSelect}
+        ${healthSelect}
+        ${rankSelect}
+        ${lastDeathSelect}
       FROM tokens t
       JOIN token_balances b
         ON t.id = b.token_id
       AND t.contract_address = b.contract_address
       ${beastJoin}
       ${tierJoin}
+      ${healthJoin}
+      ${rankJoin}
+      ${lastDeathJoin}
           WHERE t.contract_address = '${CONTRACT_ADDRESS}'
             AND b.balance > '${ZERO_BALANCE}'
             AND json_valid(t.metadata) = 1 
