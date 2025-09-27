@@ -844,6 +844,71 @@ function CollectionPage() {
     accountUsername || identifierIsUsername ? "" : "font-mono";
 
   const [selectedBeast, setSelectedBeast] = useState<Beast | null>(null);
+  const [currentDuplicateIndex, setCurrentDuplicateIndex] = useState(0);
+
+  // Get duplicates of the same beast type based on current tab context
+  const selectedBeastDuplicates = useMemo(() => {
+    if (!selectedBeast) return [];
+
+    const selectedBeastType = getBeastTypeKey(selectedBeast);
+    if (!selectedBeastType) return [];
+
+    return ownedBeasts.filter((beast) => {
+      const beastType = getBeastTypeKey(beast);
+      if (beastType !== selectedBeastType) return false;
+
+      // If we're on the "all" tab, show all duplicates regardless of category
+      if (activeTab === "all") {
+        return true;
+      }
+
+      // For specific tabs, filter by the category
+      const beastShiny = beast.attributes.some(
+        (attr) => attr.trait_type?.toLowerCase() === "shiny" && attr.value === "1"
+      );
+      const beastAnimated = beast.attributes.some(
+        (attr) => attr.trait_type?.toLowerCase() === "animated" && attr.value === "1"
+      );
+
+      // Match the current tab's category
+      switch (activeTab) {
+        case "standard":
+          return !beastShiny && !beastAnimated;
+        case "shiny":
+          return beastShiny && !beastAnimated;
+        case "animated":
+          return !beastShiny && beastAnimated;
+        case "animatedShiny":
+          return beastShiny && beastAnimated;
+        default:
+          return true;
+      }
+    });
+  }, [selectedBeast, ownedBeasts, activeTab]);
+
+  // Update the selected beast when navigating through duplicates
+  const currentDisplayedBeast = selectedBeastDuplicates.length > 0
+    ? selectedBeastDuplicates[currentDuplicateIndex] || selectedBeast
+    : selectedBeast;
+
+  // Navigation functions
+  const navigateToNextDuplicate = () => {
+    if (selectedBeastDuplicates.length > 1) {
+      setCurrentDuplicateIndex((prev) => (prev + 1) % selectedBeastDuplicates.length);
+    }
+  };
+
+  const navigateToPreviousDuplicate = () => {
+    if (selectedBeastDuplicates.length > 1) {
+      setCurrentDuplicateIndex((prev) => (prev - 1 + selectedBeastDuplicates.length) % selectedBeastDuplicates.length);
+    }
+  };
+
+  // Handle beast selection - find the index in duplicates
+  const handleBeastSelect = (beast: Beast) => {
+    setSelectedBeast(beast);
+    setCurrentDuplicateIndex(0); // Start at first duplicate
+  };
 
   const topBar = <TopBar />;
 
@@ -1106,16 +1171,20 @@ function CollectionPage() {
                 overlayLabel="Need to hunt"
                 disabled={entry.missing}
                 duplicateCount={entry.duplicateCount}
-                onSelect={(beast) => setSelectedBeast(beast)}
+                onSelect={handleBeastSelect}
               />
             ))}
           </div>
         )}
 
         <BeastModal
-          beast={selectedBeast}
+          beast={currentDisplayedBeast}
           ownerUsernames={ownerUsernames}
           onClose={() => setSelectedBeast(null)}
+          duplicates={selectedBeastDuplicates}
+          currentDuplicateIndex={currentDuplicateIndex}
+          onNextDuplicate={navigateToNextDuplicate}
+          onPreviousDuplicate={navigateToPreviousDuplicate}
         />
       </div>
     </AppLayout>
