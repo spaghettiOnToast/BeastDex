@@ -34,12 +34,13 @@ import {
   computeBeastCollectionStats,
   EMPTY_BEAST_COLLECTION_STATS,
   TOTAL_BEAST_VARIETIES,
-  calculateDuplicateCounts,
+  calculateCategoryDuplicateCounts,
 } from "../utils/beastCollection";
 import { normaliseStarknetAddress } from "../utils/address";
 import { lookupControllerAddresses } from "../services/controller";
 import { getErrorMessage } from "../utils/error";
 import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
+import { Button } from "../components/ui/button";
 import { getBeastTemplate } from "../data/beastTemplates";
 import { runBeastSql } from "../services/beast/sqlClient";
 import { mapBeastRow } from "../services/beast/helpers";
@@ -188,6 +189,7 @@ function CollectionPage() {
 
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [sortOption, setSortOption] = useState<SortOption>("default");
+  const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
 
   const summaryRequestRef = useRef(0);
 
@@ -560,8 +562,8 @@ function CollectionPage() {
     [ownedBeasts]
   );
 
-  const duplicateCounts = useMemo(
-    () => calculateDuplicateCounts(ownedBeasts),
+  const categoryDuplicateCounts = useMemo(
+    () => calculateCategoryDuplicateCounts(ownedBeasts),
     [ownedBeasts]
   );
 
@@ -642,7 +644,7 @@ function CollectionPage() {
           beast: standardPlaceholder,
           missing: !standardOwned,
           ownerUsername: resolveOwnerUsername(standardOwned),
-          duplicateCount: duplicateCounts.get(key) || 0,
+          duplicateCount: categoryDuplicateCounts.standard.get(key) || 0,
         });
 
         // Shiny tab
@@ -652,7 +654,7 @@ function CollectionPage() {
           beast: shinyOwned ?? placeholder,
           missing: !shinyOwned,
           ownerUsername: resolveOwnerUsername(shinyOwned),
-          duplicateCount: duplicateCounts.get(key) || 0,
+          duplicateCount: categoryDuplicateCounts.shiny.get(key) || 0,
         });
 
         // Animated tab
@@ -662,7 +664,7 @@ function CollectionPage() {
           beast: animatedOwned ?? placeholder,
           missing: !animatedOwned,
           ownerUsername: resolveOwnerUsername(animatedOwned),
-          duplicateCount: duplicateCounts.get(key) || 0,
+          duplicateCount: categoryDuplicateCounts.animated.get(key) || 0,
         });
 
         // Animated Shiny tab
@@ -672,7 +674,7 @@ function CollectionPage() {
           beast: animatedShinyOwned ?? placeholder,
           missing: !animatedShinyOwned,
           ownerUsername: resolveOwnerUsername(animatedShinyOwned),
-          duplicateCount: duplicateCounts.get(key) || 0,
+          duplicateCount: categoryDuplicateCounts.animatedShiny.get(key) || 0,
         });
 
         // All tab → pick *one* (any rarity)
@@ -689,7 +691,7 @@ function CollectionPage() {
           beast: anyOwned ?? placeholder,
           missing: !anyOwned,
           ownerUsername: resolveOwnerUsername(anyOwned),
-          duplicateCount: duplicateCounts.get(key) || 0,
+          duplicateCount: categoryDuplicateCounts.all.get(key) || 0,
         });
       }
     );
@@ -713,10 +715,10 @@ function CollectionPage() {
             break;
           case "tier":
             tabEntries.sort((a, b) => {
-              const getTier = (entry: typeof tabEntries[0]) => {
+              const getTier = (entry: (typeof tabEntries)[0]) => {
                 if (!entry.beast) return 999;
                 const tierAttr = entry.beast.attributes.find(
-                  attr => attr.trait_type?.toLowerCase() === "tier"
+                  (attr) => attr.trait_type?.toLowerCase() === "tier"
                 );
                 return tierAttr?.value ? Number(tierAttr.value) : 999;
               };
@@ -733,10 +735,10 @@ function CollectionPage() {
             break;
           case "health":
             tabEntries.sort((a, b) => {
-              const getHealth = (entry: typeof tabEntries[0]) => {
+              const getHealth = (entry: (typeof tabEntries)[0]) => {
                 if (!entry.beast || entry.missing) return 0;
                 const healthAttr = entry.beast.attributes.find(
-                  attr => attr.trait_type?.toLowerCase() === "health"
+                  (attr) => attr.trait_type?.toLowerCase() === "health"
                 );
                 return healthAttr?.value ? Number(healthAttr.value) : 0;
               };
@@ -747,10 +749,10 @@ function CollectionPage() {
             break;
           case "rank":
             tabEntries.sort((a, b) => {
-              const getRank = (entry: typeof tabEntries[0]) => {
+              const getRank = (entry: (typeof tabEntries)[0]) => {
                 if (!entry.beast || entry.missing) return 999999;
                 const rankAttr = entry.beast.attributes.find(
-                  attr => attr.trait_type?.toLowerCase() === "rank"
+                  (attr) => attr.trait_type?.toLowerCase() === "rank"
                 );
                 return rankAttr?.value ? Number(rankAttr.value) : 999999;
               };
@@ -761,10 +763,11 @@ function CollectionPage() {
             break;
           case "last-death":
             tabEntries.sort((a, b) => {
-              const getLastDeath = (entry: typeof tabEntries[0]) => {
+              const getLastDeath = (entry: (typeof tabEntries)[0]) => {
                 if (!entry.beast || entry.missing) return 0;
                 const deathAttr = entry.beast.attributes.find(
-                  attr => attr.trait_type?.toLowerCase() === "last death timestamp"
+                  (attr) =>
+                    attr.trait_type?.toLowerCase() === "last death timestamp"
                 );
                 return deathAttr?.value ? Number(deathAttr.value) : 0;
               };
@@ -777,8 +780,22 @@ function CollectionPage() {
       });
     }
 
+    if (showDuplicatesOnly) {
+      Object.keys(sortedEntries).forEach((tabKey) => {
+        sortedEntries[tabKey as TabKey] = sortedEntries[
+          tabKey as TabKey
+        ].filter((entry) => !entry.missing && entry.duplicateCount > 1);
+      });
+    }
+
     return sortedEntries;
-  }, [tabEntriesForCategory, resolveOwnerUsername, duplicateCounts, sortOption]);
+  }, [
+    tabEntriesForCategory,
+    resolveOwnerUsername,
+    categoryDuplicateCounts,
+    sortOption,
+    showDuplicatesOnly,
+  ]);
 
   console.log(genesisCache);
 
@@ -899,17 +916,26 @@ function CollectionPage() {
               total: TOTAL_BEAST_VARIETIES,
               mainValue: `${collectionStats.uniqueBeastTypes}`,
               subValue: `${TOTAL_BEAST_VARIETIES} Unique Beasts`,
-              color: collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES ? "rgb(57, 255, 20)" : "hsl(var(--primary))",
-              bgGradient: collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                ? "bg-gradient-to-br from-[#39ff14]/25 via-[#8bff72]/15 to-[#39ff14]/10 animate-pulse shadow-[0_0_30px_rgba(57,255,20,0.3)]"
-                : "bg-gradient-to-br from-primary/15 to-primary/5",
-              borderColor: collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                ? "border-[#39ff14]/50 shadow-[0_0_20px_rgba(57,255,20,0.2)]"
-                : "border-primary/30",
-              icon: collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES ? "🎉" : "🏆",
-              glisten: collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                ? "animate-[shimmer_2s_ease-in-out_infinite]"
-                : "",
+              color:
+                collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                  ? "rgb(57, 255, 20)"
+                  : "hsl(var(--primary))",
+              bgGradient:
+                collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                  ? "bg-gradient-to-br from-[#39ff14]/25 via-[#8bff72]/15 to-[#39ff14]/10 animate-pulse shadow-[0_0_30px_rgba(57,255,20,0.3)]"
+                  : "bg-gradient-to-br from-primary/15 to-primary/5",
+              borderColor:
+                collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                  ? "border-[#39ff14]/50 shadow-[0_0_20px_rgba(57,255,20,0.2)]"
+                  : "border-primary/30",
+              icon:
+                collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                  ? "🎉"
+                  : "🏆",
+              glisten:
+                collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                  ? "animate-[shimmer_2s_ease-in-out_infinite]"
+                  : "",
             },
             {
               key: "animatedShiny",
@@ -1028,6 +1054,19 @@ function CollectionPage() {
 
           <div className="flex items-center gap-3">
             <SortDropdown value={sortOption} onChange={setSortOption} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDuplicatesOnly(!showDuplicatesOnly)}
+              className={`font-medium bg-card/90 backdrop-blur-sm hover:bg-card ${
+                showDuplicatesOnly
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border/50"
+              }`}
+            >
+              <span className="text-muted-foreground mr-1.5">Show:</span>
+              {showDuplicatesOnly ? "All Beasts" : "Duplicates Only"}
+            </Button>
             <button
               type="button"
               onClick={() => void loadSummary()}

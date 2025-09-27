@@ -304,4 +304,52 @@ export function calculateDuplicateCounts(beasts: Beast[]): Map<string, number> {
   return duplicateCounts;
 }
 
+export function calculateCategoryDuplicateCounts(beasts: Beast[]): {
+  all: Map<string, number>;
+  standard: Map<string, number>;
+  shiny: Map<string, number>;
+  animated: Map<string, number>;
+  animatedShiny: Map<string, number>;
+} {
+  const counts = {
+    all: new Map<string, number>(),
+    standard: new Map<string, number>(),
+    shiny: new Map<string, number>(),
+    animated: new Map<string, number>(),
+    animatedShiny: new Map<string, number>(),
+  };
+
+  beasts.forEach((beast) => {
+    const typeAttribute = beast.attributes.find(
+      (attr) => attr.trait_type?.toLowerCase() === "beast"
+    )?.value;
+    const beastTypeKey = typeAttribute ? String(typeAttribute).trim().toLowerCase() : "";
+
+    if (!beastTypeKey) return;
+
+    const shiny = beast.attributes.some(
+      (attr) => attr.trait_type?.toLowerCase() === "shiny" && attr.value === "1"
+    );
+    const animated = beast.attributes.some(
+      (attr) => attr.trait_type?.toLowerCase() === "animated" && attr.value === "1"
+    );
+
+    // All category gets every beast
+    counts.all.set(beastTypeKey, (counts.all.get(beastTypeKey) || 0) + 1);
+
+    // Category-specific counts
+    if (shiny && animated) {
+      counts.animatedShiny.set(beastTypeKey, (counts.animatedShiny.get(beastTypeKey) || 0) + 1);
+    } else if (animated) {
+      counts.animated.set(beastTypeKey, (counts.animated.get(beastTypeKey) || 0) + 1);
+    } else if (shiny) {
+      counts.shiny.set(beastTypeKey, (counts.shiny.get(beastTypeKey) || 0) + 1);
+    } else {
+      counts.standard.set(beastTypeKey, (counts.standard.get(beastTypeKey) || 0) + 1);
+    }
+  });
+
+  return counts;
+}
+
 export { DEFAULT_STATS as EMPTY_BEAST_COLLECTION_STATS };
