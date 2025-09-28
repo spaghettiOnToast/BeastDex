@@ -5,6 +5,7 @@ import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import BeastGrid from "../components/beast/BeastGrid";
 import BeastModal from "../components/beast/BeastModal";
+import { BeastTableView } from "../components/beast/BeastTableView";
 import PaginationControls from "../components/pagination/PaginationControls";
 import { FiltersButton } from "../components/filters/FiltersButton";
 import { FiltersDrawer } from "../components/filters/FiltersDrawer";
@@ -27,6 +28,8 @@ import {
 } from "../utils/beastCollection";
 import { normaliseStarknetAddress } from "../utils/address";
 import { getErrorMessage } from "../utils/error";
+import { Grid, Table } from "lucide-react";
+import { Button } from "../components/ui/button";
 
 import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
 import type { OverviewCard } from "@/components/account/OverviewCards";
@@ -38,8 +41,10 @@ function ProfilePage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [selectedBeastId, setSelectedBeastId] = useState<string | null>(null);
-  const [availableFilters, setAvailableFilters] = useState<BeastAttributeFilters>({});
-  const [attributeFilters, setAttributeFilters] = useState<BeastAttributeFilters>({});
+  const [availableFilters, setAvailableFilters] =
+    useState<BeastAttributeFilters>({});
+  const [attributeFilters, setAttributeFilters] =
+    useState<BeastAttributeFilters>({});
   const [filtersLoading, setFiltersLoading] = useState(true);
   const [filtersError, setFiltersError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -47,6 +52,7 @@ function ProfilePage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [deaths, setDeaths] = useState(0);
   const [powerRanking, setPowerRanking] = useState<BeastPowerRank | null>(null);
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
 
   const ownerAddress = useMemo(() => address ?? "", [address]);
 
@@ -135,10 +141,10 @@ function ProfilePage() {
 
   // Filter and sort handlers
   const handleFilterChange = useCallback((trait: string, value: string) => {
-    setAttributeFilters(prev => {
+    setAttributeFilters((prev) => {
       const currentValues = prev[trait] || [];
       const newValues = currentValues.includes(value)
-        ? currentValues.filter(v => v !== value)
+        ? currentValues.filter((v) => v !== value)
         : [...currentValues, value];
 
       if (newValues.length === 0) {
@@ -148,7 +154,7 @@ function ProfilePage() {
 
       return {
         ...prev,
-        [trait]: newValues
+        [trait]: newValues,
       };
     });
     setPage(1); // Reset to first page when filters change
@@ -213,7 +219,10 @@ function ProfilePage() {
     };
   }, [ownerAddress, attributeFilters]);
 
-  const stats = useMemo(() => computeBeastCollectionStats(allBeasts), [allBeasts]);
+  const stats = useMemo(
+    () => computeBeastCollectionStats(allBeasts),
+    [allBeasts]
+  );
   const totalPower = useMemo(() => calculateTotalPower(allBeasts), [allBeasts]);
 
   const kdRatio = useMemo(
@@ -393,7 +402,9 @@ function ProfilePage() {
           <p className="text-[11px] text-red-400">{usernamesError}</p>
         ) : null}
         {error ? <p className="text-xs text-red-400">❌ {error}</p> : null}
-        {filtersError ? <p className="text-xs text-red-400">❌ {filtersError}</p> : null}
+        {filtersError ? (
+          <p className="text-xs text-red-400">❌ {filtersError}</p>
+        ) : null}
 
         {/* Filters and Sort Controls */}
         <div className="flex items-center justify-between gap-4">
@@ -405,24 +416,50 @@ function ProfilePage() {
               attributeFilters={attributeFilters}
               onClick={handleOpenFilters}
             />
-            <SortDropdown
-              value={sortOption}
-              onChange={handleSortChange}
-            />
+
+            {/* View Mode Toggle */}
+            <div className="flex items-center border border-border/50 rounded-md bg-card/90 backdrop-blur-sm">
+              <Button
+                variant={viewMode === "grid" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("grid")}
+                className="rounded-r-none border-0 h-8"
+              >
+                <Grid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === "table" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("table")}
+                className="rounded-l-none border-0 h-8"
+              >
+                <Table className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <SortDropdown value={sortOption} onChange={handleSortChange} />
           </div>
         </div>
 
-        {/* Grid */}
-        <BeastGrid
-          beasts={beasts}
-          ownerUsernames={ownerUsernames}
-          onSelect={(beast) => setSelectedBeastId(beast.id)}
-          loading={loading}
-          emptyMessage="No beasts found with current filters."
-        />
+        {/* Grid / Table View */}
+        {viewMode === "table" ? (
+          <BeastTableView
+            beasts={allBeasts}
+            onBeastSelect={(beast) => setSelectedBeastId(beast.id)}
+            ownerUsernames={ownerUsernames}
+          />
+        ) : (
+          <BeastGrid
+            beasts={beasts}
+            ownerUsernames={ownerUsernames}
+            onSelect={(beast) => setSelectedBeastId(beast.id)}
+            loading={loading}
+            emptyMessage="No beasts found with current filters."
+          />
+        )}
 
-        {/* Pagination */}
-        {!loading && total > PAGE_SIZE && (
+        {/* Pagination - only show for grid view */}
+        {viewMode === "grid" && !loading && total > PAGE_SIZE && (
           <PaginationControls
             page={page}
             totalPages={Math.ceil(total / PAGE_SIZE)}
