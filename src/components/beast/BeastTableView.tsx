@@ -1,4 +1,5 @@
 import type { Beast } from "../../services/beast";
+import { useState } from "react";
 
 type BeastCounts = {
   standard: number;
@@ -171,6 +172,7 @@ const TYPE_TOTAL_COLORS = {
 };
 
 export function BeastTableView({ beasts }: BeastTableViewProps) {
+  const [showDuplicates, setShowDuplicates] = useState(false);
   // Build complete beast catalog from static mapping - instant loading!
   const allPossibleBeasts: Record<string, { type: string; tier: number }> = {};
 
@@ -336,10 +338,25 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
 
   return (
     <div className="space-y-4">
-      <div className="text-center">
-        <h2 className="bg-gradient-to-r from-[#f9e08a] via-[#fbdc5e] to-[#39ff14] bg-clip-text text-xl font-bold mb-1 text-transparent">
-          Collection Overview
-        </h2>
+      <div className="flex items-center justify-between">
+        <div className="flex-1" />
+        <div className="text-center">
+          <h2 className="bg-gradient-to-r from-[#f9e08a] via-[#fbdc5e] to-[#39ff14] bg-clip-text text-xl font-bold mb-1 text-transparent">
+            Collection Overview
+          </h2>
+        </div>
+        <div className="flex-1 flex justify-end">
+          <button
+            onClick={() => setShowDuplicates(!showDuplicates)}
+            className={`px-3 py-1 text-xs font-semibold uppercase tracking-wide rounded-md border transition-colors ${
+              showDuplicates
+                ? "bg-gradient-to-r from-purple-500/20 to-purple-600/30 text-white"
+                : "bg-transparent text-muted-foreground border-muted hover:bg-muted/20"
+            }`}
+          >
+            Show Duplicates
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -398,51 +415,52 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
                     const tierBorderClass = isNewTier
                       ? "border-t-2 border-t-white"
                       : "";
-                    const regularBorderClass = "border-b border-gray-300/30";
-                    const rowBackgroundClass = "bg-muted/20 hover:bg-muted/30";
+                    const regularBorderClass = "border-b border-gray-500";
+
+                    const rowBackgroundClass = "bg-gray-800/60 hover:bg-gray-600/50";
 
                     return (
                       <tr
                         key={beastName}
-                        className={`transition-all duration-200 ${rowBackgroundClass} border-l-3 border-l-border/40 ${regularBorderClass} hover:scale-[1.01] hover:shadow-sm ${tierBorderClass}`}
+                        className={`transition-all duration-200 ${rowBackgroundClass} hover:scale-[1.01] hover:shadow-sm ${tierBorderClass}`}
                       >
-                        <td className="px-2 py-0.5 font-medium text-xs truncate">
+                        <td className={`px-2 py-0.5 font-medium text-xs truncate ${regularBorderClass}`}>
                           {beastName}
                         </td>
-                        <td className="px-1 py-0.5 text-center text-xs">
+                        <td className={`px-1 py-0.5 text-center text-xs ${regularBorderClass} ${showDuplicates && counts.standard > 1 ? 'bg-gradient-to-r from-purple-500/20 to-purple-600/30' : ''}`}>
                           {counts.standard > 0 ? (
-                            <span className="font-bold text-foreground text-xs">
+                            <span className="font-bold text-foreground text-xs ">
                               {counts.standard}
                             </span>
                           ) : (
-                            <span className="text-muted-foreground/60">-</span>
+                            <span className="text-muted-foreground/60 ">-</span>
                           )}
                         </td>
-                        <td className="p-1 text-center text-xs">
+                        <td className={`px-1 py-0.5 text-center text-xs ${regularBorderClass} ${showDuplicates && counts.shiny > 1 ? 'bg-gradient-to-r from-purple-500/20 to-purple-600/30' : ''}`}>
                           {counts.shiny > 0 ? (
-                            <span className="font-bold text-foreground text-xs">
+                            <span className="font-bold text-foreground text-xs ">
                               {counts.shiny}
                             </span>
                           ) : (
-                            <span className="text-muted-foreground/60">-</span>
+                            <span className="text-muted-foreground/60 ">-</span>
                           )}
                         </td>
-                        <td className="p-1 text-center text-xs">
+                        <td className={`px-1 py-0.5 text-center text-xs ${regularBorderClass} ${showDuplicates && counts.animated > 1 ? 'bg-gradient-to-r from-purple-500/20 to-purple-600/30' : ''}`}>
                           {counts.animated > 0 ? (
-                            <span className="font-bold text-foreground text-xs">
+                            <span className="font-bold text-foreground text-xs ">
                               {counts.animated}
                             </span>
                           ) : (
-                            <span className="text-muted-foreground/60">-</span>
+                            <span className="text-muted-foreground/60 ">-</span>
                           )}
                         </td>
-                        <td className="p-1 text-center text-xs">
+                        <td className={`px-1 py-0.5 text-center text-xs ${regularBorderClass} ${showDuplicates && counts.shinyAnimated > 1 ? 'bg-gradient-to-r from-purple-500/20 to-purple-600/30' : ''}`}>
                           {counts.shinyAnimated > 0 ? (
-                            <span className="font-bold text-foreground text-xs">
+                            <span className="font-bold text-foreground text-xs ">
                               {counts.shinyAnimated}
                             </span>
                           ) : (
-                            <span className="text-muted-foreground/60">-</span>
+                            <span className="text-muted-foreground/60 ">-</span>
                           )}
                         </td>
                       </tr>
@@ -450,28 +468,28 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
                   })}
 
                   <tr
-                    className={`${TYPE_TOTAL_COLORS[beastType]} border-l-4 border-t border-border/40 font-bold`}
+                    className={`${TYPE_TOTAL_COLORS[beastType]} border-l-4 border-t border-gray-500 font-bold`}
                   >
                     <td className="px-2 py-0.5 text-xs uppercase tracking-wide text-white/95 truncate">
                       Total
                     </td>
                     <td className="px-1 py-0.5 text-center text-xs">
-                      <span className="font-bold text-white text-xs">
+                      <span className="font-bold text-white text-xs ">
                         {typeTotals[beastType].standard}
                       </span>
                     </td>
-                    <td className="p-1 text-center text-xs">
-                      <span className="font-bold text-white text-xs">
+                    <td className="px-1 py-0.5 text-center text-xs">
+                      <span className="font-bold text-white text-xs ">
                         {typeTotals[beastType].shiny}
                       </span>
                     </td>
-                    <td className="p-1 text-center text-xs">
-                      <span className="font-bold text-white text-xs">
+                    <td className="px-1 py-0.5 text-center text-xs">
+                      <span className="font-bold text-white text-xs ">
                         {typeTotals[beastType].animated}
                       </span>
                     </td>
-                    <td className="p-1 text-center text-xs">
-                      <span className="font-bold text-white text-xs">
+                    <td className="px-1 py-0.5 text-center text-xs">
+                      <span className="font-bold text-white text-xs ">
                         {typeTotals[beastType].shinyAnimated}
                       </span>
                     </td>
