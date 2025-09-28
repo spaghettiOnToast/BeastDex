@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
+import { useAccount } from "@starknet-react/core";
 
 // CSS injection for shimmer animation
 const shimmerStyles = `
@@ -24,6 +25,7 @@ import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import BeastCard from "../components/BeastCard";
 import BeastModal from "../components/beast/BeastModal";
+import { TradeCreationModal } from "../components/trade/TradeCreationModal";
 import {
   fetchBeastAttributeFilters,
   fetchBeasts,
@@ -163,6 +165,8 @@ function buildCategoryMaps(beasts: Beast[]): CategoryMaps {
 
 function CollectionPage() {
   const { identifier = "" } = useParams<{ identifier: string }>();
+  const { address: connectedWalletAddress } = useAccount();
+  const navigate = useNavigate();
 
   const [filtersError, setFiltersError] = useState<string | null>(null);
 
@@ -845,6 +849,8 @@ function CollectionPage() {
 
   const [selectedBeast, setSelectedBeast] = useState<Beast | null>(null);
   const [currentDuplicateIndex, setCurrentDuplicateIndex] = useState(0);
+  const [tradeModalOpen, setTradeModalOpen] = useState(false);
+  const [tradeInitialBeast, setTradeInitialBeast] = useState<Beast | null>(null);
 
   // Get duplicates of the same beast type based on current tab context
   const selectedBeastDuplicates = useMemo(() => {
@@ -908,6 +914,17 @@ function CollectionPage() {
   const handleBeastSelect = (beast: Beast) => {
     setSelectedBeast(beast);
     setCurrentDuplicateIndex(0); // Start at first duplicate
+  };
+
+  // Handle opening a trade with this beast
+  const handleOpenTrade = (beast: Beast) => {
+    if (!connectedWalletAddress) {
+      alert('Please connect your wallet to create a trade');
+      return;
+    }
+
+    setTradeInitialBeast(beast);
+    setTradeModalOpen(true);
   };
 
   const topBar = <TopBar />;
@@ -1185,6 +1202,17 @@ function CollectionPage() {
           currentDuplicateIndex={currentDuplicateIndex}
           onNextDuplicate={navigateToNextDuplicate}
           onPreviousDuplicate={navigateToPreviousDuplicate}
+          onOpenTrade={handleOpenTrade}
+        />
+
+        <TradeCreationModal
+          isOpen={tradeModalOpen}
+          onClose={() => {
+            setTradeModalOpen(false);
+            setTradeInitialBeast(null);
+          }}
+          initialBeast={tradeInitialBeast || undefined}
+          availableBeasts={ownedBeasts}
         />
       </div>
     </AppLayout>

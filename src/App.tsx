@@ -17,6 +17,7 @@ const AccountPage = lazy(() => import("./pages/AccountPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const CollectionPage = lazy(() => import("./pages/CollectionPage"));
 const LeaderboardPage = lazy(() => import("./pages/LeaderboardPage"));
+const TradePage = lazy(() => import("./pages/TradePage"));
 
 const provider = jsonRpcProvider({
   rpc: (chain: Chain) => {
@@ -59,6 +60,7 @@ function App() {
             <Route path="/collection/:identifier" element={<CollectionPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/leaderboard" element={<LeaderboardPage />} />
+            <Route path="/trade/:id" element={<TradePage />} />
           </Routes>
         </Suspense>
         </ErrorBoundary>

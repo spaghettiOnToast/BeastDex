@@ -9,7 +9,7 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowRightLeft } from "lucide-react";
 
 type BeastModalProps = {
   beast: Beast | null;
@@ -19,6 +19,7 @@ type BeastModalProps = {
   currentDuplicateIndex?: number;
   onNextDuplicate?: () => void;
   onPreviousDuplicate?: () => void;
+  onOpenTrade?: (beast: Beast) => void;
 };
 
 export function BeastModal({
@@ -28,7 +29,8 @@ export function BeastModal({
   duplicates = [],
   currentDuplicateIndex = 0,
   onNextDuplicate,
-  onPreviousDuplicate
+  onPreviousDuplicate,
+  onOpenTrade
 }: BeastModalProps) {
   const navigate = useNavigate();
 
@@ -87,17 +89,33 @@ export function BeastModal({
               beast={beast}
               ownerUsername={ownerUsername}
               actionSlot={
-                <Button
-                  variant="default"
-                  size="default"
-                  onClick={() => {
-                    onClose();
-                    navigate(detailPath);
-                  }}
-                  className="w-full sm:w-auto font-semibold tracking-wide"
-                >
-                  View Full Details
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-2 w-full">
+                  <Button
+                    variant="default"
+                    size="default"
+                    onClick={() => {
+                      onClose();
+                      navigate(detailPath);
+                    }}
+                    className="flex-1 sm:flex-none font-semibold tracking-wide"
+                  >
+                    View Full Details
+                  </Button>
+                  {onOpenTrade && (
+                    <Button
+                      variant="outline"
+                      size="default"
+                      onClick={() => {
+                        onOpenTrade(beast);
+                        onClose();
+                      }}
+                      className="flex-1 sm:flex-none font-semibold tracking-wide"
+                    >
+                      <ArrowRightLeft className="w-4 h-4 mr-2" />
+                      Open Trade
+                    </Button>
+                  )}
+                </div>
               }
             />
           </div>
