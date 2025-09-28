@@ -376,7 +376,7 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
               </h3>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-hidden">
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="bg-gradient-to-r from-muted/40 to-muted/60 backdrop-blur-sm border-b border-border/50">
@@ -503,7 +503,7 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
 
       {/* Overall totals row */}
       <div className="bg-gradient-to-r from-gray-800/90 via-gray-900/90 to-black/90 text-white font-bold border border-lsGold/50 backdrop-blur-sm rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-hidden">
           <table className="w-full border-collapse text-xs">
             <tbody>
               <tr>
