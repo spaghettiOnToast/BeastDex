@@ -116,7 +116,7 @@ const BEAST_NAMES: { [key: number]: string } = {
 function getBeastInfo(beastName: string): { type: string; tier: number } {
   // Find the beast ID by name
   const beastId = Object.entries(BEAST_NAMES).find(
-    ([name]) => name === beastName
+    ([id, name]) => name === beastName
   )?.[0];
 
   if (!beastId) {
