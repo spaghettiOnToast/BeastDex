@@ -319,36 +319,44 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
       typeTotals.Brute.shinyAnimated,
   };
 
+  // Calculate duplicates (total beasts minus unique beasts owned)
+  const uniqueBeastsOwned = Object.values(allBeastInfo).filter(
+    (beast) =>
+      beast.counts.standard > 0 ||
+      beast.counts.shiny > 0 ||
+      beast.counts.animated > 0 ||
+      beast.counts.shinyAnimated > 0
+  ).length;
+  const totalBeastsOwned =
+    overallTotals.standard +
+    overallTotals.shiny +
+    overallTotals.animated +
+    overallTotals.shinyAnimated;
+  const duplicates = Math.max(0, totalBeastsOwned - uniqueBeastsOwned);
+
   return (
     <div className="space-y-4">
       <div className="text-center">
         <h2 className="bg-gradient-to-r from-[#f9e08a] via-[#fbdc5e] to-[#39ff14] bg-clip-text text-xl font-bold mb-1 text-transparent">
           Collection Overview
         </h2>
-        <p className="text-muted-foreground text-sm uppercase tracking-wider">
-          Beast counts by type and variant
-        </p>
       </div>
 
-      {/* Three tables side by side */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {(["Magic", "Hunter", "Brute"] as const).map((beastType) => (
           <div
             key={beastType}
             className="bg-card/20 backdrop-blur-sm rounded-lg border border-muted/40 overflow-hidden"
           >
-            {/* Type Header */}
             <div className={`${TYPE_HEADER_COLORS[beastType]} border-l-4 p-3`}>
               <h3 className="font-bold text-sm uppercase tracking-wider text-white/90">
-                ✨ {beastType} Beasts
-              </h3>
-              <p className="text-xs text-white/70 mt-1">
+                ✨ {beastType} Beasts -{" "}
                 {typeTotals[beastType].standard +
                   typeTotals[beastType].shiny +
                   typeTotals[beastType].animated +
                   typeTotals[beastType].shinyAnimated}{" "}
                 owned
-              </p>
+              </h3>
             </div>
 
             <div className="overflow-x-auto">
@@ -356,37 +364,30 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
                 <thead>
                   <tr className="bg-gradient-to-r from-muted/40 to-muted/60 backdrop-blur-sm border-b border-border/50">
                     <th
-                      className={`p-2 text-left font-semibold text-xs tracking-wide uppercase text-white/90 ${TYPE_TOTAL_COLORS[beastType]}`}
+                      className={`px-2 py-0.5 text-left font-semibold text-xs tracking-wide uppercase text-white/90 ${TYPE_TOTAL_COLORS[beastType]}`}
                     >
                       Beast
                     </th>
-                    <th
-                      className={`p-2 text-center font-semibold text-xs tracking-wide uppercase text-white/90 ${TYPE_TOTAL_COLORS[beastType]}`}
-                    >
-                      T
-                    </th>
-                    <th className="p-1 text-center font-semibold bg-gradient-to-b from-white/90 to-gray-100/90 text-black text-[10px] tracking-wide uppercase backdrop-blur-sm">
+                    <th className="px-1 py-0.5 text-center font-semibold bg-gradient-to-b from-white/90 to-gray-100/90 text-black text-[10px] tracking-wide uppercase backdrop-blur-sm">
                       Std
                     </th>
-                    <th className="p-1 text-center font-semibold bg-gradient-to-b from-yellow-300/90 to-yellow-400/90 text-black text-[10px] tracking-wide uppercase backdrop-blur-sm">
+                    <th className="px-1 py-0.5 text-center font-semibold bg-gradient-to-b from-yellow-300/90 to-yellow-400/90 text-black text-[10px] tracking-wide uppercase backdrop-blur-sm">
                       Shy
                     </th>
-                    <th className="p-1 text-center font-semibold bg-gradient-to-b from-sky-400/90 to-sky-500/90 text-black text-[10px] tracking-wide uppercase backdrop-blur-sm">
+                    <th className="px-1 py-0.5 text-center font-semibold bg-gradient-to-b from-sky-400/90 to-sky-500/90 text-black text-[10px] tracking-wide uppercase backdrop-blur-sm">
                       Ani
                     </th>
-                    <th className="p-1 text-center font-semibold bg-gradient-to-br from-pink-400/90 via-purple-400/90 to-blue-400/90 text-white text-[9px] tracking-wide uppercase backdrop-blur-sm">
+                    <th className="px-1 py-0.5 text-center font-semibold bg-gradient-to-br from-pink-400/90 via-purple-400/90 to-blue-400/90 text-white text-[9px] tracking-wide uppercase backdrop-blur-sm">
                       SA
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {/* Beast rows for this type */}
                   {groupedBeasts[beastType].map((beastName, index) => {
                     const beastInfo = allBeastInfo[beastName];
                     const counts = beastInfo.counts;
                     const tier = beastInfo.tier;
 
-                    // Check if this is the first beast of a new tier
                     const prevBeast =
                       index > 0 ? groupedBeasts[beastType][index - 1] : null;
                     const prevTier = prevBeast
@@ -394,11 +395,10 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
                       : null;
                     const isNewTier = prevTier !== null && tier !== prevTier;
 
-                    // Make all rows grey, with bright border only for tier separators
                     const tierBorderClass = isNewTier
-                      ? "border-t-4 border-t-white"
+                      ? "border-t-2 border-t-white"
                       : "";
-                    const regularBorderClass = "border-b border-border/20";
+                    const regularBorderClass = "border-b border-gray-300/30";
                     const rowBackgroundClass = "bg-muted/20 hover:bg-muted/30";
 
                     return (
@@ -406,17 +406,12 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
                         key={beastName}
                         className={`transition-all duration-200 ${rowBackgroundClass} border-l-3 border-l-border/40 ${regularBorderClass} hover:scale-[1.01] hover:shadow-sm ${tierBorderClass}`}
                       >
-                        <td className="p-2 font-medium text-xs truncate">
+                        <td className="px-2 py-0.5 font-medium text-xs truncate">
                           {beastName}
                         </td>
-                        <td className="p-2 text-center text-xs">
-                          <span className="inline-flex items-center justify-center min-w-[18px] h-4 rounded bg-white/20 font-bold text-foreground backdrop-blur-sm text-xs">
-                            {tier}
-                          </span>
-                        </td>
-                        <td className="p-1 text-center text-xs">
+                        <td className="px-1 py-0.5 text-center text-xs">
                           {counts.standard > 0 ? (
-                            <span className="inline-flex items-center justify-center min-w-[18px] h-4 rounded bg-white/20 font-bold text-foreground backdrop-blur-sm text-xs">
+                            <span className="font-bold text-foreground text-xs">
                               {counts.standard}
                             </span>
                           ) : (
@@ -425,7 +420,7 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
                         </td>
                         <td className="p-1 text-center text-xs">
                           {counts.shiny > 0 ? (
-                            <span className="inline-flex items-center justify-center min-w-[18px] h-4 rounded bg-yellow-400/30 font-bold text-foreground backdrop-blur-sm text-xs">
+                            <span className="font-bold text-foreground text-xs">
                               {counts.shiny}
                             </span>
                           ) : (
@@ -434,7 +429,7 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
                         </td>
                         <td className="p-1 text-center text-xs">
                           {counts.animated > 0 ? (
-                            <span className="inline-flex items-center justify-center min-w-[18px] h-4 rounded bg-sky-400/30 font-bold text-foreground backdrop-blur-sm text-xs">
+                            <span className="font-bold text-foreground text-xs">
                               {counts.animated}
                             </span>
                           ) : (
@@ -443,7 +438,7 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
                         </td>
                         <td className="p-1 text-center text-xs">
                           {counts.shinyAnimated > 0 ? (
-                            <span className="inline-flex items-center justify-center min-w-[18px] h-4 rounded bg-gradient-to-r from-pink-400/30 via-purple-400/30 to-blue-400/30 font-bold text-foreground backdrop-blur-sm text-xs">
+                            <span className="font-bold text-foreground text-xs">
                               {counts.shinyAnimated}
                             </span>
                           ) : (
@@ -454,35 +449,29 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
                     );
                   })}
 
-                  {/* Type totals row */}
                   <tr
                     className={`${TYPE_TOTAL_COLORS[beastType]} border-l-4 border-t border-border/40 font-bold`}
                   >
-                    <td className="p-2 text-xs uppercase tracking-wide text-white/95 truncate">
+                    <td className="px-2 py-0.5 text-xs uppercase tracking-wide text-white/95 truncate">
                       Total
                     </td>
-                    <td className="p-2 text-center text-xs">
-                      <span className="inline-flex items-center justify-center min-w-[18px] h-4 rounded bg-white/20 font-bold text-white backdrop-blur-sm text-xs">
-                        -
-                      </span>
-                    </td>
-                    <td className="p-1 text-center text-xs">
-                      <span className="inline-flex items-center justify-center min-w-[20px] h-5 rounded bg-white/30 font-bold text-white backdrop-blur-sm text-xs">
+                    <td className="px-1 py-0.5 text-center text-xs">
+                      <span className="font-bold text-white text-xs">
                         {typeTotals[beastType].standard}
                       </span>
                     </td>
                     <td className="p-1 text-center text-xs">
-                      <span className="inline-flex items-center justify-center min-w-[20px] h-5 rounded bg-yellow-400/40 font-bold text-white backdrop-blur-sm text-xs">
+                      <span className="font-bold text-white text-xs">
                         {typeTotals[beastType].shiny}
                       </span>
                     </td>
                     <td className="p-1 text-center text-xs">
-                      <span className="inline-flex items-center justify-center min-w-[20px] h-5 rounded bg-sky-400/40 font-bold text-white backdrop-blur-sm text-xs">
+                      <span className="font-bold text-white text-xs">
                         {typeTotals[beastType].animated}
                       </span>
                     </td>
                     <td className="p-1 text-center text-xs">
-                      <span className="inline-flex items-center justify-center min-w-[20px] h-5 rounded bg-gradient-to-r from-pink-400/40 via-purple-400/40 to-blue-400/40 font-bold text-white backdrop-blur-sm text-xs">
+                      <span className="font-bold text-white text-xs">
                         {typeTotals[beastType].shinyAnimated}
                       </span>
                     </td>
@@ -500,35 +489,65 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
           <table className="w-full border-collapse text-xs">
             <tbody>
               <tr>
-                <td className="p-3 text-xs uppercase tracking-widest">
+                <td className="p-1 text-xs uppercase tracking-widest">
                   <span className="bg-gradient-to-r from-[#f9e08a] via-[#fbdc5e] to-[#39ff14] bg-clip-text text-transparent font-bold">
-                    TOTAL OVERALL
+                    TOTAL BEASTS -{" "}
+                    {overallTotals.standard +
+                      overallTotals.shiny +
+                      overallTotals.animated +
+                      overallTotals.shinyAnimated}{" "}
+                    Total
                   </span>
                 </td>
-                <td className="p-3 text-center text-xs">
-                  <span className="inline-flex items-center justify-center min-w-[24px] h-6 rounded-md bg-white/20 font-bold text-white backdrop-blur-sm">
-                    -
-                  </span>
+                <td className="p-1 text-center text-xs">
+                  <div className="flex items-center justify-center gap-1">
+                    <span className="inline-flex items-center justify-center min-w-[20px] h-5 rounded bg-gray-500/30 font-bold text-white backdrop-blur-sm border border-gray-500/30">
+                      {duplicates}
+                    </span>
+                    <span className="text-[9px] text-white/70 uppercase tracking-wide">
+                      Duplicates
+                    </span>
+                  </div>
                 </td>
-                <td className="p-3 text-center text-xs">
-                  <span className="inline-flex items-center justify-center min-w-[28px] h-7 rounded-lg bg-white/20 font-bold text-white backdrop-blur-sm border border-white/20">
-                    {overallTotals.standard}
-                  </span>
+                <td className="p-1 text-center text-xs">
+                  <div className="flex items-center justify-center gap-1">
+                    <span className="inline-flex items-center justify-center min-w-[20px] h-5 rounded bg-white/20 font-bold text-white backdrop-blur-sm border border-white/20">
+                      {overallTotals.standard}
+                    </span>
+                    <span className="text-[9px] text-white/70 uppercase tracking-wide">
+                      Standard
+                    </span>
+                  </div>
                 </td>
-                <td className="p-3 text-center text-xs">
-                  <span className="inline-flex items-center justify-center min-w-[28px] h-7 rounded-lg bg-yellow-400/30 font-bold text-white backdrop-blur-sm border border-yellow-400/30">
-                    {overallTotals.shiny}
-                  </span>
+                <td className="p-1 text-center text-xs">
+                  <div className="flex items-center justify-center gap-1">
+                    <span className="inline-flex items-center justify-center min-w-[20px] h-5 rounded bg-yellow-400/30 font-bold text-white backdrop-blur-sm border border-yellow-400/30">
+                      {overallTotals.shiny}
+                    </span>
+                    <span className="text-[9px] text-white/70 uppercase tracking-wide">
+                      Shiny
+                    </span>
+                  </div>
                 </td>
-                <td className="p-3 text-center text-xs">
-                  <span className="inline-flex items-center justify-center min-w-[28px] h-7 rounded-lg bg-sky-400/30 font-bold text-white backdrop-blur-sm border border-sky-400/30">
-                    {overallTotals.animated}
-                  </span>
+                <td className="p-1 text-center text-xs">
+                  <div className="flex items-center justify-center gap-1">
+                    <span className="inline-flex items-center justify-center min-w-[20px] h-5 rounded bg-sky-400/30 font-bold text-white backdrop-blur-sm border border-sky-400/30">
+                      {overallTotals.animated}
+                    </span>
+                    <span className="text-[9px] text-white/70 uppercase tracking-wide">
+                      Animated
+                    </span>
+                  </div>
                 </td>
-                <td className="p-3 text-center text-xs">
-                  <span className="inline-flex items-center justify-center min-w-[28px] h-7 rounded-lg bg-gradient-to-r from-pink-400/30 via-purple-400/30 to-blue-400/30 font-bold text-white backdrop-blur-sm border border-purple-400/30">
-                    {overallTotals.shinyAnimated}
-                  </span>
+                <td className="p-1 text-center text-xs">
+                  <div className="flex items-center justify-center gap-1">
+                    <span className="inline-flex items-center justify-center min-w-[20px] h-5 rounded bg-gradient-to-r from-pink-400/30 via-purple-400/30 to-blue-400/30 font-bold text-white backdrop-blur-sm border border-purple-400/30">
+                      {overallTotals.shinyAnimated}
+                    </span>
+                    <span className="text-[8px] text-white/70 uppercase tracking-wide">
+                      Shiny Anim
+                    </span>
+                  </div>
                 </td>
               </tr>
             </tbody>
