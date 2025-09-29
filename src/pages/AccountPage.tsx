@@ -299,45 +299,15 @@ function AccountPage() {
     setSummaryError(null);
 
     try {
-      const limit = 120; // Larger batch size for fewer requests
-      const MAX_INITIAL_PAGES = 3; // Limit initial pages for faster loading
-      let accumulated: Beast[] = [];
-      let totalCount = 0;
-
-      // Load first batch to get total count
-      const { beasts: firstBatch, total: batchTotal } = await fetchBeasts({
-        limit,
-        page: 1,
+      // Load ALL beasts for accurate stats calculation (like ProfilePage and CollectionPage)
+      const { beasts: allUserBeasts, total: totalCount } = await fetchBeasts({
+        limit: 1000, // High limit to get all beasts
         ownerAddresses: [resolvedAddress],
         sort: "default",
       });
 
       if (summaryRequestRef.current !== requestId) {
         return;
-      }
-
-      accumulated = [...firstBatch];
-      totalCount = batchTotal;
-
-      // Load additional pages up to limit (sequential for better caching)
-      if (totalCount > firstBatch.length) {
-        const totalPages = Math.ceil(totalCount / limit);
-        const pagesToLoad = Math.min(totalPages, MAX_INITIAL_PAGES);
-
-        for (let p = 2; p <= pagesToLoad; p++) {
-          try {
-            const result = await fetchBeasts({
-              limit,
-              page: p,
-              ownerAddresses: [resolvedAddress],
-              sort: "default",
-            });
-            accumulated = accumulated.concat(result.beasts);
-          } catch (error) {
-            console.warn(`Failed to load page ${p}:`, error);
-            // Continue with partial data rather than fail completely
-          }
-        }
       }
 
       const [deaths, ranking] = await Promise.all([
@@ -355,12 +325,12 @@ function AccountPage() {
         return;
       }
 
-      // Use totalCount first, only compute stats with sample for speed
-      setCollectionTotal(totalCount || accumulated.length);
+      // Set collection total and compute stats with ALL beasts for accuracy
+      setCollectionTotal(totalCount);
 
-      // Compute stats with available sample (partial data is better than slow loading)
-      const stats = computeBeastCollectionStats(accumulated);
-      const power = calculateTotalPower(accumulated);
+      // Compute stats with complete data (like ProfilePage and CollectionPage)
+      const stats = computeBeastCollectionStats(allUserBeasts);
+      const power = calculateTotalPower(allUserBeasts);
 
       setCollectionStats(stats);
       setCollectionPower(power);

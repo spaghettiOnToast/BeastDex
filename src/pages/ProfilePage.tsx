@@ -25,6 +25,7 @@ import {
   calculateKdRatio,
   calculateTotalPower,
   computeBeastCollectionStats,
+  TOTAL_BEAST_VARIETIES,
 } from "../utils/beastCollection";
 import { normaliseStarknetAddress } from "../utils/address";
 import { getErrorMessage } from "../utils/error";
@@ -387,6 +388,49 @@ function ProfilePage() {
           >
             ← Back to Home
           </Link>
+        </div>
+
+        {/* Unique Beasts Total Display */}
+        <div className="flex items-center justify-center">
+          <div className="flex items-center gap-2 bg-card/20 backdrop-blur-sm rounded-lg border border-muted/40 px-3 py-2">
+            <span
+              className={`text-sm transition-all duration-300 ${
+                stats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                  ? "animate-bounce text-base"
+                  : ""
+              }`}
+            >
+              {stats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                ? "🎉"
+                : "🏆"}
+            </span>
+            <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              Total Unique Beasts
+            </span>
+            <span
+              className={`font-bold transition-all duration-300 ${
+                stats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                  ? "text-[#39ff14] text-lg drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] animate-pulse"
+                  : "text-primary"
+              }`}
+            >
+              {stats.uniqueBeastTypes}
+            </span>
+            <span
+              className={`transition-all duration-300 ${
+                stats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                  ? "text-[#39ff14] font-bold drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] animate-pulse"
+                  : "text-muted-foreground"
+              }`}
+            >
+              / {TOTAL_BEAST_VARIETIES}
+            </span>
+            {stats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES && (
+              <span className="text-[#39ff14] font-bold animate-pulse ml-1 text-xs">
+                COMPLETE! ✨
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Three Column Stats Layout */}
