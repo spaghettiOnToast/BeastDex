@@ -161,6 +161,15 @@ function buildCategoryMaps(beasts: Beast[]): CategoryMaps {
   return maps;
 }
 
+function checkHasAllVariants(beastTypeKey: string, categoryMaps: CategoryMaps): boolean {
+  return (
+    categoryMaps.standard.has(beastTypeKey) &&
+    categoryMaps.shiny.has(beastTypeKey) &&
+    categoryMaps.animated.has(beastTypeKey) &&
+    categoryMaps.animatedShiny.has(beastTypeKey)
+  );
+}
+
 function CollectionPage() {
   const { identifier = "" } = useParams<{ identifier: string }>();
 
@@ -612,6 +621,7 @@ function CollectionPage() {
         missing: boolean;
         ownerUsername: string | null;
         duplicateCount: number;
+        hasAllVariants: boolean;
       }>
     > = {
       all: [],
@@ -631,6 +641,8 @@ function CollectionPage() {
         standardOwned,
         placeholder,
       }) => {
+        const hasAllVariants = checkHasAllVariants(key, categoryMaps);
+
         // Standard tab
         const standardPlaceholder = standardOwned ?? placeholder;
         if (!standardPlaceholder) {
@@ -645,6 +657,7 @@ function CollectionPage() {
           missing: !standardOwned,
           ownerUsername: resolveOwnerUsername(standardOwned),
           duplicateCount: categoryDuplicateCounts.standard.get(key) || 0,
+          hasAllVariants,
         });
 
         // Shiny tab
@@ -655,6 +668,7 @@ function CollectionPage() {
           missing: !shinyOwned,
           ownerUsername: resolveOwnerUsername(shinyOwned),
           duplicateCount: categoryDuplicateCounts.shiny.get(key) || 0,
+          hasAllVariants,
         });
 
         // Animated tab
@@ -665,6 +679,7 @@ function CollectionPage() {
           missing: !animatedOwned,
           ownerUsername: resolveOwnerUsername(animatedOwned),
           duplicateCount: categoryDuplicateCounts.animated.get(key) || 0,
+          hasAllVariants,
         });
 
         // Animated Shiny tab
@@ -675,6 +690,7 @@ function CollectionPage() {
           missing: !animatedShinyOwned,
           ownerUsername: resolveOwnerUsername(animatedShinyOwned),
           duplicateCount: categoryDuplicateCounts.animatedShiny.get(key) || 0,
+          hasAllVariants,
         });
 
         // All tab → pick *one* (any rarity)
@@ -692,6 +708,7 @@ function CollectionPage() {
           missing: !anyOwned,
           ownerUsername: resolveOwnerUsername(anyOwned),
           duplicateCount: categoryDuplicateCounts.all.get(key) || 0,
+          hasAllVariants,
         });
       }
     );
@@ -793,6 +810,7 @@ function CollectionPage() {
     tabEntriesForCategory,
     resolveOwnerUsername,
     categoryDuplicateCounts,
+    categoryMaps,
     sortOption,
     showDuplicatesOnly,
   ]);
@@ -1171,6 +1189,7 @@ function CollectionPage() {
                 overlayLabel="Need to hunt"
                 disabled={entry.missing}
                 duplicateCount={entry.duplicateCount}
+                hasAllVariants={entry.hasAllVariants}
                 onSelect={handleBeastSelect}
               />
             ))}
