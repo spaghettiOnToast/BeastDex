@@ -433,3 +433,189 @@ export async function fetchBeastCollectionLeaderboard({
   });
 }
 
+export async function fetchMostCollectedBeastLeaderboard({
+  limit = 10,
+  offset = 0,
+}: FetchLeaderboardOptions = {}): Promise<Array<{
+  rank: number;
+  beast_name: string;
+  value: number;
+}>> {
+  return apiCache.get("most-collected-beast-leaderboard", { limit, offset }, async () => {
+    const query = `
+      WITH beast_counts AS (
+        SELECT
+          json_extract(attr.value, '$.value') as beast_name,
+          COUNT(*) as beast_count
+        FROM tokens t
+        JOIN token_balances b
+          ON t.id = b.token_id
+          AND t.contract_address = b.contract_address
+        JOIN json_each(
+          CASE
+            WHEN json_valid(t.metadata) = 1 THEN t.metadata
+            ELSE '{"attributes":[]}'
+          END,
+          '$.attributes'
+        ) attr
+        WHERE t.contract_address = '${CONTRACT_ADDRESS}'
+          AND b.balance > '${ZERO_BALANCE}'
+          AND json_valid(t.metadata) = 1
+          AND LOWER(json_extract(attr.value, '$.trait_type')) = 'beast'
+          AND json_extract(attr.value, '$.value') IS NOT NULL
+          AND json_extract(attr.value, '$.value') != ''
+        GROUP BY json_extract(attr.value, '$.value')
+      )
+      SELECT
+        ROW_NUMBER() OVER (ORDER BY beast_count DESC) as rank,
+        beast_name,
+        beast_count as value
+      FROM beast_counts
+      ORDER BY beast_count DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+
+    type BeastNameCountRow = {
+      rank: number;
+      beast_name: string;
+      value: number;
+    };
+
+    const rows = await runBeastSql<BeastNameCountRow[]>(query, "fetchMostCollectedBeastLeaderboard");
+    return rows.map(row => ({
+      rank: row.rank,
+      beast_name: row.beast_name,
+      value: row.value,
+    }));
+  });
+}
+
+export async function fetchBeastOfTheDayLeaderboard({
+  limit = 10,
+  offset = 0,
+}: FetchLeaderboardOptions = {}): Promise<Array<{
+  rank: number;
+  beast: Beast;
+  owner: string;
+  rarity_score: number;
+  power: number;
+  beast_rank: number;
+  last_death: number;
+}>> {
+  return apiCache.get("beast-of-the-day-leaderboard", { limit, offset }, async () => {
+    // Calculate 24 hours ago timestamp
+    const twentyFourHoursAgo = Math.floor(Date.now() / 1000) - (24 * 60 * 60);
+
+    const query = `
+      WITH beast_data AS (
+        SELECT
+          t.id,
+          t.metadata,
+          LOWER(b.account_address) as owner,
+          -- Extract attributes
+          (SELECT json_extract(attr.value, '$.value')
+           FROM json_each(t.metadata, '$.attributes') attr
+           WHERE LOWER(json_extract(attr.value, '$.trait_type')) = 'beast') as beast_name,
+          (SELECT CAST(json_extract(attr.value, '$.value') AS INTEGER)
+           FROM json_each(t.metadata, '$.attributes') attr
+           WHERE LOWER(json_extract(attr.value, '$.trait_type')) = 'last death timestamp') as last_death,
+          (SELECT CAST(json_extract(attr.value, '$.value') AS REAL)
+           FROM json_each(t.metadata, '$.attributes') attr
+           WHERE LOWER(json_extract(attr.value, '$.trait_type')) LIKE '%power%') as power,
+          (SELECT CAST(json_extract(attr.value, '$.value') AS INTEGER)
+           FROM json_each(t.metadata, '$.attributes') attr
+           WHERE LOWER(json_extract(attr.value, '$.trait_type')) = 'rank') as beast_rank,
+          (SELECT json_extract(attr.value, '$.value')
+           FROM json_each(t.metadata, '$.attributes') attr
+           WHERE LOWER(json_extract(attr.value, '$.trait_type')) = 'animated') as animated,
+          (SELECT json_extract(attr.value, '$.value')
+           FROM json_each(t.metadata, '$.attributes') attr
+           WHERE LOWER(json_extract(attr.value, '$.trait_type')) = 'shiny') as shiny
+        FROM tokens t
+        JOIN token_balances b
+          ON t.id = b.token_id
+          AND t.contract_address = b.contract_address
+        WHERE t.contract_address = '${CONTRACT_ADDRESS}'
+          AND b.balance > '${ZERO_BALANCE}'
+          AND json_valid(t.metadata) = 1
+          AND b.account_address IS NOT NULL
+          AND b.account_address != ''
+      ),
+      recent_deaths AS (
+        SELECT
+          *,
+          -- Calculate rarity score: Shiny Animated = 4, Shiny = 3, Animated = 2, Standard = 1
+          CASE
+            WHEN (animated = '1' OR animated = 1) AND (shiny = '1' OR shiny = 1) THEN 4
+            WHEN (shiny = '1' OR shiny = 1) THEN 3
+            WHEN (animated = '1' OR animated = 1) THEN 2
+            ELSE 1
+          END as rarity_score
+        FROM beast_data
+        WHERE last_death IS NOT NULL
+          AND last_death >= ${twentyFourHoursAgo}
+          AND power IS NOT NULL
+          AND beast_rank IS NOT NULL
+      )
+      SELECT
+        ROW_NUMBER() OVER (
+          ORDER BY
+            rarity_score DESC,
+            power DESC,
+            beast_rank ASC
+        ) as rank,
+        id,
+        metadata,
+        owner,
+        rarity_score,
+        COALESCE(power, 0) as power,
+        COALESCE(beast_rank, 999999) as beast_rank,
+        last_death
+      FROM recent_deaths
+      ORDER BY
+        rarity_score DESC,
+        power DESC,
+        beast_rank ASC
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+
+    type BeastOfTheDayRow = {
+      rank: number;
+      id: string;
+      metadata: string;
+      owner: string;
+      rarity_score: number;
+      power: number;
+      beast_rank: number;
+      last_death: number;
+    };
+
+    const rows = await runBeastSql<BeastOfTheDayRow[]>(query, "fetchBeastOfTheDayLeaderboard");
+
+    return rows.map(row => {
+      // Parse the beast data using existing helper
+      const beastRow = {
+        id: row.id,
+        metadata: row.metadata,
+        account_address: row.owner,
+        contract_address: CONTRACT_ADDRESS,
+        token_id: row.id,
+        balance: "1",
+        total_count: 1
+      };
+
+      const beast = mapBeastRow(beastRow);
+
+      return {
+        rank: row.rank,
+        beast,
+        owner: row.owner,
+        rarity_score: row.rarity_score,
+        power: row.power,
+        beast_rank: row.beast_rank,
+        last_death: row.last_death,
+      };
+    });
+  });
+}
+

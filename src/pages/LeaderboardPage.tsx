@@ -3,8 +3,10 @@ import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import { RankLeaderboard } from "../components/leaderboard/RankLeaderboard";
 import { MostBeastsCollected } from "../components/leaderboard/MostBeastsCollected";
+import { MostCollectedBeast } from "../components/leaderboard/MostCollectedBeast";
+import { BeastOfTheDay } from "../components/leaderboard/BeastOfTheDay";
 
-type LeaderboardTab = "power" | "beasts";
+type LeaderboardTab = "power" | "beasts" | "beastNames" | "beastOfTheDay";
 
 function LeaderboardPage() {
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("power");
@@ -12,8 +14,26 @@ function LeaderboardPage() {
   const topBar = <TopBar />;
 
   const tabs = [
-    { id: "power" as const, label: "Power Rank", description: "Top players by total power" },
-    { id: "beasts" as const, label: "Most Beasts", description: "Top collectors by beast count" },
+    {
+      id: "power" as const,
+      label: "Power Rank",
+      description: "Top players by total power",
+    },
+    {
+      id: "beasts" as const,
+      label: "Most Beasts",
+      description: "Top collectors",
+    },
+    {
+      id: "beastNames" as const,
+      label: "Most Collected Beast",
+      description: "Most collected beast across all players",
+    },
+    {
+      id: "beastOfTheDay" as const,
+      label: "Beast of the Day",
+      description: "Most prestigious beasts fallen in the past 24 hours",
+    },
   ];
 
   return (
@@ -54,7 +74,7 @@ function LeaderboardPage() {
         {/* Tab Description */}
         <div className="text-center">
           <p className="text-sm text-gray-400">
-            {tabs.find(tab => tab.id === activeTab)?.description}
+            {tabs.find((tab) => tab.id === activeTab)?.description}
           </p>
         </div>
 
@@ -64,6 +84,8 @@ function LeaderboardPage() {
           <div className="relative z-10">
             {activeTab === "power" && <RankLeaderboard />}
             {activeTab === "beasts" && <MostBeastsCollected />}
+            {activeTab === "beastNames" && <MostCollectedBeast />}
+            {activeTab === "beastOfTheDay" && <BeastOfTheDay />}
           </div>
         </div>
       </div>
