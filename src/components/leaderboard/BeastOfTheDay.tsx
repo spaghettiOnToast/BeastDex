@@ -17,14 +17,26 @@ type BeastOfTheDayEntry = {
   last_death: number;
 };
 
-const getRarityInfo = (rarityScore: number) => {
+const getRarityInfo = (rarityScore: number, beast: any) => {
   switch (rarityScore) {
-    case 4:
-      return { label: "Shiny Animated", color: "bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400", icon: "✨🎬" };
     case 3:
-      return { label: "Shiny", color: "bg-yellow-300", icon: "⭐" };
+      return { label: "Shiny Animated", color: "bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400", icon: "✨🎬" };
     case 2:
-      return { label: "Animated", color: "bg-sky-400", icon: "⚡" };
+      // Check if it's shiny or animated to show the correct label
+      const isShiny = beast.attributes?.some((attr: any) =>
+        attr.trait_type?.toLowerCase() === 'shiny' && (attr.value === '1' || attr.value === 1)
+      );
+      const isAnimated = beast.attributes?.some((attr: any) =>
+        attr.trait_type?.toLowerCase() === 'animated' && (attr.value === '1' || attr.value === 1)
+      );
+
+      if (isShiny && !isAnimated) {
+        return { label: "Shiny", color: "bg-yellow-300", icon: "⭐" };
+      } else if (isAnimated && !isShiny) {
+        return { label: "Animated", color: "bg-sky-400", icon: "⚡" };
+      } else {
+        return { label: "Shiny/Animated", color: "bg-gradient-to-r from-yellow-300 to-sky-400", icon: "⭐⚡" };
+      }
     default:
       return { label: "Standard", color: "bg-white", icon: "🐾" };
   }
@@ -176,7 +188,7 @@ export function BeastOfTheDay() {
         <div className="divide-y divide-gray-700/30">
           {leaderboard.map((entry) => {
             const normalised = normaliseStarknetAddress(entry.owner);
-            const rarityInfo = getRarityInfo(entry.rarity_score);
+            const rarityInfo = getRarityInfo(entry.rarity_score, entry.beast);
 
             return (
               <div

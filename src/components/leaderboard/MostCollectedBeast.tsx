@@ -15,6 +15,7 @@ export function MostCollectedBeast() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [ascending, setAscending] = useState(false);
 
   useEffect(() => {
     async function loadLeaderboard() {
@@ -23,7 +24,7 @@ export function MostCollectedBeast() {
         setError(null);
 
         const offset = (page - 1) * PAGE_SIZE;
-        const data = await fetchMostCollectedBeastLeaderboard({ limit: PAGE_SIZE, offset });
+        const data = await fetchMostCollectedBeastLeaderboard({ limit: PAGE_SIZE, offset, ascending });
 
         if (page === 1) {
           setLeaderboard(data);
@@ -41,12 +42,18 @@ export function MostCollectedBeast() {
     }
 
     loadLeaderboard();
-  }, [page]);
+  }, [page, ascending]);
 
   const handleLoadMore = () => {
     if (!loading && hasMore) {
       setPage(prev => prev + 1);
     }
+  };
+
+  const toggleSortOrder = () => {
+    setAscending(prev => !prev);
+    setPage(1); // Reset to first page when changing sort order
+    setLeaderboard([]); // Clear current data
   };
 
   if (loading && page === 1) {
@@ -76,6 +83,17 @@ export function MostCollectedBeast() {
 
   return (
     <div className="space-y-4">
+      {/* Sort Toggle */}
+      <div className="flex justify-center">
+        <button
+          onClick={toggleSortOrder}
+          className="px-4 py-2 bg-gradient-to-r from-gray-800 to-gray-900 hover:from-lsGold/20 hover:to-[#8bff72]/20 text-lsGold hover:text-[#8bff72] transition-all duration-300 rounded-xl text-sm font-bold uppercase tracking-wider border border-gray-700 hover:border-[#8bff72]/50 shadow-lg hover:shadow-[#8bff72]/20 flex items-center gap-2"
+        >
+          <span>{ascending ? "📈" : "📉"}</span>
+          <span>Sort by: {ascending ? "Least" : "Most"} Collected</span>
+        </button>
+      </div>
+
       {/* Leaderboard Table */}
       <div className="bg-gradient-to-br from-gray-900/90 to-black/60 backdrop-blur-sm border border-gray-700/50 rounded-xl overflow-hidden shadow-2xl">
         <div className="grid grid-cols-4 gap-4 px-6 py-3 bg-gradient-to-r from-gray-800/80 to-gray-900/80 border-b border-gray-600/30 text-xs font-bold uppercase tracking-wider text-gray-300">

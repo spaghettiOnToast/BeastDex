@@ -436,12 +436,13 @@ export async function fetchBeastCollectionLeaderboard({
 export async function fetchMostCollectedBeastLeaderboard({
   limit = 10,
   offset = 0,
-}: FetchLeaderboardOptions = {}): Promise<Array<{
+  ascending = false,
+}: FetchLeaderboardOptions & { ascending?: boolean } = {}): Promise<Array<{
   rank: number;
   beast_name: string;
   value: number;
 }>> {
-  return apiCache.get("most-collected-beast-leaderboard", { limit, offset }, async () => {
+  return apiCache.get("most-collected-beast-leaderboard", { limit, offset, ascending }, async () => {
     const query = `
       WITH beast_counts AS (
         SELECT
@@ -467,11 +468,11 @@ export async function fetchMostCollectedBeastLeaderboard({
         GROUP BY json_extract(attr.value, '$.value')
       )
       SELECT
-        ROW_NUMBER() OVER (ORDER BY beast_count DESC) as rank,
+        ROW_NUMBER() OVER (ORDER BY beast_count ${ascending ? 'ASC' : 'DESC'}) as rank,
         beast_name,
         beast_count as value
       FROM beast_counts
-      ORDER BY beast_count DESC
+      ORDER BY beast_count ${ascending ? 'ASC' : 'DESC'}
       LIMIT ${limit} OFFSET ${offset}
     `;
 
@@ -544,10 +545,10 @@ export async function fetchBeastOfTheDayLeaderboard({
       recent_deaths AS (
         SELECT
           *,
-          -- Calculate rarity score: Shiny Animated = 4, Shiny = 3, Animated = 2, Standard = 1
+          -- Calculate rarity score: Shiny Animated = 3, Shiny = 2, Animated = 2, Standard = 1
           CASE
-            WHEN (animated = '1' OR animated = 1) AND (shiny = '1' OR shiny = 1) THEN 4
-            WHEN (shiny = '1' OR shiny = 1) THEN 3
+            WHEN (animated = '1' OR animated = 1) AND (shiny = '1' OR shiny = 1) THEN 3
+            WHEN (shiny = '1' OR shiny = 1) THEN 2
             WHEN (animated = '1' OR animated = 1) THEN 2
             ELSE 1
           END as rarity_score
