@@ -21,7 +21,9 @@ export type Trade = {
   offer_b: string[]; // Array of token IDs
   offer_a_sent: boolean;
   offer_b_sent: boolean;
-  status: 'OPEN' | 'COMPLETE' | 'EXPIRED' | 'CANCELLED';
+  status: 'DRAFT' | 'PENDING' | 'ACCEPTED' | 'COMPLETE' | 'REJECTED' | 'CANCELLED' | 'EXPIRED';
+  trade_locked: boolean;
+  account_b_accepted: boolean | null;
   created_at: string;
   updated_at: string;
   expires_at: string;
@@ -29,6 +31,7 @@ export type Trade = {
 
 export type CreateTradeData = {
   account_a: string;
+  account_b?: string;
   offer_a?: string[];
   offer_b?: string[];
 };
@@ -40,4 +43,6 @@ export type UpdateTradeData = {
   offer_a_sent?: boolean;
   offer_b_sent?: boolean;
   status?: Trade['status'];
+  trade_locked?: boolean;
+  account_b_accepted?: boolean | null;
 };

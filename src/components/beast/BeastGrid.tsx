@@ -10,6 +10,7 @@ type BeastGridProps = {
   onSelect: (beast: Beast) => void;
   loading?: boolean;
   emptyMessage?: string;
+  selectedBeastIds?: string[];
 };
 
 export const BeastGrid = memo(function BeastGrid({
@@ -18,6 +19,7 @@ export const BeastGrid = memo(function BeastGrid({
   onSelect,
   loading = false,
   emptyMessage = "No beasts found.",
+  selectedBeastIds = [],
 }: BeastGridProps) {
   if (loading && beasts.length === 0) {
     return (
@@ -41,19 +43,23 @@ export const BeastGrid = memo(function BeastGrid({
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-5 gap-6 animate-in fade-in duration-500">
-      {beasts.map((beast) => (
-        <BeastCard
-          key={beast.id}
-          beast={beast}
-          owned={!!beast.owner}
-          ownerUsername={
-            beast.owner
-              ? ownerUsernames[beast.owner.toLowerCase()] ?? null
-              : null
-          }
-          onSelect={onSelect}
-        />
-      ))}
+      {beasts.map((beast) => {
+        const isSelected = selectedBeastIds.includes(beast.id);
+        return (
+          <BeastCard
+            key={beast.id}
+            beast={beast}
+            owned={!!beast.owner}
+            ownerUsername={
+              beast.owner
+                ? ownerUsernames[beast.owner.toLowerCase()] ?? null
+                : null
+            }
+            onSelect={onSelect}
+            selected={isSelected}
+          />
+        );
+      })}
     </div>
   );
 });

@@ -9,6 +9,7 @@ import { mainnet, type Chain } from "@starknet-react/chains";
 import { connectors } from "./wallet/controller";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { GlobalSearchProvider } from "./hooks/useGlobalSearch";
+import { TradeBuilderProvider } from "./contexts/TradeBuilderContext";
 
 // Lazy load pages for better performance
 const HomePage = lazy(() => import("./pages/HomePage"));
@@ -42,7 +43,8 @@ function App() {
       autoConnect
     >
       <GlobalSearchProvider>
-        <ErrorBoundary>
+        <TradeBuilderProvider>
+          <ErrorBoundary>
           <Suspense
           fallback={
             <div className="flex items-center justify-center min-h-screen">
@@ -60,10 +62,12 @@ function App() {
             <Route path="/collection/:identifier" element={<CollectionPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/leaderboard" element={<LeaderboardPage />} />
+            <Route path="/trades" element={<TradePage />} />
             <Route path="/trade/:id" element={<TradePage />} />
           </Routes>
         </Suspense>
-        </ErrorBoundary>
+          </ErrorBoundary>
+        </TradeBuilderProvider>
       </GlobalSearchProvider>
     </StarknetConfig>
   );

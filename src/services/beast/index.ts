@@ -119,6 +119,22 @@ export async function fetchBeastById(
   });
 }
 
+export async function fetchBeastsByIds(
+  ids: (string | number)[]
+): Promise<Beast[]> {
+  if (ids.length === 0) {
+    return [];
+  }
+
+  // Fetch all beasts in parallel
+  const results = await Promise.all(
+    ids.map(id => fetchBeastById(id))
+  );
+
+  // Filter out nulls and return only valid beasts
+  return results.filter((beast): beast is Beast => beast !== null);
+}
+
 export async function fetchBeastAttributeFilters(): Promise<BeastAttributeFilters> {
   return apiCache.get("beast-filters", {}, async () => {
     const query = buildAttributeFiltersQuery();

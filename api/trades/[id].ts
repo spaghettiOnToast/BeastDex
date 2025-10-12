@@ -1,6 +1,15 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb, UpdateTradeData } from '../../src/lib/db';
 
+// Helper function to parse trade JSON fields
+function parseTrade(trade: any) {
+  return {
+    ...trade,
+    offer_a: typeof trade.offer_a === 'string' ? JSON.parse(trade.offer_a) : (Array.isArray(trade.offer_a) ? trade.offer_a : []),
+    offer_b: typeof trade.offer_b === 'string' ? JSON.parse(trade.offer_b) : (Array.isArray(trade.offer_b) ? trade.offer_b : []),
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const sql = getDb();
   const { id } = req.query;
@@ -30,7 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(404).json({ error: 'Trade not found' });
       }
 
-      return res.status(200).json({ trade: result[0] });
+      return res.status(200).json({ trade: parseTrade(result[0]) });
     }
 
     if (req.method === 'PUT') {
@@ -91,10 +100,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           WHERE id = ${id}
           RETURNING *
         `;
-        return res.status(200).json({ trade: completeResult[0] });
+        return res.status(200).json({ trade: parseTrade(completeResult[0]) });
       }
 
-      return res.status(200).json({ trade: result[0] });
+      return res.status(200).json({ trade: parseTrade(trade) });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });

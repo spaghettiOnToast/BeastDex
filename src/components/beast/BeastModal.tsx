@@ -20,6 +20,8 @@ type BeastModalProps = {
   onNextDuplicate?: () => void;
   onPreviousDuplicate?: () => void;
   onOpenTrade?: (beast: Beast) => void;
+  onAddToTrade?: (beast: Beast) => void;
+  showAddToTrade?: boolean;
 };
 
 export function BeastModal({
@@ -30,7 +32,9 @@ export function BeastModal({
   currentDuplicateIndex = 0,
   onNextDuplicate,
   onPreviousDuplicate,
-  onOpenTrade
+  onOpenTrade,
+  onAddToTrade,
+  showAddToTrade = false
 }: BeastModalProps) {
   const navigate = useNavigate();
 
@@ -101,6 +105,20 @@ export function BeastModal({
                   >
                     View Full Details
                   </Button>
+                  {showAddToTrade && onAddToTrade && (
+                    <Button
+                      variant="outline"
+                      size="default"
+                      onClick={() => {
+                        onAddToTrade(beast);
+                        onClose();
+                      }}
+                      className="flex-1 sm:flex-none font-semibold tracking-wide border-lsGold text-lsGold hover:bg-lsGold/10"
+                    >
+                      <ArrowRightLeft className="w-4 h-4 mr-2" />
+                      Add to Trade
+                    </Button>
+                  )}
                   {onOpenTrade && (
                     <Button
                       variant="outline"

@@ -2,6 +2,15 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb, CreateTradeData } from '../../src/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 
+// Helper function to parse trade JSON fields
+function parseTrade(trade: any) {
+  return {
+    ...trade,
+    offer_a: typeof trade.offer_a === 'string' ? JSON.parse(trade.offer_a) : (Array.isArray(trade.offer_a) ? trade.offer_a : []),
+    offer_b: typeof trade.offer_b === 'string' ? JSON.parse(trade.offer_b) : (Array.isArray(trade.offer_b) ? trade.offer_b : []),
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const sql = getDb();
 
@@ -31,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         RETURNING *
       `;
 
-      return res.status(201).json({ trade: result[0] });
+      return res.status(201).json({ trade: parseTrade(result[0]) });
     }
 
     if (req.method === 'GET') {
@@ -49,7 +58,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         LIMIT 50
       `;
 
-      return res.status(200).json({ trades });
+      // Parse JSON fields for all trades
+      const parsedTrades = Array.isArray(trades) ? trades.map((trade: any) => parseTrade(trade)) : [];
+
+      return res.status(200).json({ trades: parsedTrades });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });

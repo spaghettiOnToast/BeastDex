@@ -1,6 +1,15 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from '../../../src/lib/db';
 
+// Helper function to parse trade JSON fields
+function parseTrade(trade: any) {
+  return {
+    ...trade,
+    offer_a: typeof trade.offer_a === 'string' ? JSON.parse(trade.offer_a) : (Array.isArray(trade.offer_a) ? trade.offer_a : []),
+    offer_b: typeof trade.offer_b === 'string' ? JSON.parse(trade.offer_b) : (Array.isArray(trade.offer_b) ? trade.offer_b : []),
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const sql = getDb();
   const { id } = req.query;
@@ -44,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Check if this account can join
     if (trade.account_a === account) {
       // Account A is already the creator
-      return res.status(200).json({ trade, message: 'You are the creator of this trade' });
+      return res.status(200).json({ trade: parseTrade(trade), message: 'You are the creator of this trade' });
     }
 
     if (trade.account_b && trade.account_b !== account) {
@@ -53,7 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (trade.account_b === account) {
       // Account is already the counterparty
-      return res.status(200).json({ trade, message: 'You are already part of this trade' });
+      return res.status(200).json({ trade: parseTrade(trade), message: 'You are already part of this trade' });
     }
 
     // Join as account_b
@@ -64,7 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       RETURNING *
     `;
 
-    return res.status(200).json({ trade: result[0], message: 'Successfully joined trade' });
+    return res.status(200).json({ trade: parseTrade(result[0]), message: 'Successfully joined trade' });
   } catch (error) {
     console.error('API Error:', error);
     return res.status(500).json({ error: 'Internal server error' });

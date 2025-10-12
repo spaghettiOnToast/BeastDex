@@ -5,6 +5,7 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
+import { useAccount } from "@starknet-react/core";
 import BeastGrid from "../components/beast/BeastGrid";
 import BeastModal from "../components/beast/BeastModal";
 import PaginationControls from "../components/pagination/PaginationControls";
@@ -12,6 +13,8 @@ import { FiltersButton } from "../components/filters/FiltersButton";
 import { FiltersDrawer } from "../components/filters/FiltersDrawer";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
+import { TradeBuilder } from "../components/trade/TradeBuilder";
+import { useTradeBuilder } from "../contexts/TradeBuilderContext";
 import { useBeasts } from "../hooks/useBeasts";
 import {
   fetchBeastAttributeFilters,
@@ -52,6 +55,8 @@ function AccountPage() {
   const { identifier = "" } = useParams<{ identifier: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { address: connectedWalletAddress } = useAccount();
+  const tradeBuilder = useTradeBuilder();
   const [availableFilters, setAvailableFilters] =
     useState<BeastAttributeFilters>({});
   const [attributeFilters, setAttributeFilters] =
@@ -267,6 +272,7 @@ function AccountPage() {
   }, []);
 
   const handleSelectBeast = useCallback((beast: Beast) => {
+    // Always open modal - allows selecting specific beasts from duplicates
     setSelectedBeast(beast);
   }, []);
 
@@ -644,6 +650,24 @@ function AccountPage() {
                   </Link>
                 ) : null}
 
+                {(() => {
+                  // Check if viewing own account
+                  const isOwnAccount = connectedWalletAddress && resolvedAddress && (
+                    normaliseStarknetAddress(connectedWalletAddress)?.toLowerCase() ===
+                    normaliseStarknetAddress(resolvedAddress)?.toLowerCase()
+                  );
+
+                  return isOwnAccount && !tradeBuilder.isBuilding && (
+                    <button
+                      type="button"
+                      onClick={() => tradeBuilder.startTrade()}
+                      className="inline-flex items-center gap-2 rounded-md border border-lsGold px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-lsGold hover:bg-gray-900"
+                    >
+                      <span>Start Trade</span>
+                    </button>
+                  );
+                })()}
+
                 <button
                   type="button"
                   onClick={handleRefresh}
@@ -717,6 +741,10 @@ function AccountPage() {
           onSelect={handleSelectBeast}
           loading={loading}
           emptyMessage="No beasts found for this account."
+          selectedBeastIds={tradeBuilder.isBuilding ? [
+            ...tradeBuilder.selectedBeastsA.map(b => b.id),
+            ...tradeBuilder.selectedBeastsB.map(b => b.id)
+          ] : []}
         />
 
         {/* Pagination */}
@@ -742,6 +770,14 @@ function AccountPage() {
           beast={selectedBeast}
           ownerUsernames={ownerUsernames}
           onClose={handleCloseModal}
+          showAddToTrade={tradeBuilder.isBuilding}
+          onAddToTrade={(beast) => {
+            if (tradeBuilder.step === 'select-a') {
+              tradeBuilder.addBeastToA(beast);
+            } else if (tradeBuilder.step === 'select-b') {
+              tradeBuilder.addBeastToB(beast);
+            }
+          }}
         />
 
         <FiltersDrawer
@@ -754,6 +790,8 @@ function AccountPage() {
           onFilterChange={handleFilterChange}
           onResetFilters={handleResetFilters}
         />
+
+        <TradeBuilder />
       </div>
     </AppLayout>
   );

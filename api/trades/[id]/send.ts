@@ -1,6 +1,15 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from '../../../src/lib/db';
 
+// Helper function to parse trade JSON fields
+function parseTrade(trade: any) {
+  return {
+    ...trade,
+    offer_a: typeof trade.offer_a === 'string' ? JSON.parse(trade.offer_a) : (Array.isArray(trade.offer_a) ? trade.offer_a : []),
+    offer_b: typeof trade.offer_b === 'string' ? JSON.parse(trade.offer_b) : (Array.isArray(trade.offer_b) ? trade.offer_b : []),
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const sql = getDb();
   const { id } = req.query;
@@ -71,14 +80,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `;
 
       return res.status(200).json({
-        trade: completeResult[0],
+        trade: parseTrade(completeResult[0]),
         message: 'Trade completed!',
         txHash
       });
     }
 
     return res.status(200).json({
-      trade: updatedTrade,
+      trade: parseTrade(updatedTrade),
       message: 'Send confirmed',
       txHash
     });

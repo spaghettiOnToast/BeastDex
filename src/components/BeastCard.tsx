@@ -15,6 +15,7 @@ type Props = {
   overlayLabel?: string;
   disabled?: boolean;
   duplicateCount?: number;
+  selected?: boolean;
 };
 
 const BeastCard = memo(function BeastCard({
@@ -26,6 +27,7 @@ const BeastCard = memo(function BeastCard({
   overlayLabel = "Need to hunt",
   disabled = false,
   duplicateCount,
+  selected = false,
 }: Props) {
   const { image, name, owner } = beast;
 
@@ -86,7 +88,8 @@ const BeastCard = memo(function BeastCard({
         "hover:shadow-2xl hover:-translate-y-1",
         "bg-card/50 backdrop-blur-sm",
         missing && "opacity-50 cursor-not-allowed",
-        disabled && "pointer-events-none opacity-50"
+        disabled && "pointer-events-none opacity-50",
+        selected && "ring-2 ring-lsGold shadow-lg shadow-lsGold/50"
       )}
       onClick={() => {
         if (!disabled && !missing) {
