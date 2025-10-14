@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Trophy } from "lucide-react";
+import { Trophy, Store } from "lucide-react";
 import Logo from "../Logo";
 import SearchBar from "../SearchBar";
 import WalletButton from "../wallet/WalletButton";
@@ -22,6 +22,15 @@ export default function TopBar({ filtersControl }: Props) {
         {filtersControl}
       </div>
       <div className="flex items-center gap-4">
+        <Button
+          asChild
+          className="bg-[#0ef] text-black text-xs font-semibold uppercase tracking-wide hover:bg-[#0bc] hover:text-black min-w-[140px] h-10"
+        >
+          <Link to="/marketplace">
+            <Store className="h-4 w-4" />
+            Marketplace
+          </Link>
+        </Button>
         <Button
           asChild
           className="bg-[#39ff14] text-black text-xs font-semibold uppercase tracking-wide hover:bg-[#2ecc10] hover:text-black min-w-[140px] h-10"
