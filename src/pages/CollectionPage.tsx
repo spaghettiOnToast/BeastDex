@@ -44,6 +44,7 @@ import { Button } from "../components/ui/button";
 import { getBeastTemplate } from "../data/beastTemplates";
 import { runBeastSql } from "../services/beast/sqlClient";
 import { mapBeastRow } from "../services/beast/helpers";
+import { apiCache } from "../services/apiCache";
 
 const TABS = [
   { key: "all", label: "All" },
@@ -315,7 +316,7 @@ function CollectionPage() {
       let hasMoreData = true;
 
       // Load user's collection in batches
-      while (hasMoreData && allUserBeasts.length < 1000) {
+      while (hasMoreData && allUserBeasts.length < 5000) {
         // Safety limit
         const { beasts: batch, total } = await fetchBeasts({
           limit,
@@ -1152,7 +1153,11 @@ function CollectionPage() {
             </Button>
             <button
               type="button"
-              onClick={() => void loadSummary()}
+              onClick={() => {
+                // Clear the beast query cache to force fresh data
+                apiCache.clearEndpoint("beast-query");
+                void loadSummary();
+              }}
               disabled={anyLoading || !resolvedAddress}
               className="inline-flex items-center gap-2 rounded-md border border-lsGold px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-lsGold hover:bg-gray-900 disabled:opacity-50"
             >
