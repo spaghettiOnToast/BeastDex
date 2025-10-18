@@ -54,8 +54,8 @@ function buildAttributeFiltersClause(
     .filter(([, values]) => Array.isArray(values) && values.length > 0)
     .map(([trait, values]) => {
       const escapedTrait = escapeSqlLiteral(trait);
-      const escapedValues = values
-        .map((value) => `'${escapeSqlLiteral(String(value))}'`)
+      const escapedValuesLower = values
+        .map((value) => `LOWER('${escapeSqlLiteral(String(value))}')`)
         .join(", ");
 
       return `AND EXISTS (
@@ -67,8 +67,8 @@ function buildAttributeFiltersClause(
           END,
           '$.attributes'
         ) attr
-        WHERE json_extract(attr.value, '$.trait_type') = '${escapedTrait}'
-          AND json_extract(attr.value, '$.value') IN (${escapedValues})
+        WHERE LOWER(json_extract(attr.value, '$.trait_type')) = LOWER('${escapedTrait}')
+          AND LOWER(json_extract(attr.value, '$.value')) IN (${escapedValuesLower})
           AND json_extract(attr.value, '$.trait_type') IS NOT NULL
           AND json_extract(attr.value, '$.value') IS NOT NULL
       )`;
@@ -253,7 +253,19 @@ export function buildBeastsQuery({
       : "ORDER BY CAST(id AS INTEGER) ASC";
 
   return `
-    WITH filtered_tokens AS (
+    WITH current_owners AS (
+      -- Get only the current owner for each token (the one with non-zero balance)
+      SELECT
+        token_id,
+        contract_address,
+        account_address,
+        balance,
+        ROW_NUMBER() OVER (PARTITION BY token_id, contract_address ORDER BY balance DESC) as rn
+      FROM token_balances
+      WHERE contract_address = '${CONTRACT_ADDRESS}'
+        AND balance > '${ZERO_BALANCE}'
+    ),
+    filtered_tokens AS (
       SELECT
         t.id,
         t.metadata,
@@ -265,17 +277,17 @@ export function buildBeastsQuery({
         ${rankSelect}
         ${lastDeathSelect}
       FROM tokens t
-      JOIN token_balances b
+      JOIN current_owners b
         ON t.id = b.token_id
-      AND t.contract_address = b.contract_address
+        AND t.contract_address = b.contract_address
+        AND b.rn = 1
       ${beastJoin}
       ${tierJoin}
       ${healthJoin}
       ${rankJoin}
       ${lastDeathJoin}
           WHERE t.contract_address = '${CONTRACT_ADDRESS}'
-            AND b.balance > '${ZERO_BALANCE}'
-            AND json_valid(t.metadata) = 1 
+            AND json_valid(t.metadata) = 1
             ${searchClause}
             ${attributeClauses}
             ${ownerClause}
@@ -352,18 +364,29 @@ export function buildBeastByIdQuery(id: string, tokenHex?: string) {
   const filter = whereClauses.length > 0 ? whereClauses.join(" OR ") : "0";
 
   return `
+    WITH current_owners AS (
+      SELECT
+        token_id,
+        contract_address,
+        account_address,
+        balance,
+        ROW_NUMBER() OVER (PARTITION BY token_id, contract_address ORDER BY balance DESC) as rn
+      FROM token_balances
+      WHERE contract_address = '${CONTRACT_ADDRESS}'
+        AND balance > '${ZERO_BALANCE}'
+    )
     SELECT
       t.id,
       t.metadata,
       b.account_address,
       ${POWER_SELECT_FRAGMENT}
     FROM tokens t
-    JOIN token_balances b
+    JOIN current_owners b
       ON t.id = b.token_id
-     AND t.contract_address = b.contract_address
+      AND t.contract_address = b.contract_address
+      AND b.rn = 1
     WHERE t.contract_address = '${CONTRACT_ADDRESS}'
-      AND b.balance > '${ZERO_BALANCE}'
-       AND json_valid(t.metadata) = 1
+      AND json_valid(t.metadata) = 1
       AND (${filter})
     LIMIT 1;
   `;

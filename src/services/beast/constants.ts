@@ -3,7 +3,11 @@ export const CONTRACT_ADDRESS =
 
 export const TORII_SQL_ENDPOINT = import.meta.env.DEV
   ? "/torii/sql"
-  : "https://api.cartridge.gg/x/pg-mainnet-6/torii/sql";
+  : "https://api.cartridge.gg/x/pg-mainnet-5/torii/sql";
+
+export const TORII_GRAPHQL_ENDPOINT = import.meta.env.DEV
+  ? "/torii/graphql"
+  : "https://api.cartridge.gg/x/pg-mainnet-5/torii/graphql";
 
 export const TOTAL_BEAST_SUPPLY = 93225;
 

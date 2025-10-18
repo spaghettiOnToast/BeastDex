@@ -300,11 +300,35 @@ function AccountPage() {
 
     try {
       // Load ALL beasts for accurate stats calculation (like ProfilePage and CollectionPage)
-      const { beasts: allUserBeasts, total: totalCount } = await fetchBeasts({
-        limit: 1000, // High limit to get all beasts
-        ownerAddresses: [resolvedAddress],
-        sort: "default",
-      });
+      // Use batched loading to handle large collections (11,000+ beasts)
+      const batchSize = 200;
+      let allUserBeasts: Beast[] = [];
+      let currentPage = 1;
+      let hasMoreData = true;
+      let totalCount = 0;
+
+      while (hasMoreData && allUserBeasts.length < 15000) {
+        const { beasts: batch, total } = await fetchBeasts({
+          limit: batchSize,
+          page: currentPage,
+          ownerAddresses: [resolvedAddress],
+          sort: "default",
+        });
+
+        if (summaryRequestRef.current !== requestId) {
+          return;
+        }
+
+        allUserBeasts = [...allUserBeasts, ...batch];
+        totalCount = total;
+
+        hasMoreData = batch.length === batchSize && allUserBeasts.length < total;
+        currentPage++;
+
+        if (allUserBeasts.length >= total || batch.length < batchSize) {
+          hasMoreData = false;
+        }
+      }
 
       if (summaryRequestRef.current !== requestId) {
         return;

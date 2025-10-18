@@ -162,7 +162,10 @@ function buildCategoryMaps(beasts: Beast[]): CategoryMaps {
   return maps;
 }
 
-function checkHasAllVariants(beastTypeKey: string, categoryMaps: CategoryMaps): boolean {
+function checkHasAllVariants(
+  beastTypeKey: string,
+  categoryMaps: CategoryMaps
+): boolean {
   return (
     categoryMaps.standard.has(beastTypeKey) &&
     categoryMaps.shiny.has(beastTypeKey) &&
@@ -316,8 +319,8 @@ function CollectionPage() {
       let hasMoreData = true;
 
       // Load user's collection in batches
-      while (hasMoreData && allUserBeasts.length < 5000) {
-        // Safety limit
+      while (hasMoreData && allUserBeasts.length < 15000) {
+        // Safety limit (supports large collections)
         const { beasts: batch, total } = await fetchBeasts({
           limit,
           page: currentPage,
@@ -883,10 +886,12 @@ function CollectionPage() {
 
       // For specific tabs, filter by the category
       const beastShiny = beast.attributes.some(
-        (attr) => attr.trait_type?.toLowerCase() === "shiny" && attr.value === "1"
+        (attr) =>
+          attr.trait_type?.toLowerCase() === "shiny" && attr.value === "1"
       );
       const beastAnimated = beast.attributes.some(
-        (attr) => attr.trait_type?.toLowerCase() === "animated" && attr.value === "1"
+        (attr) =>
+          attr.trait_type?.toLowerCase() === "animated" && attr.value === "1"
       );
 
       // Match the current tab's category
@@ -906,20 +911,27 @@ function CollectionPage() {
   }, [selectedBeast, ownedBeasts, activeTab]);
 
   // Update the selected beast when navigating through duplicates
-  const currentDisplayedBeast = selectedBeastDuplicates.length > 0
-    ? selectedBeastDuplicates[currentDuplicateIndex] || selectedBeast
-    : selectedBeast;
+  const currentDisplayedBeast =
+    selectedBeastDuplicates.length > 0
+      ? selectedBeastDuplicates[currentDuplicateIndex] || selectedBeast
+      : selectedBeast;
 
   // Navigation functions
   const navigateToNextDuplicate = () => {
     if (selectedBeastDuplicates.length > 1) {
-      setCurrentDuplicateIndex((prev) => (prev + 1) % selectedBeastDuplicates.length);
+      setCurrentDuplicateIndex(
+        (prev) => (prev + 1) % selectedBeastDuplicates.length
+      );
     }
   };
 
   const navigateToPreviousDuplicate = () => {
     if (selectedBeastDuplicates.length > 1) {
-      setCurrentDuplicateIndex((prev) => (prev - 1 + selectedBeastDuplicates.length) % selectedBeastDuplicates.length);
+      setCurrentDuplicateIndex(
+        (prev) =>
+          (prev - 1 + selectedBeastDuplicates.length) %
+          selectedBeastDuplicates.length
+      );
     }
   };
 
@@ -1114,6 +1126,14 @@ function CollectionPage() {
           <p className="text-xs text-red-400">❌ {filtersError}</p>
         ) : null}
 
+        <div className="flex items-center justify-center gap-2 py-2 px-4 bg-blue-900/20 border border-blue-400/30 rounded-md">
+          <span className="text-blue-300 text-xs">ℹ️</span>
+          <p className="text-xs text-blue-200">
+            Traded a beast? It may take 1-2 minutes to appear. Click{" "}
+            <strong>Refresh</strong> to check for updates.
+          </p>
+        </div>
+
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 my-6">
           <div className="flex flex-wrap items-center gap-2">
             {TABS.map((tab) => {
@@ -1156,10 +1176,12 @@ function CollectionPage() {
               onClick={() => {
                 // Clear the beast query cache to force fresh data
                 apiCache.clearEndpoint("beast-query");
+                apiCache.clearEndpoint("beast-by-id");
                 void loadSummary();
               }}
               disabled={anyLoading || !resolvedAddress}
               className="inline-flex items-center gap-2 rounded-md border border-lsGold px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-lsGold hover:bg-gray-900 disabled:opacity-50"
+              title="Force refresh collection data. Note: New purchases may take 1-2 minutes to sync from the blockchain."
             >
               {anyLoading ? (
                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-lsGold border-t-transparent" />

@@ -200,12 +200,33 @@ function ProfilePage() {
     let mounted = true;
     async function loadAllBeasts() {
       try {
-        const { beasts: allUserBeasts } = await fetchBeasts({
-          limit: 1000, // High limit to get all beasts
-          ownerAddresses: [ownerAddress],
-          attributeFilters,
-          sort: "default",
-        });
+        // Use batched loading to handle large collections (11,000+ beasts)
+        const batchSize = 200;
+        let allUserBeasts: Beast[] = [];
+        let currentPage = 1;
+        let hasMoreData = true;
+
+        while (hasMoreData && allUserBeasts.length < 15000) {
+          const { beasts: batch, total } = await fetchBeasts({
+            limit: batchSize,
+            page: currentPage,
+            ownerAddresses: [ownerAddress],
+            attributeFilters,
+            sort: "default",
+          });
+
+          if (!mounted) return;
+
+          allUserBeasts = [...allUserBeasts, ...batch];
+
+          hasMoreData = batch.length === batchSize && allUserBeasts.length < total;
+          currentPage++;
+
+          if (allUserBeasts.length >= total || batch.length < batchSize) {
+            hasMoreData = false;
+          }
+        }
+
         if (mounted) {
           setAllBeasts(allUserBeasts);
         }

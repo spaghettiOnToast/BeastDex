@@ -14,11 +14,12 @@ class ApiCache {
 
   constructor() {
     // Set default cache configurations for different API endpoints
-    this.cacheConfigs.set("beast-filters", { ttl: 10 * 60 * 1000 }); // 10 minutes
-    this.cacheConfigs.set("beast-by-id", { ttl: 5 * 60 * 1000 }); // 5 minutes
-    this.cacheConfigs.set("beast-query", { ttl: 2 * 60 * 1000 }); // 2 minutes
-    this.cacheConfigs.set("adventurer-deaths", { ttl: 5 * 60 * 1000 }); // 5 minutes
-    this.cacheConfigs.set("beast-power-rank", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    // Note: Shorter TTLs to account for SQL endpoint sync delays
+    this.cacheConfigs.set("beast-filters", { ttl: 10 * 60 * 1000 }); // 10 minutes (static data)
+    this.cacheConfigs.set("beast-by-id", { ttl: 30 * 1000 }); // 30 seconds (can change frequently)
+    this.cacheConfigs.set("beast-query", { ttl: 15 * 1000 }); // 15 seconds (ownership changes)
+    this.cacheConfigs.set("adventurer-deaths", { ttl: 1 * 60 * 1000 }); // 1 minute
+    this.cacheConfigs.set("beast-power-rank", { ttl: 1 * 60 * 1000 }); // 1 minute
   }
 
   private getCacheKey(endpoint: string, params: any): string {
