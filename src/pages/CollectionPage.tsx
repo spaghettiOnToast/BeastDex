@@ -310,8 +310,6 @@ function CollectionPage() {
     setSummaryError(null);
 
     try {
-      console.log("Loading user collection for address:", resolvedAddress);
-
       // Load ALL user's beasts efficiently (we only need their collection, not random samples)
       const limit = 150; // Larger batch since we're only getting user's beasts
       let allUserBeasts: Beast[] = [];
@@ -342,14 +340,6 @@ function CollectionPage() {
         hasMoreData = batch.length === limit && allUserBeasts.length < total;
         currentPage++;
 
-        console.log(
-          `Loaded page ${currentPage - 1}: ${
-            batch.length
-          } beasts from API, total accumulated: ${
-            allUserBeasts.length
-          }/${total}`
-        );
-
         // Early break if we have all the data
         if (allUserBeasts.length >= total || batch.length < limit) {
           hasMoreData = false;
@@ -360,10 +350,6 @@ function CollectionPage() {
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
       }
-
-      console.log(
-        `Collection loading complete: ${allUserBeasts.length} beasts loaded`
-      );
     } catch (err: unknown) {
       if (summaryRequestRef.current !== requestId) {
         return;
@@ -411,8 +397,6 @@ function CollectionPage() {
     Map<string, Beast>
   > => {
     try {
-      console.log("Loading all Genesis beasts with single SQL query...");
-
       // Generate all Genesis beast IDs (1-75) as u256 format
       const genesisIds = Array.from({ length: 75 }, (_, i) =>
         formatBeastId(i + 1)
@@ -426,8 +410,6 @@ function CollectionPage() {
       const rows = await runBeastSql(query, "loadAllGenesisBeasts");
       const beasts = (rows as any[]).map(mapBeastRow);
 
-      console.log(`Fetched ${beasts.length} Genesis beasts with single query`);
-
       const genesisMap = new Map<string, Beast>();
 
       beasts.forEach((beast: any) => {
@@ -435,16 +417,10 @@ function CollectionPage() {
           const typeKey = getGenesisBeastTypeKey(beast);
           if (typeKey && !genesisMap.has(typeKey)) {
             genesisMap.set(typeKey, beast);
-            console.log(
-              `Found Genesis ${beast.name} (ID: ${beast.id}) for type: ${typeKey}`
-            );
           }
         }
       });
 
-      console.log(
-        `Loaded ${genesisMap.size} Genesis beasts with single SQL query`
-      );
       return genesisMap;
     } catch (error) {
       console.error("Failed to load Genesis beasts:", error);
@@ -486,10 +462,6 @@ function CollectionPage() {
         // Update both states at the same time
         setBeastTypes(uniqueEntries);
         setGenesisCache(genesisMap);
-
-        console.log(
-          `Loaded ${uniqueEntries.length} beast types and ${genesisMap.size} Genesis beasts together`
-        );
       } catch (err: unknown) {
         if (cancelled) return;
         setFiltersError(getErrorMessage(err, "Failed to load beast list"));
@@ -545,29 +517,6 @@ function CollectionPage() {
 
     setCatalog(templateCatalog);
     setCatalogLoading(false);
-
-    const genesisCount = Object.values(templateCatalog).filter((beast) =>
-      beast?.id?.startsWith("genesis-template-")
-    ).length;
-
-    console.log(
-      `Catalog ready with ${
-        beastTypes.length
-      } beast types (${genesisCount} from Genesis, ${
-        beastTypes.length - genesisCount
-      } from templates)`
-    );
-    console.log(
-      "Template catalog sample:",
-      Object.fromEntries(
-        Object.entries(templateCatalog)
-          .slice(0, 3)
-          .map(([k, v]) => [
-            k,
-            { name: v?.name, image: v?.image ? "YES" : "NO" },
-          ])
-      )
-    );
   }, [beastTypes, genesisCache]); // Build catalog when beast types or Genesis cache change
 
   const categoryMaps = useMemo(
@@ -818,8 +767,6 @@ function CollectionPage() {
     sortOption,
     showDuplicatesOnly,
   ]);
-
-  console.log(genesisCache);
 
   const anyLoading =
     summaryLoading || catalogLoading || resolvingIdentifier || genesisLoading;

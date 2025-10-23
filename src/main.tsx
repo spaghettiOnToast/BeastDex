@@ -10,7 +10,6 @@ if (import.meta.env.DEV) {
   (window as any).apiCache = apiCache;
   // Clear cache on app start to ensure fresh data after config changes
   apiCache.clearAll();
-  console.log("🧹 API cache cleared on dev mode startup");
 }
 
 createRoot(document.getElementById("root")!).render(

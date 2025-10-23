@@ -182,12 +182,6 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
     allPossibleBeasts[beastName] = { type, tier };
   });
 
-  console.log(
-    "Loaded beast catalog from static mapping:",
-    Object.keys(allPossibleBeasts).length,
-    "unique beasts"
-  );
-
   // Initialize allBeastInfo with all possible beasts from catalog
   const allBeastInfo: Record<
     string,
