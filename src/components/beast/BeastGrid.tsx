@@ -3,6 +3,7 @@ import type { Beast } from "../../services/beast";
 import BeastCard from "../BeastCard";
 import BeastCardSkeleton from "../BeastCardSkeleton";
 import { Alert, AlertDescription } from "../ui/alert";
+import { normaliseStarknetAddress } from "../../utils/address";
 
 type BeastGridProps = {
   beasts: Beast[];
@@ -41,19 +42,22 @@ export const BeastGrid = memo(function BeastGrid({
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-5 gap-6 animate-in fade-in duration-500">
-      {beasts.map((beast) => (
-        <BeastCard
-          key={beast.id}
-          beast={beast}
-          owned={!!beast.owner}
-          ownerUsername={
-            beast.owner
-              ? ownerUsernames[beast.owner.toLowerCase()] ?? null
-              : null
-          }
-          onSelect={onSelect}
-        />
-      ))}
+      {beasts.map((beast) => {
+        const normalizedOwner = beast.owner ? normaliseStarknetAddress(beast.owner) : null;
+        return (
+          <BeastCard
+            key={beast.id}
+            beast={beast}
+            owned={!!beast.owner}
+            ownerUsername={
+              normalizedOwner
+                ? ownerUsernames[normalizedOwner] ?? null
+                : null
+            }
+            onSelect={onSelect}
+          />
+        );
+      })}
     </div>
   );
 });

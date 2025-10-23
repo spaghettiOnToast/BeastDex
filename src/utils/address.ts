@@ -33,3 +33,39 @@ export function normaliseStarknetAddresses(values: Array<string | null | undefin
     ),
   );
 }
+
+export function padStarknetAddress(value: string | null | undefined): string | null {
+  if (!value || typeof value !== "string") {
+    return null;
+  }
+
+  const address = value.trim().toLowerCase();
+  if (address.length === 0) {
+    return null;
+  }
+
+  // Only accept valid hex addresses starting with 0x
+  if (!address.startsWith("0x")) {
+    return null;
+  }
+
+  // Validate that everything after 0x is valid hex
+  const hexPart = address.slice(2);
+  if (!/^[0-9a-f]*$/.test(hexPart)) {
+    return null;
+  }
+
+  // Pad to 64 characters (0x + 64 hex digits = 66 total)
+  const paddedHex = hexPart.padStart(64, "0");
+  return `0x${paddedHex}`;
+}
+
+export function padStarknetAddresses(values: Array<string | null | undefined>): string[] {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => padStarknetAddress(value))
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+}

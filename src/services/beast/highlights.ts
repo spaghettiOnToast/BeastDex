@@ -6,10 +6,11 @@ import {
   ZERO_BALANCE,
 } from "./constants";
 import type { BeastHighlights } from "./types";
+import { normaliseStarknetAddress } from "../../utils/address";
 
 const BOOLEAN_TRUE_VALUES = ["1", "true", "True", "TRUE"]; // coarse normalization
 
-const EXCLUDED_ADDRESS = "0x7bdeac5b256fa53c11b0bc0368af72916203987429032f37254465ee4ec078b";
+const EXCLUDED_ADDRESS = "0x07bdeac5b256fa53c11b0bc0368af72916203987429032f37254465ee4ec078b";
 
 function buildBaseCte() {
   return `
@@ -151,9 +152,12 @@ export async function fetchBeastHighlights(forceRefresh = false): Promise<BeastH
       return { owner: null, username: null, value: 0 };
     }
     const address = entry.owner.toLowerCase();
+    const normalizedAddress = normaliseStarknetAddress(address);
+    const username = normalizedAddress ? usernamesLookup[normalizedAddress] ?? null : null;
+
     return {
       owner: address,
-      username: usernamesLookup[address] ?? null,
+      username,
       value: entry.value ?? 0,
     };
   }

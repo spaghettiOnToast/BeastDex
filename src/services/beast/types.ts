@@ -65,6 +65,12 @@ export type BeastPowerRank = {
   totalOwners: number;
 };
 
+export type BeastHealthRank = {
+  rank: number | null;
+  totalHealth: number;
+  totalOwners: number;
+};
+
 export type LeaderboardEntry = {
   rank: number;
   owner: string;

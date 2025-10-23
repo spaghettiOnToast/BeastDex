@@ -1,13 +1,13 @@
 export const CONTRACT_ADDRESS =
-  "0x46da8955829adf2bda310099a0063451923f02e648cf25a1203aac6335cf0e4";
+  "0x046da8955829adf2bda310099a0063451923f02e648cf25a1203aac6335cf0e4";
 
 export const TORII_SQL_ENDPOINT = import.meta.env.DEV
   ? "/torii/sql"
-  : "https://api.cartridge.gg/x/pg-mainnet-5/torii/sql";
+  : "https://api.cartridge.gg/x/pg-beasts/torii/sql";
 
 export const TORII_GRAPHQL_ENDPOINT = import.meta.env.DEV
   ? "/torii/graphql"
-  : "https://api.cartridge.gg/x/pg-mainnet-5/torii/graphql";
+  : "https://api.cartridge.gg/x/pg-beasts/torii/graphql";
 
 export const TOTAL_BEAST_SUPPLY = 93225;
 
