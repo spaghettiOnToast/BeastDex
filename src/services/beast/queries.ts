@@ -1,4 +1,4 @@
-import { normaliseStarknetAddresses } from "../../utils/address";
+import { padStarknetAddresses } from "../../utils/address";
 import { CONTRACT_ADDRESS, ZERO_BALANCE } from "./constants";
 import type { AttributeFilterInput } from "./types";
 
@@ -105,20 +105,21 @@ function buildSearchClause(search?: string) {
   )}\n        )`;
 }
 
-function buildOwnerClause(addresses?: string[]) {
+function buildOwnerClause(addresses?: string[], tableAlias: string = "b") {
   if (!Array.isArray(addresses) || addresses.length === 0) {
     return "";
   }
 
-  const canonical = normaliseStarknetAddresses(addresses).map(
+  // Use padded addresses to match pg-beasts storage format (66 characters: 0x + 64 hex)
+  const paddedAddresses = padStarknetAddresses(addresses).map(
     (address) => `'${escapeSqlLiteral(address)}'`
   );
 
-  if (canonical.length === 0) {
+  if (paddedAddresses.length === 0) {
     return "";
   }
 
-  return `\n        AND LOWER(b.account_address) IN (${canonical.join(", ")})`;
+  return `\n        AND LOWER(${tableAlias}.account_address) IN (${paddedAddresses.join(", ")})`;
 }
 
 export function buildBeastsQuery({
@@ -134,7 +135,12 @@ export function buildBeastsQuery({
   const offset = (safePage - 1) * limitClause;
   const attributeClauses = buildAttributeFiltersClause(attributeFilters);
   const searchClause = buildSearchClause(search);
-  const ownerClause = buildOwnerClause(ownerAddresses);
+
+  // Optimize owner filtering by applying it early in the CTE
+  // In current_owners CTE, use token_balances directly (no alias)
+  const ownerFilterInCTE = ownerAddresses && ownerAddresses.length > 0
+    ? buildOwnerClause(ownerAddresses, "token_balances")
+    : "";
   const beastJoin =
     sort === "beast"
       ? `LEFT JOIN json_each(
@@ -255,6 +261,7 @@ export function buildBeastsQuery({
   return `
     WITH current_owners AS (
       -- Get only the current owner for each token (the one with non-zero balance)
+      -- Apply owner filter here to reduce dataset size early
       SELECT
         token_id,
         contract_address,
@@ -264,6 +271,7 @@ export function buildBeastsQuery({
       FROM token_balances
       WHERE contract_address = '${CONTRACT_ADDRESS}'
         AND balance > '${ZERO_BALANCE}'
+        ${ownerFilterInCTE}
     ),
     filtered_tokens AS (
       SELECT
@@ -287,10 +295,8 @@ export function buildBeastsQuery({
       ${rankJoin}
       ${lastDeathJoin}
           WHERE t.contract_address = '${CONTRACT_ADDRESS}'
-            AND json_valid(t.metadata) = 1
             ${searchClause}
             ${attributeClauses}
-            ${ownerClause}
     )
     , total AS (
       SELECT COUNT(*) AS total_count FROM filtered_tokens
@@ -403,5 +409,66 @@ export function buildBeastStatsQuery() {
      AND t.contract_address = b.contract_address
     WHERE t.contract_address = '${CONTRACT_ADDRESS}'
       AND b.balance > '${ZERO_BALANCE}';
+  `;
+}
+
+export function buildOwnerBeastStatsQuery(ownerAddress: string) {
+  const paddedAddresses = padStarknetAddresses([ownerAddress]);
+  if (paddedAddresses.length === 0) {
+    throw new Error("Invalid owner address");
+  }
+  const paddedOwner = paddedAddresses[0];
+
+  return `
+    WITH owner_beasts AS (
+      SELECT
+        t.id,
+        t.metadata
+      FROM tokens t
+      JOIN token_balances b
+        ON t.id = b.token_id
+        AND t.contract_address = b.contract_address
+      WHERE t.contract_address = '${CONTRACT_ADDRESS}'
+        AND b.balance > '${ZERO_BALANCE}'
+        AND LOWER(b.account_address) = LOWER('${escapeSqlLiteral(paddedOwner)}')
+    ),
+    beast_attributes AS (
+      SELECT
+        ob.id,
+        json_extract(attr.value, '$.trait_type') AS trait_type,
+        json_extract(attr.value, '$.value') AS trait_value
+      FROM owner_beasts ob
+      CROSS JOIN json_each(ob.metadata, '$.attributes') attr
+      WHERE json_extract(attr.value, '$.trait_type') IS NOT NULL
+        AND json_extract(attr.value, '$.value') IS NOT NULL
+    )
+    SELECT
+      COUNT(DISTINCT ob.id) AS total_beasts,
+      COALESCE(SUM(
+        CASE
+          WHEN LOWER(ba.trait_type) LIKE '%power%'
+            AND json_type(ba.trait_value) IN ('integer', 'real')
+          THEN CAST(ba.trait_value AS REAL)
+          ELSE 0
+        END
+      ), 0) AS total_power,
+      COUNT(DISTINCT CASE
+        WHEN LOWER(ba.trait_type) = 'beast'
+        THEN ba.trait_value
+        ELSE NULL
+      END) AS unique_beast_types,
+      COUNT(DISTINCT CASE
+        WHEN LOWER(ba.trait_type) = 'tier'
+        THEN ba.trait_value
+        ELSE NULL
+      END) AS unique_tiers,
+      MAX(CASE
+        WHEN LOWER(ba.trait_type) LIKE '%power%'
+          AND json_type(ba.trait_value) IN ('integer', 'real')
+        THEN CAST(ba.trait_value AS REAL)
+        ELSE 0
+      END) AS max_power
+    FROM owner_beasts ob
+    LEFT JOIN beast_attributes ba ON ob.id = ba.id;
   `;
 }

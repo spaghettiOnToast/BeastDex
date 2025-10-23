@@ -2,6 +2,7 @@ import { memo, useMemo } from "react";
 import { Grid } from "react-window";
 import type { Beast } from "../../services/beast";
 import BeastCard from "../BeastCard";
+import { normaliseStarknetAddress } from "../../utils/address";
 
 type VirtualizedBeastGridProps = {
   beasts: Beast[];
@@ -39,6 +40,8 @@ const Cell = memo(function Cell({ columnIndex, rowIndex, style, data }: GridCell
     return <div style={style} />;
   }
 
+  const normalizedOwner = beast.owner ? normaliseStarknetAddress(beast.owner) : null;
+
   return (
     <div
       style={{
@@ -53,7 +56,7 @@ const Cell = memo(function Cell({ columnIndex, rowIndex, style, data }: GridCell
         beast={beast}
         owned={!!beast.owner}
         ownerUsername={
-          beast.owner ? ownerUsernames[beast.owner.toLowerCase()] ?? null : null
+          normalizedOwner ? ownerUsernames[normalizedOwner] ?? null : null
         }
         onSelect={onSelect}
       />
@@ -105,19 +108,22 @@ export const VirtualizedBeastGrid = memo(function VirtualizedBeastGrid({
   if (beasts.length <= 50) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-8 justify-items-center">
-        {beasts.map((beast) => (
-          <BeastCard
-            key={beast.id}
-            beast={beast}
-            owned={!!beast.owner}
-            ownerUsername={
-              beast.owner
-                ? ownerUsernames[beast.owner.toLowerCase()] ?? null
-                : null
-            }
-            onSelect={onSelect}
-          />
-        ))}
+        {beasts.map((beast) => {
+          const normalizedOwner = beast.owner ? normaliseStarknetAddress(beast.owner) : null;
+          return (
+            <BeastCard
+              key={beast.id}
+              beast={beast}
+              owned={!!beast.owner}
+              ownerUsername={
+                normalizedOwner
+                  ? ownerUsernames[normalizedOwner] ?? null
+                  : null
+              }
+              onSelect={onSelect}
+            />
+          );
+        })}
       </div>
     );
   }

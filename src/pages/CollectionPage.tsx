@@ -421,7 +421,7 @@ function CollectionPage() {
       // Build a simple SQL query to fetch all Genesis beasts at once
       const escapedIds = genesisIds.map((id) => `"${id}"`).join(", ");
 
-      const query = `SELECT * FROM tokens WHERE contract_address = "0x46da8955829adf2bda310099a0063451923f02e648cf25a1203aac6335cf0e4" AND token_id IN (${escapedIds}) LIMIT 1000;`;
+      const query = `SELECT * FROM tokens WHERE contract_address = "0x046da8955829adf2bda310099a0063451923f02e648cf25a1203aac6335cf0e4" AND token_id IN (${escapedIds}) LIMIT 1000;`;
 
       const rows = await runBeastSql(query, "loadAllGenesisBeasts");
       const beasts = (rows as any[]).map(mapBeastRow);
@@ -609,8 +609,8 @@ function CollectionPage() {
   const resolveOwnerUsername = useCallback(
     (beast: Beast | null): string | null => {
       if (!beast?.owner) return null;
-      const ownerKey = beast.owner.toLowerCase();
-      return ownerUsernames[ownerKey] ?? null;
+      const normalizedOwner = normaliseStarknetAddress(beast.owner);
+      return normalizedOwner ? ownerUsernames[normalizedOwner] ?? null : null;
     },
     [ownerUsernames]
   );
