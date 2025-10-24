@@ -43,11 +43,6 @@ export function useBeasts({
       try {
         setLoading(true);
         setError(null);
-        console.log(
-          `🔎 Fetching beasts from ${
-            import.meta.env.DEV ? "proxy (/torii → Cartridge)" : "Cartridge API"
-          }`
-        );
 
         const { beasts: result, total: totalCount } = await fetchBeasts({
           limit,
@@ -61,10 +56,9 @@ export function useBeasts({
 
         setBeasts(result);
         setTotal(totalCount);
-        console.log(`✅ Finished loading beasts (page ${page}: ${result.length} beasts, total: ${totalCount})`);
       } catch (error: unknown) {
         if (signal?.aborted) return;
-        console.error("❌ Failed to fetch beasts:", error);
+        console.error("Failed to fetch beasts:", error);
         setError(getErrorMessage(error, "Failed to fetch beasts"));
       } finally {
         if (!signal?.aborted) {

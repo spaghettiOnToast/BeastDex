@@ -14,17 +14,16 @@ import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { useBeasts } from "../hooks/useBeasts";
 import {
   fetchBeastAttributeFilters,
-  fetchAdventurerDeaths,
-  fetchBeastPowerRank,
+  fetchBeastCombinedRanks,
   fetchBeasts,
+  fetchOwnerBeastStats,
   type Beast,
   type BeastPowerRank,
+  type BeastHealthRank,
   type BeastAttributeFilters,
+  type OwnerBeastStats,
 } from "../services/beast";
 import {
-  calculateKdRatio,
-  calculateTotalPower,
-  computeBeastCollectionStats,
   TOTAL_BEAST_VARIETIES,
 } from "../utils/beastCollection";
 import { normaliseStarknetAddress } from "../utils/address";
@@ -34,6 +33,7 @@ import { Button } from "../components/ui/button";
 
 import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
 import type { OverviewCard } from "@/components/account/OverviewCards";
+import { computeBeastCollectionStats } from "../utils/beastCollection";
 
 const PAGE_SIZE = 50;
 
@@ -51,9 +51,12 @@ function ProfilePage() {
   const [page, setPage] = useState(1);
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [deaths, setDeaths] = useState(0);
   const [powerRanking, setPowerRanking] = useState<BeastPowerRank | null>(null);
+  const [healthRanking, setHealthRanking] = useState<BeastHealthRank | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+  const [ownerStats, setOwnerStats] = useState<OwnerBeastStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [mostPowerfulBeast, setMostPowerfulBeast] = useState<Beast | null>(null);
 
   const ownerAddress = useMemo(() => address ?? "", [address]);
 
@@ -72,24 +75,46 @@ function ProfilePage() {
 
   const loadAdditionalData = useCallback(async () => {
     if (!ownerAddress) {
-      setDeaths(0);
       setPowerRanking(null);
+      setHealthRanking(null);
+      setOwnerStats(null);
+      setMostPowerfulBeast(null);
       return;
     }
 
     try {
-      const [deathCount, ranking] = await Promise.all([
-        fetchAdventurerDeaths(ownerAddress),
-        fetchBeastPowerRank(ownerAddress).catch((rankError) => {
-          console.error("Failed to fetch beast power rank", rankError);
+      setStatsLoading(true);
+
+      // Use combined ranks query for better performance (single query instead of two)
+      const [combinedRanks, stats, powerfulBeast] = await Promise.all([
+        fetchBeastCombinedRanks(ownerAddress).catch((rankError) => {
+          console.error("Failed to fetch beast combined ranks", rankError);
+          return { powerRank: null, healthRank: null };
+        }),
+        fetchOwnerBeastStats(ownerAddress).catch((statsError) => {
+          console.error("Failed to fetch owner beast stats", statsError);
+          return null;
+        }),
+        // Fetch the most powerful beast (limit 1, sorted by power DESC)
+        fetchBeasts({
+          limit: 1,
+          page: 1,
+          ownerAddresses: [ownerAddress],
+          sort: "default", // default sort is by power DESC
+        }).then(res => res.beasts[0] || null).catch((beastError) => {
+          console.error("Failed to fetch most powerful beast", beastError);
           return null;
         }),
       ]);
 
-      setDeaths(deathCount);
-      setPowerRanking(ranking);
+      setPowerRanking(combinedRanks.powerRank);
+      setHealthRanking(combinedRanks.healthRank);
+      setOwnerStats(stats);
+      setMostPowerfulBeast(powerfulBeast);
     } catch (err: unknown) {
       console.error("Failed to load additional profile data", err);
+    } finally {
+      setStatsLoading(false);
     }
   }, [ownerAddress]);
 
@@ -187,11 +212,11 @@ function ProfilePage() {
     navigate("/");
   }, [navigate]);
 
-  // For collection stats, we need all beasts, not just the paginated ones
+  // Load all beasts for accurate collection stats (rarity counts, etc.)
   const [allBeasts, setAllBeasts] = useState<Beast[]>([]);
 
   useEffect(() => {
-    // Load all beasts for collection stats when filters change or on initial load
+    // Load all beasts for collection stats
     if (!ownerAddress) {
       setAllBeasts([]);
       return;
@@ -200,17 +225,36 @@ function ProfilePage() {
     let mounted = true;
     async function loadAllBeasts() {
       try {
-        const { beasts: allUserBeasts } = await fetchBeasts({
-          limit: 1000, // High limit to get all beasts
-          ownerAddresses: [ownerAddress],
-          attributeFilters,
-          sort: "default",
-        });
+        const batchSize = 200;
+        let allUserBeasts: Beast[] = [];
+        let currentPage = 1;
+        let hasMoreData = true;
+
+        while (hasMoreData && allUserBeasts.length < 15000) {
+          const { beasts: batch, total } = await fetchBeasts({
+            limit: batchSize,
+            page: currentPage,
+            ownerAddresses: [ownerAddress],
+            sort: "default",
+          });
+
+          if (!mounted) return;
+
+          allUserBeasts = [...allUserBeasts, ...batch];
+
+          hasMoreData = batch.length === batchSize && allUserBeasts.length < total;
+          currentPage++;
+
+          if (allUserBeasts.length >= total || batch.length < batchSize) {
+            hasMoreData = false;
+          }
+        }
+
         if (mounted) {
           setAllBeasts(allUserBeasts);
         }
       } catch (error) {
-        console.error("Failed to load all beasts for stats:", error);
+        console.error("Failed to load all beasts for collection stats:", error);
       }
     }
 
@@ -218,18 +262,7 @@ function ProfilePage() {
     return () => {
       mounted = false;
     };
-  }, [ownerAddress, attributeFilters]);
-
-  const stats = useMemo(
-    () => computeBeastCollectionStats(allBeasts),
-    [allBeasts]
-  );
-  const totalPower = useMemo(() => calculateTotalPower(allBeasts), [allBeasts]);
-
-  const kdRatio = useMemo(
-    () => calculateKdRatio(allBeasts.length, deaths),
-    [deaths, allBeasts.length]
-  );
+  }, [ownerAddress]);
 
   const topBar = <TopBar />;
 
@@ -239,26 +272,20 @@ function ProfilePage() {
     ? `of ${powerRanking.totalOwners.toLocaleString()}`
     : "";
 
+  // Use SQL stats for overview cards (much faster than loading all beasts)
   const overviewCards: OverviewCard[] = useMemo(
     () => [
-      {
-        key: "kd",
-        icon: "⚔️",
-        label: "K:D Ratio",
-        value: kdRatio,
-        sub: `${allBeasts.length.toLocaleString()} K / ${deaths.toLocaleString()} D`,
-      },
       {
         key: "beasts",
         icon: "🐾",
         label: "Beasts Collected",
-        value: allBeasts.length.toLocaleString(),
+        value: statsLoading ? "—" : (ownerStats?.totalBeasts ?? 0).toLocaleString(),
       },
       {
         key: "power",
         icon: "🔮",
         label: "Combined Power",
-        value: totalPower.toLocaleString(),
+        value: statsLoading ? "—" : (ownerStats?.totalPower ?? 0).toLocaleString(),
       },
       {
         key: "rank",
@@ -267,21 +294,15 @@ function ProfilePage() {
         value: rankDisplay,
         sub: rankSubheading || "Global leaderboard",
       },
+      {
+        key: "health",
+        icon: "❤️",
+        label: "Combined Health",
+        value: statsLoading ? "—" : (healthRanking?.totalHealth ?? 0).toLocaleString(),
+      },
     ],
-    [deaths, kdRatio, rankDisplay, rankSubheading, allBeasts.length, totalPower]
+    [rankDisplay, rankSubheading, healthRanking, ownerStats, statsLoading]
   );
-
-  const displayTitle = useMemo(() => {
-    if (stats.mostPowerfulTitle) return stats.mostPowerfulTitle;
-    const name = stats.mostPowerful?.name?.trim();
-    if (!name) return null;
-    const quotedMatch = name.match(/"([^"]+)"/);
-    if (quotedMatch?.[1]) return quotedMatch[1];
-    const parts = name.split(/\s+/).filter(Boolean);
-    if (parts.length >= 2) return `${parts[0]} ${parts[1]}`;
-    if (parts.length === 1) return parts[0];
-    return null;
-  }, [stats.mostPowerful, stats.mostPowerfulTitle]);
 
   const normalisedAccountAddress = useMemo(
     () => (address ? normaliseStarknetAddress(address) ?? address : ""),
@@ -312,6 +333,30 @@ function ProfilePage() {
     }
     return normalisedAccountAddress;
   }, [normalisedAccountAddress, profileUsername]);
+
+  // Extract display title from the most powerful beast's name
+  const displayTitle = useMemo(() => {
+    if (!mostPowerfulBeast?.name) return null;
+    const name = mostPowerfulBeast.name.trim();
+    if (!name) return null;
+
+    // Try to extract text within quotes
+    const quotedMatch = name.match(/"([^"]+)"/);
+    if (quotedMatch?.[1]) return quotedMatch[1];
+
+    // Otherwise take first two words
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return `${parts[0]} ${parts[1]}`;
+    if (parts.length === 1) return parts[0];
+
+    return null;
+  }, [mostPowerfulBeast]);
+
+  // Compute collection stats from all beasts for accurate rarity counts
+  const stats = useMemo(
+    () => computeBeastCollectionStats(allBeasts),
+    [allBeasts]
+  );
 
   if (!address) {
     return (
@@ -395,12 +440,12 @@ function ProfilePage() {
           <div className="flex items-center gap-2 bg-card/20 backdrop-blur-sm rounded-lg border border-muted/40 px-3 py-2">
             <span
               className={`text-sm transition-all duration-300 ${
-                stats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                (ownerStats?.uniqueBeastTypes ?? 0) === TOTAL_BEAST_VARIETIES
                   ? "animate-bounce text-base"
                   : ""
               }`}
             >
-              {stats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+              {(ownerStats?.uniqueBeastTypes ?? 0) === TOTAL_BEAST_VARIETIES
                 ? "🎉"
                 : "🏆"}
             </span>
@@ -409,23 +454,23 @@ function ProfilePage() {
             </span>
             <span
               className={`font-bold transition-all duration-300 ${
-                stats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                (ownerStats?.uniqueBeastTypes ?? 0) === TOTAL_BEAST_VARIETIES
                   ? "text-[#39ff14] text-lg drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] animate-pulse"
                   : "text-primary"
               }`}
             >
-              {stats.uniqueBeastTypes}
+              {statsLoading ? "—" : (ownerStats?.uniqueBeastTypes ?? 0)}
             </span>
             <span
               className={`transition-all duration-300 ${
-                stats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                (ownerStats?.uniqueBeastTypes ?? 0) === TOTAL_BEAST_VARIETIES
                   ? "text-[#39ff14] font-bold drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] animate-pulse"
                   : "text-muted-foreground"
               }`}
             >
               / {TOTAL_BEAST_VARIETIES}
             </span>
-            {stats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES && (
+            {(ownerStats?.uniqueBeastTypes ?? 0) === TOTAL_BEAST_VARIETIES && (
               <span className="text-[#39ff14] font-bold animate-pulse ml-1 text-xs">
                 COMPLETE! ✨
               </span>

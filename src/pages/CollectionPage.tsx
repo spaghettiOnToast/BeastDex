@@ -44,6 +44,7 @@ import { Button } from "../components/ui/button";
 import { getBeastTemplate } from "../data/beastTemplates";
 import { runBeastSql } from "../services/beast/sqlClient";
 import { mapBeastRow } from "../services/beast/helpers";
+import { apiCache } from "../services/apiCache";
 
 const TABS = [
   { key: "all", label: "All" },
@@ -161,7 +162,10 @@ function buildCategoryMaps(beasts: Beast[]): CategoryMaps {
   return maps;
 }
 
-function checkHasAllVariants(beastTypeKey: string, categoryMaps: CategoryMaps): boolean {
+function checkHasAllVariants(
+  beastTypeKey: string,
+  categoryMaps: CategoryMaps
+): boolean {
   return (
     categoryMaps.standard.has(beastTypeKey) &&
     categoryMaps.shiny.has(beastTypeKey) &&
@@ -306,8 +310,6 @@ function CollectionPage() {
     setSummaryError(null);
 
     try {
-      console.log("Loading user collection for address:", resolvedAddress);
-
       // Load ALL user's beasts efficiently (we only need their collection, not random samples)
       const limit = 150; // Larger batch since we're only getting user's beasts
       let allUserBeasts: Beast[] = [];
@@ -315,8 +317,8 @@ function CollectionPage() {
       let hasMoreData = true;
 
       // Load user's collection in batches
-      while (hasMoreData && allUserBeasts.length < 1000) {
-        // Safety limit
+      while (hasMoreData && allUserBeasts.length < 15000) {
+        // Safety limit (supports large collections)
         const { beasts: batch, total } = await fetchBeasts({
           limit,
           page: currentPage,
@@ -338,14 +340,6 @@ function CollectionPage() {
         hasMoreData = batch.length === limit && allUserBeasts.length < total;
         currentPage++;
 
-        console.log(
-          `Loaded page ${currentPage - 1}: ${
-            batch.length
-          } beasts from API, total accumulated: ${
-            allUserBeasts.length
-          }/${total}`
-        );
-
         // Early break if we have all the data
         if (allUserBeasts.length >= total || batch.length < limit) {
           hasMoreData = false;
@@ -356,10 +350,6 @@ function CollectionPage() {
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
       }
-
-      console.log(
-        `Collection loading complete: ${allUserBeasts.length} beasts loaded`
-      );
     } catch (err: unknown) {
       if (summaryRequestRef.current !== requestId) {
         return;
@@ -407,8 +397,6 @@ function CollectionPage() {
     Map<string, Beast>
   > => {
     try {
-      console.log("Loading all Genesis beasts with single SQL query...");
-
       // Generate all Genesis beast IDs (1-75) as u256 format
       const genesisIds = Array.from({ length: 75 }, (_, i) =>
         formatBeastId(i + 1)
@@ -417,12 +405,10 @@ function CollectionPage() {
       // Build a simple SQL query to fetch all Genesis beasts at once
       const escapedIds = genesisIds.map((id) => `"${id}"`).join(", ");
 
-      const query = `SELECT * FROM tokens WHERE contract_address = "0x46da8955829adf2bda310099a0063451923f02e648cf25a1203aac6335cf0e4" AND token_id IN (${escapedIds}) LIMIT 1000;`;
+      const query = `SELECT * FROM tokens WHERE contract_address = "0x046da8955829adf2bda310099a0063451923f02e648cf25a1203aac6335cf0e4" AND token_id IN (${escapedIds}) LIMIT 1000;`;
 
       const rows = await runBeastSql(query, "loadAllGenesisBeasts");
       const beasts = (rows as any[]).map(mapBeastRow);
-
-      console.log(`Fetched ${beasts.length} Genesis beasts with single query`);
 
       const genesisMap = new Map<string, Beast>();
 
@@ -431,16 +417,10 @@ function CollectionPage() {
           const typeKey = getGenesisBeastTypeKey(beast);
           if (typeKey && !genesisMap.has(typeKey)) {
             genesisMap.set(typeKey, beast);
-            console.log(
-              `Found Genesis ${beast.name} (ID: ${beast.id}) for type: ${typeKey}`
-            );
           }
         }
       });
 
-      console.log(
-        `Loaded ${genesisMap.size} Genesis beasts with single SQL query`
-      );
       return genesisMap;
     } catch (error) {
       console.error("Failed to load Genesis beasts:", error);
@@ -482,10 +462,6 @@ function CollectionPage() {
         // Update both states at the same time
         setBeastTypes(uniqueEntries);
         setGenesisCache(genesisMap);
-
-        console.log(
-          `Loaded ${uniqueEntries.length} beast types and ${genesisMap.size} Genesis beasts together`
-        );
       } catch (err: unknown) {
         if (cancelled) return;
         setFiltersError(getErrorMessage(err, "Failed to load beast list"));
@@ -541,29 +517,6 @@ function CollectionPage() {
 
     setCatalog(templateCatalog);
     setCatalogLoading(false);
-
-    const genesisCount = Object.values(templateCatalog).filter((beast) =>
-      beast?.id?.startsWith("genesis-template-")
-    ).length;
-
-    console.log(
-      `Catalog ready with ${
-        beastTypes.length
-      } beast types (${genesisCount} from Genesis, ${
-        beastTypes.length - genesisCount
-      } from templates)`
-    );
-    console.log(
-      "Template catalog sample:",
-      Object.fromEntries(
-        Object.entries(templateCatalog)
-          .slice(0, 3)
-          .map(([k, v]) => [
-            k,
-            { name: v?.name, image: v?.image ? "YES" : "NO" },
-          ])
-      )
-    );
   }, [beastTypes, genesisCache]); // Build catalog when beast types or Genesis cache change
 
   const categoryMaps = useMemo(
@@ -605,8 +558,8 @@ function CollectionPage() {
   const resolveOwnerUsername = useCallback(
     (beast: Beast | null): string | null => {
       if (!beast?.owner) return null;
-      const ownerKey = beast.owner.toLowerCase();
-      return ownerUsernames[ownerKey] ?? null;
+      const normalizedOwner = normaliseStarknetAddress(beast.owner);
+      return normalizedOwner ? ownerUsernames[normalizedOwner] ?? null : null;
     },
     [ownerUsernames]
   );
@@ -815,8 +768,6 @@ function CollectionPage() {
     showDuplicatesOnly,
   ]);
 
-  console.log(genesisCache);
-
   const anyLoading =
     summaryLoading || catalogLoading || resolvingIdentifier || genesisLoading;
 
@@ -882,10 +833,12 @@ function CollectionPage() {
 
       // For specific tabs, filter by the category
       const beastShiny = beast.attributes.some(
-        (attr) => attr.trait_type?.toLowerCase() === "shiny" && attr.value === "1"
+        (attr) =>
+          attr.trait_type?.toLowerCase() === "shiny" && attr.value === "1"
       );
       const beastAnimated = beast.attributes.some(
-        (attr) => attr.trait_type?.toLowerCase() === "animated" && attr.value === "1"
+        (attr) =>
+          attr.trait_type?.toLowerCase() === "animated" && attr.value === "1"
       );
 
       // Match the current tab's category
@@ -905,20 +858,27 @@ function CollectionPage() {
   }, [selectedBeast, ownedBeasts, activeTab]);
 
   // Update the selected beast when navigating through duplicates
-  const currentDisplayedBeast = selectedBeastDuplicates.length > 0
-    ? selectedBeastDuplicates[currentDuplicateIndex] || selectedBeast
-    : selectedBeast;
+  const currentDisplayedBeast =
+    selectedBeastDuplicates.length > 0
+      ? selectedBeastDuplicates[currentDuplicateIndex] || selectedBeast
+      : selectedBeast;
 
   // Navigation functions
   const navigateToNextDuplicate = () => {
     if (selectedBeastDuplicates.length > 1) {
-      setCurrentDuplicateIndex((prev) => (prev + 1) % selectedBeastDuplicates.length);
+      setCurrentDuplicateIndex(
+        (prev) => (prev + 1) % selectedBeastDuplicates.length
+      );
     }
   };
 
   const navigateToPreviousDuplicate = () => {
     if (selectedBeastDuplicates.length > 1) {
-      setCurrentDuplicateIndex((prev) => (prev - 1 + selectedBeastDuplicates.length) % selectedBeastDuplicates.length);
+      setCurrentDuplicateIndex(
+        (prev) =>
+          (prev - 1 + selectedBeastDuplicates.length) %
+          selectedBeastDuplicates.length
+      );
     }
   };
 
@@ -1113,6 +1073,14 @@ function CollectionPage() {
           <p className="text-xs text-red-400">❌ {filtersError}</p>
         ) : null}
 
+        <div className="flex items-center justify-center gap-2 py-2 px-4 bg-blue-900/20 border border-blue-400/30 rounded-md">
+          <span className="text-blue-300 text-xs">ℹ️</span>
+          <p className="text-xs text-blue-200">
+            Traded a beast? It may take 1-2 minutes to appear. Click{" "}
+            <strong>Refresh</strong> to check for updates.
+          </p>
+        </div>
+
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 my-6">
           <div className="flex flex-wrap items-center gap-2">
             {TABS.map((tab) => {
@@ -1152,9 +1120,15 @@ function CollectionPage() {
             </Button>
             <button
               type="button"
-              onClick={() => void loadSummary()}
+              onClick={() => {
+                // Clear the beast query cache to force fresh data
+                apiCache.clearEndpoint("beast-query");
+                apiCache.clearEndpoint("beast-by-id");
+                void loadSummary();
+              }}
               disabled={anyLoading || !resolvedAddress}
               className="inline-flex items-center gap-2 rounded-md border border-lsGold px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-lsGold hover:bg-gray-900 disabled:opacity-50"
+              title="Force refresh collection data. Note: New purchases may take 1-2 minutes to sync from the blockchain."
             >
               {anyLoading ? (
                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-lsGold border-t-transparent" />

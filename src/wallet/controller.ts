@@ -7,7 +7,7 @@ export const controllerConnector = new ControllerConnector({
   defaultChainId: "0x534e5f4d41494e",
   slot:
     (import.meta.env.VITE_CONTROLLER_SLOT as string | undefined)?.trim() ||
-    "eternum-marketplace-mainnet",
+    "pg-mainnet-7",
 });
 
 // The current @starknet-react release expects additional methods.

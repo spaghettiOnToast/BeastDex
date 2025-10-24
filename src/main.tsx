@@ -13,6 +13,14 @@ import {
 } from "@cartridge/marketplace";
 import { ToriiClient } from "@dojoengine/torii-wasm";
 import { constants } from "starknet";
+import { apiCache } from "./services/apiCache";
+
+// Expose apiCache in dev mode for debugging and clear cache on app start
+if (import.meta.env.DEV) {
+  (window as any).apiCache = apiCache;
+  // Clear cache on app start to ensure fresh data after config changes
+  apiCache.clearAll();
+}
 
 const queryClient = new QueryClient();
 

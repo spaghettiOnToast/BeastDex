@@ -6,6 +6,7 @@ import { fetchBeastById, type Beast } from "../services/beast";
 import { getErrorMessage } from "../utils/error";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
+import { normaliseStarknetAddress } from "../utils/address";
 
 function BeastDetailPage() {
   const params = useParams<{ tokenId: string }>();
@@ -66,8 +67,9 @@ function BeastDetailPage() {
     error: ownerLookupError,
   } = useControllerUsernames(ownerLookupAddresses);
 
-  const ownerUsername = beast?.owner
-    ? ownerUsernames[beast.owner.toLowerCase()] ?? null
+  const normalizedOwner = beast?.owner ? normaliseStarknetAddress(beast.owner) : null;
+  const ownerUsername = normalizedOwner
+    ? ownerUsernames[normalizedOwner] ?? null
     : null;
 
   if (loading) {

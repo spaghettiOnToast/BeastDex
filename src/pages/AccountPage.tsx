@@ -16,7 +16,6 @@ import { useBeasts } from "../hooks/useBeasts";
 import {
   fetchBeastAttributeFilters,
   fetchBeasts,
-  fetchAdventurerDeaths,
   fetchBeastPowerRank,
   type BeastAttributeFilters,
   type Beast,
@@ -30,7 +29,6 @@ import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
 import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
 import type { OverviewCard } from "@/components/account/OverviewCards";
 import {
-  calculateKdRatio,
   calculateTotalPower,
   computeBeastCollectionStats,
   EMPTY_BEAST_COLLECTION_STATS,
@@ -67,7 +65,6 @@ function AccountPage() {
   );
   const [collectionTotal, setCollectionTotal] = useState(0);
   const [collectionPower, setCollectionPower] = useState(0);
-  const [accountDeaths, setAccountDeaths] = useState(0);
   const [accountRanking, setAccountRanking] = useState<BeastPowerRank | null>(
     null
   );
@@ -286,7 +283,6 @@ function AccountPage() {
       setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
       setCollectionTotal(0);
       setCollectionPower(0);
-      setAccountDeaths(0);
       setAccountRanking(null);
       setSummaryError(identifierError);
       setSummaryLoading(false);
@@ -300,26 +296,44 @@ function AccountPage() {
 
     try {
       // Load ALL beasts for accurate stats calculation (like ProfilePage and CollectionPage)
-      const { beasts: allUserBeasts, total: totalCount } = await fetchBeasts({
-        limit: 1000, // High limit to get all beasts
-        ownerAddresses: [resolvedAddress],
-        sort: "default",
-      });
+      // Use batched loading to handle large collections (11,000+ beasts)
+      const batchSize = 200;
+      let allUserBeasts: Beast[] = [];
+      let currentPage = 1;
+      let hasMoreData = true;
+      let totalCount = 0;
+
+      while (hasMoreData && allUserBeasts.length < 15000) {
+        const { beasts: batch, total } = await fetchBeasts({
+          limit: batchSize,
+          page: currentPage,
+          ownerAddresses: [resolvedAddress],
+          sort: "default",
+        });
+
+        if (summaryRequestRef.current !== requestId) {
+          return;
+        }
+
+        allUserBeasts = [...allUserBeasts, ...batch];
+        totalCount = total;
+
+        hasMoreData = batch.length === batchSize && allUserBeasts.length < total;
+        currentPage++;
+
+        if (allUserBeasts.length >= total || batch.length < batchSize) {
+          hasMoreData = false;
+        }
+      }
 
       if (summaryRequestRef.current !== requestId) {
         return;
       }
 
-      const [deaths, ranking] = await Promise.all([
-        fetchAdventurerDeaths(resolvedAddress).catch((err) => {
-          console.error("Failed to fetch account deaths", err);
-          return 0;
-        }),
-        fetchBeastPowerRank(resolvedAddress).catch((err) => {
-          console.error("Failed to fetch account rank", err);
-          return null;
-        }),
-      ]);
+      const ranking = await fetchBeastPowerRank(resolvedAddress).catch((err) => {
+        console.error("Failed to fetch account rank", err);
+        return null;
+      });
 
       if (summaryRequestRef.current !== requestId) {
         return;
@@ -334,7 +348,6 @@ function AccountPage() {
 
       setCollectionStats(stats);
       setCollectionPower(power);
-      setAccountDeaths(deaths);
       setAccountRanking(ranking);
     } catch (err: unknown) {
       if (summaryRequestRef.current !== requestId) {
@@ -344,7 +357,6 @@ function AccountPage() {
       setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
       setCollectionTotal(0);
       setCollectionPower(0);
-      setAccountDeaths(0);
       setAccountRanking(null);
       setSummaryError(getErrorMessage(err, "Failed to load account summary"));
     } finally {
@@ -383,11 +395,6 @@ function AccountPage() {
     void reload();
     void loadSummary();
   }, [loadSummary, reload, resolvedAddress]);
-
-  const kdRatio = useMemo(
-    () => calculateKdRatio(collectionTotal, accountDeaths),
-    [collectionTotal, accountDeaths]
-  );
 
   const rankDisplay =
     accountRanking?.rank != null
@@ -473,13 +480,6 @@ function AccountPage() {
   const overviewCards: OverviewCard[] = useMemo(
     () => [
       {
-        key: "kd",
-        icon: "⚔️",
-        label: "K:D Ratio",
-        value: kdRatio,
-        sub: `${collectionTotal.toLocaleString()} K / ${accountDeaths.toLocaleString()} D`,
-      },
-      {
         key: "beasts",
         icon: "🐾",
         label: "Beasts Collected",
@@ -500,10 +500,8 @@ function AccountPage() {
       },
     ],
     [
-      accountDeaths,
       collectionPower,
       collectionTotal,
-      kdRatio,
       rankDisplay,
       rankSubheading,
     ]

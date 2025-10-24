@@ -1,4 +1,5 @@
 import { memo, useState, useRef, useEffect } from "react";
+import { imageLoadQueue } from "../../utils/imageLoadQueue";
 
 type LazyImageProps = {
   src: string;
@@ -22,6 +23,7 @@ export const LazyImage = memo(function LazyImage({
   const [isInView, setIsInView] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const loadingRef = useRef(false);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -36,7 +38,7 @@ export const LazyImage = memo(function LazyImage({
       },
       {
         threshold: 0.1,
-        rootMargin: "50px",
+        rootMargin: "100px",
       }
     );
 
@@ -46,6 +48,23 @@ export const LazyImage = memo(function LazyImage({
       observer.disconnect();
     };
   }, [isInView]);
+
+  // Use queue when image comes into view
+  useEffect(() => {
+    if (!isInView || loadingRef.current || isLoaded || isError) return;
+
+    loadingRef.current = true;
+    imageLoadQueue
+      .loadImage(src)
+      .then(() => {
+        setIsLoaded(true);
+        onLoad?.();
+      })
+      .catch(() => {
+        setIsError(true);
+        onError?.();
+      });
+  }, [isInView, src, isLoaded, isError, onLoad, onError]);
 
   const handleLoad = () => {
     setIsLoaded(true);
