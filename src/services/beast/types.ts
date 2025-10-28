@@ -26,13 +26,15 @@ export type Beast = {
 export type AttributeFilterInput = Record<string, Array<string | number>>;
 export type BeastAttributeFilters = Record<string, string[]>;
 
+export type BeastSortField = "default" | "beast" | "tier" | "health" | "rank" | "last-death";
+
 export type FetchBeastsOptions = {
   limit?: number;
   search?: string;
   attributeFilters?: AttributeFilterInput;
   ownerAddresses?: string[];
   page?: number;
-  sort?: "default" | "beast" | "tier" | "health" | "rank" | "last-death";
+  sort?: BeastSortField;
 };
 
 export type BeastStats = {

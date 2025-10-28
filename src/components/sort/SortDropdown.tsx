@@ -6,8 +6,34 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
+import type { BeastSortField } from "../../services/beast/types";
 
-export type SortOption = "default" | "beast" | "tier" | "health" | "rank" | "last-death";
+export type SortOption =
+  | "default"
+  | "beast-asc"
+  | "beast-desc"
+  | "tier-asc"
+  | "tier-desc"
+  | "health-asc"
+  | "health-desc"
+  | "rank-asc"
+  | "rank-desc"
+  | "last-death-asc"
+  | "last-death-desc"
+  | "price-asc"
+  | "price-desc";
+
+/**
+ * Converts a SortOption (with direction) to a BeastSortField (without direction)
+ * for use with the fetchBeasts API
+ */
+export function sortOptionToBeastSortField(sortOption: SortOption): BeastSortField {
+  if (sortOption === "default") return "default";
+
+  // Strip the -asc or -desc suffix to get the base field
+  const field = sortOption.replace(/-(?:asc|desc)$/, "") as BeastSortField;
+  return field;
+}
 
 type SortDropdownProps = {
   value: SortOption;
@@ -15,12 +41,19 @@ type SortDropdownProps = {
 };
 
 const OPTIONS: Array<{ label: string; value: SortOption }> = [
-  { label: "Default", value: "default" },
-  { label: "Beast (A → Z)", value: "beast" },
-  { label: "Tier (1 → 5)", value: "tier" },
-  { label: "Health (High → Low)", value: "health" },
-  { label: "Rank (1 → ∞)", value: "rank" },
-  { label: "Last Death (Recent)", value: "last-death" },
+  { label: "Default (Power)", value: "default" },
+  { label: "Price (Low → High)", value: "price-asc" },
+  { label: "Price (High → Low)", value: "price-desc" },
+  { label: "Beast (A → Z)", value: "beast-asc" },
+  { label: "Beast (Z → A)", value: "beast-desc" },
+  { label: "Tier (1 → 5)", value: "tier-asc" },
+  { label: "Tier (5 → 1)", value: "tier-desc" },
+  { label: "Health (High → Low)", value: "health-desc" },
+  { label: "Health (Low → High)", value: "health-asc" },
+  { label: "Rank (1 → ∞)", value: "rank-asc" },
+  { label: "Rank (∞ → 1)", value: "rank-desc" },
+  { label: "Last Death (Recent)", value: "last-death-desc" },
+  { label: "Last Death (Oldest)", value: "last-death-asc" },
 ];
 
 export function SortDropdown({ value, onChange }: SortDropdownProps) {

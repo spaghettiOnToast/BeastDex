@@ -9,7 +9,7 @@ import { BeastTableView } from "../components/beast/BeastTableView";
 import PaginationControls from "../components/pagination/PaginationControls";
 import { FiltersButton } from "../components/filters/FiltersButton";
 import { FiltersDrawer } from "../components/filters/FiltersDrawer";
-import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
+import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { useBeasts } from "../hooks/useBeasts";
 import {
@@ -70,7 +70,7 @@ function ProfilePage() {
     attributeFilters,
     ownerAddresses,
     page,
-    sort: sortOption,
+    sort: sortOptionToBeastSortField(sortOption),
   });
 
   const loadAdditionalData = useCallback(async () => {

@@ -34,7 +34,8 @@ export async function cancelListingFlow<TAccount>(
   const { account, collectionAddress, tokenId, orderId } = params;
   const tokenIdBigInt = toBigInt(tokenId);
   const orderIdBigInt = toBigInt(orderId);
-  await cancel(account, orderIdBigInt, collectionAddress, tokenIdBigInt);
+  // Return the underlying action result so callers can surface tx hash
+  return await cancel(account, orderIdBigInt, collectionAddress, tokenIdBigInt);
 }
 
 export type EditListingParams<TAccount> = CancelListingParams<TAccount> & {

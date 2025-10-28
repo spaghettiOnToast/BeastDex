@@ -25,7 +25,7 @@ import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { lookupControllerAddresses } from "../services/controller";
 import { starknetIdService } from "../services/starknetId";
 import { getErrorMessage } from "../utils/error";
-import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
+import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
 import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
 import type { OverviewCard } from "@/components/account/OverviewCards";
 import {
@@ -178,7 +178,7 @@ function AccountPage() {
     attributeFilters,
     ownerAddresses,
     page,
-    sort: sortOption,
+    sort: sortOptionToBeastSortField(sortOption),
     enabled: Boolean(resolvedAddress),
   });
 

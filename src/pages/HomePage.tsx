@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
+import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
 import { useSearchParams } from "react-router-dom";
 import TopBar from "../components/header/TopBar";
 import StatsPanel from "../components/stats/StatsPanel";
@@ -62,7 +62,7 @@ function HomePage() {
     attributeFilters,
     ownerAddresses: ownerAddressFilters,
     page,
-    sort: sortOption,
+    sort: sortOptionToBeastSortField(sortOption),
   });
 
   const ownerAddresses = useMemo(

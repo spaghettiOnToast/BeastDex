@@ -9,6 +9,7 @@ import { mainnet, type Chain } from "@starknet-react/chains";
 import { connectors } from "./wallet/controller";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { GlobalSearchProvider } from "./hooks/useGlobalSearch";
+import { Toaster } from "sonner";
 
 // Lazy load pages for better performance
 const HomePage = lazy(() => import("./pages/HomePage"));
@@ -43,6 +44,7 @@ function App() {
     >
       <GlobalSearchProvider>
         <ErrorBoundary>
+          <Toaster position="top-right" expand={false} richColors />
           <Suspense
           fallback={
             <div className="flex items-center justify-center min-h-screen">

@@ -39,7 +39,7 @@ import {
 import { normaliseStarknetAddress } from "../utils/address";
 import { lookupControllerAddresses } from "../services/controller";
 import { getErrorMessage } from "../utils/error";
-import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
+import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
 import { Button } from "../components/ui/button";
 import { getBeastTemplate } from "../data/beastTemplates";
 import { runBeastSql } from "../services/beast/sqlClient";
@@ -323,7 +323,7 @@ function CollectionPage() {
           limit,
           page: currentPage,
           ownerAddresses: [resolvedAddress],
-          sort: sortOption,
+          sort: sortOptionToBeastSortField(sortOption),
         });
 
         if (summaryRequestRef.current !== requestId) {
@@ -679,7 +679,10 @@ function CollectionPage() {
       Object.keys(sortedEntries).forEach((tabKey) => {
         const tabEntries = sortedEntries[tabKey as TabKey];
 
-        switch (sortOption) {
+        // Extract base field from sortOption (e.g., "beast-asc" -> "beast")
+        const baseSortField = sortOptionToBeastSortField(sortOption);
+
+        switch (baseSortField) {
           case "beast":
             tabEntries.sort((a, b) => a.label.localeCompare(b.label));
             break;

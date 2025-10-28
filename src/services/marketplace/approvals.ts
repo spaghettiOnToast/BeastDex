@@ -113,3 +113,43 @@ export async function ensureErc20Allowance(
     },
   ]);
 }
+
+export async function getErc20Balance(
+  provider: ProviderInterface,
+  tokenAddress: string,
+  owner: string,
+): Promise<bigint> {
+  const response = await provider.callContract({
+    contractAddress: tokenAddress,
+    entrypoint: "balanceOf",
+    calldata: [owner],
+  });
+  const rawResult = Array.isArray(response) ? response : (response as any).result;
+  if (!Array.isArray(rawResult) || rawResult.length < 2) {
+    return 0n;
+  }
+  const [low, high] = rawResult;
+  const lowBig = BigInt(low);
+  const highBig = BigInt(high);
+  return highBig * (1n << 128n) + lowBig;
+}
+
+export async function checkSufficientBalance(
+  account: AccountInterface,
+  tokenAddress: string | undefined,
+  requiredAmount: bigint,
+): Promise<{ sufficient: boolean; balance: bigint }> {
+  if (!tokenAddress || tokenAddress === "0x0") {
+    // Native token - we can't easily check without additional setup
+    return { sufficient: true, balance: 0n };
+  }
+  if (!account.address) {
+    throw new Error("Wallet address not available");
+  }
+  const provider = getProvider(account);
+  const balance = await getErc20Balance(provider, tokenAddress, account.address);
+  return {
+    sufficient: balance >= requiredAmount,
+    balance,
+  };
+}

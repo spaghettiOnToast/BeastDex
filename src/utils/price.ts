@@ -8,6 +8,8 @@ export const TOKEN_DECIMALS: Record<string, number> = {
   STRK: 18,
   LORDS: 18,
   ETH: 18,
+  USDC: 6,
+  SURVIVOR: 18,
 };
 
 /**
@@ -16,9 +18,11 @@ export const TOKEN_DECIMALS: Record<string, number> = {
  * @param decimals - Number of decimals for the token (default: 18)
  * @returns Formatted string with appropriate decimal places
  */
-export function fromWei(weiAmount: string | bigint, decimals: number = 18): string {
+import { toBigIntSafe, type BigNumberish } from "./bigint";
+
+export function fromWei(weiAmount: BigNumberish, decimals: number = 18): string {
   try {
-    const amount = typeof weiAmount === 'string' ? BigInt(weiAmount) : weiAmount;
+    const amount = toBigIntSafe(weiAmount as any);
 
     // Handle zero
     if (amount === 0n) {
@@ -86,11 +90,50 @@ export function toWei(amount: string | number, decimals: number = 18): bigint {
  * @param tokenSymbol - Token symbol (e.g., 'STRK', 'LORDS', 'ETH')
  * @returns Formatted price string like "1.5 STRK"
  */
-export function formatPrice(weiAmount: string | bigint, tokenSymbol: string = 'STRK'): string {
+export function formatPrice(weiAmount: BigNumberish, tokenSymbol: string = 'STRK'): string {
   const decimals = TOKEN_DECIMALS[tokenSymbol.toUpperCase()] ?? 18;
   const humanReadable = fromWei(weiAmount, decimals);
 
   return tokenSymbol ? `${humanReadable} ${tokenSymbol}` : humanReadable;
+}
+
+export type RatesInSTRK = {
+  // price of 1 unit of token (human units) expressed in STRK (human units)
+  STRK: number; // always 1
+  LORDS?: number;
+  USDC?: number;
+  ETH?: number;
+};
+
+export function formatPriceInSymbol(
+  weiAmount: BigNumberish,
+  fromSymbol: string,
+  displaySymbol: string,
+  rates: RatesInSTRK
+): string {
+  const from = fromSymbol.toUpperCase();
+  const to = displaySymbol.toUpperCase();
+  if (from === to) return formatPrice(weiAmount, to);
+
+  const fromDecimals = TOKEN_DECIMALS[from] ?? 18;
+
+  // Convert to human-readable number
+  const humanFrom = parseFloat(fromWei(weiAmount, fromDecimals));
+  if (!Number.isFinite(humanFrom)) return `0 ${to}`;
+
+  // Convert to STRK using rates
+  const rFromInSTRK = (rates as any)[from] ?? (from === 'STRK' ? 1 : undefined);
+  const rToInSTRK = (rates as any)[to] ?? (to === 'STRK' ? 1 : undefined);
+  if (!rFromInSTRK || !rToInSTRK) {
+    // Fallback: if we don't have rate for one side, show original
+    return formatPrice(weiAmount, fromSymbol);
+  }
+
+  const valueInSTRK = humanFrom * rFromInSTRK;
+  const valueInTarget = valueInSTRK / rToInSTRK;
+
+  const precision = to === 'USDC' ? 2 : 4;
+  return `${valueInTarget.toFixed(precision)} ${to}`;
 }
 
 /**
@@ -99,7 +142,7 @@ export function formatPrice(weiAmount: string | bigint, tokenSymbol: string = 'S
  * @param tokenSymbol - Token symbol
  * @returns Formatted price like "1.5K STRK" or "2.3M STRK"
  */
-export function formatPriceCompact(weiAmount: string | bigint, tokenSymbol: string = 'STRK'): string {
+export function formatPriceCompact(weiAmount: BigNumberish, tokenSymbol: string = 'STRK'): string {
   const decimals = TOKEN_DECIMALS[tokenSymbol.toUpperCase()] ?? 18;
   const humanReadable = fromWei(weiAmount, decimals);
   const num = Number.parseFloat(humanReadable);

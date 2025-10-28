@@ -1,6 +1,7 @@
 import { mapBeastRow, type BeastRow } from "./helpers";
 import {
   buildAttributeFiltersQuery,
+  buildBeastsByIdListQuery,
   buildBeastsQuery,
   buildBeastByIdQuery,
   buildOwnerBeastStatsQuery,
@@ -68,6 +69,7 @@ export async function fetchBeasts({
     const query = buildBeastsQuery(params);
     const rows = await runBeastSql<BeastRow[]>(query, "fetchBeasts");
     const beasts = rows.map(mapBeastRow);
+
     const total =
       rows.length > 0 ? Number(rows[0]?.total_count ?? beasts.length) : 0;
 
@@ -75,7 +77,7 @@ export async function fetchBeasts({
   });
 }
 
-function deriveTokenHex(identifier: string): string | null {
+export function deriveTokenHex(identifier: string): string | null {
   const trimmed = identifier.trim();
   if (trimmed.length === 0) {
     return null;
@@ -126,8 +128,45 @@ export async function fetchBeastById(
       return null;
     }
 
-    return mapBeastRow(rows[0]);
+    const beast = mapBeastRow(rows[0]);
+
+    return beast;
   });
+}
+
+export async function fetchBeastsByIds(
+  ids: Array<string | number>
+): Promise<Beast[]> {
+  const identifiers = Array.from(
+    new Set(
+      ids
+        .map((value) => String(value).trim())
+        .filter((value) => value.length > 0)
+        .map((value) => value.toLowerCase())
+    )
+  );
+
+  if (identifiers.length === 0) {
+    return [];
+  }
+
+  const tokenHexes = Array.from(
+    new Set(
+      identifiers
+        .map((identifier) => deriveTokenHex(identifier))
+        .filter((hex): hex is string => typeof hex === "string")
+        .map((hex) => hex.toLowerCase())
+    )
+  );
+
+  const query = buildBeastsByIdListQuery({
+    identifiers,
+    tokenHexes,
+  });
+  const rows = await runBeastSql<BeastRow[]>(query, "fetchBeastsByIds", {
+    timeoutMs: 20_000,
+  });
+  return rows.map(mapBeastRow);
 }
 
 export async function fetchBeastAttributeFilters(): Promise<BeastAttributeFilters> {

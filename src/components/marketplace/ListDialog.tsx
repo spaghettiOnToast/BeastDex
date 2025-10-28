@@ -13,13 +13,16 @@ import type { Beast } from "../../services/beast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import {
   DEFAULT_PAYMENT_TOKEN,
-  PAYMENT_TOKENS,
   BEASTS_COLLECTION_ADDRESS,
   DEFAULT_LISTING_DURATION_SECONDS,
   LISTING_DURATION_OPTIONS,
+  CLIENT_FEE_BP,
 } from "../../services/marketplace/constants";
 import { NAMESPACE, useMarketplace, useMarketplaceActions } from "@cartridge/marketplace";
-import { parseDojoCall } from "@dojoengine/core";
+import { getContractByName, parseDojoCall } from "@dojoengine/core";
+import { toWei, fromWei, TOKEN_DECIMALS, formatPriceInSymbol } from "../../utils/price";
+import { toast } from "sonner";
+import { usePriceRates } from "../../services/marketplace/rates";
 
 const CUSTOM_DURATION_VALUE = "custom";
 
@@ -44,15 +47,15 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
   const { account } = useAccount();
   const { provider } = useMarketplace();
   const [price, setPrice] = useState("");
-  const [tokenSym, setTokenSym] = useState<string>(DEFAULT_PAYMENT_TOKEN.symbol);
   const [duration, setDuration] = useState<string>(DEFAULT_DURATION_VALUE);
   const [customExpiration, setCustomExpiration] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { list, buildListCalls } = useMarketplaceActions();
+  const { buildListCalls } = useMarketplaceActions();
   const [estimatedFee, setEstimatedFee] = useState<bigint | null>(null);
   const [estimatingFee, setEstimatingFee] = useState(false);
   const [feeError, setFeeError] = useState<string | null>(null);
+  const { data: priceRates } = usePriceRates();
 
   useEffect(() => {
     if (open) {
@@ -68,38 +71,32 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
     }
   }, [duration]);
 
-  const selectedToken = useMemo(
-    () => PAYMENT_TOKENS.find((t) => t.symbol === tokenSym) ?? DEFAULT_PAYMENT_TOKEN,
-    [tokenSym]
-  );
-  const currencyAddress = selectedToken.address ?? DEFAULT_PAYMENT_TOKEN.address;
+  // Lock currency to the fee token (Cartridge default)
+  const selectedToken = DEFAULT_PAYMENT_TOKEN;
+  const currencyAddress = selectedToken.address;
 
   const toBigInt = (value: string) => {
     const trimmed = value.trim();
     return BigInt(trimmed.startsWith("0x") ? trimmed : trimmed);
   };
 
+  // Convert human input to smallest units (wei) expected by marketplace
   const priceBigInt = useMemo(() => {
     const trimmed = price.trim();
     if (!trimmed) return null;
+    const numericValue = Number.parseFloat(trimmed);
+    if (!Number.isFinite(numericValue) || numericValue <= 0) return null;
     try {
-      return toBigInt(trimmed);
+      const decimals = TOKEN_DECIMALS[selectedToken.symbol] ?? 18;
+      const wei = toWei(trimmed, decimals);
+      return wei > 0n ? wei : null;
     } catch {
       return null;
     }
-  }, [price]);
+  }, [price, selectedToken]);
 
   const formatFee = (feeWei: bigint) => {
-    const decimals = 18;
-    const feeString = feeWei.toString();
-    const negative = feeString.startsWith("-");
-    const digits = negative ? feeString.slice(1) : feeString;
-    const padded = digits.padStart(decimals + 1, "0");
-    const intPart = padded.slice(0, -decimals);
-    const fracPartRaw = padded.slice(-decimals).replace(/0+$/, "");
-    const fracPart = fracPartRaw.slice(0, 6); // limit to 6 decimals for display
-    const formatted = fracPart.length > 0 ? `${intPart}.${fracPart}` : intPart;
-    return negative ? `-${formatted}` : formatted;
+    return fromWei(feeWei, 18);
   };
 
   const toLocalInputValue = (date: Date) => {
@@ -135,6 +132,17 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
         return {
           expirationSeconds: null,
           error: "Expiration must be in the future.",
+          preview: null,
+        };
+      }
+      // Enforce a maximum listing horizon (aligns with marketplace policies)
+      const maxSeconds = nowSeconds + DEFAULT_LISTING_DURATION_SECONDS;
+      if (seconds > maxSeconds) {
+        return {
+          expirationSeconds: null,
+          error: `Max expiration is ${Math.floor(
+            DEFAULT_LISTING_DURATION_SECONDS / (60 * 60 * 24)
+          )} days from now.`,
           preview: null,
         };
       }
@@ -188,21 +196,16 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
         const tokenIdBigInt = toBigInt(rawTokenId);
         const expirationBigInt = BigInt(expirationDetails.expirationSeconds!);
 
+        // Use Cartridge SDK's buildListCalls with quantity=0 for ERC721
         const [approvalCall, dojoCall] = buildListCalls(
           BEASTS_COLLECTION_ADDRESS,
           tokenIdBigInt,
-          1n,
-          priceBigInt,
+          0n, // quantity = 0 for ERC721 (non-fungible)
+          priceBigInt!,
           currencyAddress,
           expirationBigInt
         );
-
-        const parsedListCall = parseDojoCall(
-          provider.manifest,
-          NAMESPACE,
-          dojoCall
-        );
-
+        const parsedListCall = (parseDojoCall as any)(provider.manifest, NAMESPACE, dojoCall);
         const calls = [approvalCall, parsedListCall];
 
         const accountWithEstimate = account as any;
@@ -298,11 +301,14 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
   const onSubmit = async () => {
     if (!account || !beast) return;
     if (priceBigInt === null) {
-      setError("Enter a valid price");
+      toast.error("Please enter a valid price greater than 0");
       return;
     }
+
     setSubmitting(true);
     setError(null);
+    const toastId = toast.loading("Listing beast...");
+
     try {
       const rawTokenId = (beast.id.split(":").pop() || beast.id).trim();
       const tokenIdBigInt = toBigInt(rawTokenId);
@@ -311,23 +317,53 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
         throw new Error("Invalid expiration selected");
       }
       const expirationBigInt = BigInt(expirationSeconds);
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      const maxSeconds = nowSeconds + DEFAULT_LISTING_DURATION_SECONDS;
+      if (expirationSeconds > maxSeconds) {
+        throw new Error(
+          `Max expiration is ${Math.floor(
+            DEFAULT_LISTING_DURATION_SECONDS / (60 * 60 * 24)
+          )} days from now.`
+        );
+      }
 
-      await list(
-        account as any,
+      // Use buildListCalls with quantity=0 for ERC721 (Cartridge mentioned "value" needs to be 0 for ERC721)
+      const [approvalCall, listCall] = buildListCalls(
         BEASTS_COLLECTION_ADDRESS,
         tokenIdBigInt,
-        1n,
+        0n, // quantity = 0 for ERC721 (non-fungible)
         priceBigInt,
         currencyAddress,
         expirationBigInt
       );
+
+      // Parse the list call through Dojo
+      const parsedListCall = (parseDojoCall as any)(provider.manifest, NAMESPACE, listCall);
+
+      console.log('List calldata (quantity=0):', parsedListCall.calldata);
+
+      await (account as any).execute([approvalCall, parsedListCall]);
+
+      toast.success("Beast listed successfully!", { id: toastId });
+      toast.info("Your listing will appear in the marketplace shortly...", { duration: 5000 });
       onOpenChange(false);
       setPrice("");
       setEstimatedFee(null);
       setFeeError(null);
       onListed?.();
     } catch (e) {
-      setError((e as Error).message || "Failed to list beast");
+      const errorMessage = (e as Error).message || "Failed to list beast";
+
+      // Check if user cancelled the transaction
+      if (errorMessage.toLowerCase().includes("user") &&
+          (errorMessage.toLowerCase().includes("reject") ||
+           errorMessage.toLowerCase().includes("cancel") ||
+           errorMessage.toLowerCase().includes("abort"))) {
+        toast.info("Listing cancelled", { id: toastId });
+      } else {
+        setError(errorMessage);
+        toast.error(errorMessage, { id: toastId });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -339,8 +375,7 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
         <DialogHeader>
           <DialogTitle>List Beast for Sale</DialogTitle>
           <DialogDescription>
-            Choose a price and expiration for your listing. Prices must be entered in the
-            payment token's base units (wei for STRK).
+            Set your listing price and expiration for your beast.
           </DialogDescription>
         </DialogHeader>
         {!beast ? (
@@ -354,36 +389,55 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
             <div>
               <label className="text-sm text-gray-400">Price</label>
               <Input
+                type="number"
+                step="0.01"
+                min="0"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                placeholder="Enter price"
+                placeholder={`e.g., 1.5 ${selectedToken.symbol}`}
                 className="mt-1"
               />
+              {priceBigInt && priceBigInt > 0n && (
+                <div className="mt-2 space-y-1">
+                  {/* USDC Conversion */}
+                  {priceRates && selectedToken.symbol.toUpperCase() !== 'USDC' && (
+                    <div className="text-xs text-gray-400">
+                      ≈ {formatPriceInSymbol(priceBigInt, selectedToken.symbol, 'USDC', priceRates)}
+                    </div>
+                  )}
+                  {/* Buyer's Total Cost */}
+                  <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-2 space-y-1">
+                    <p className="text-xs text-blue-200 font-medium">Buyer will pay:</p>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">Your listing:</span>
+                      <span className="text-white">{fromWei(priceBigInt, TOKEN_DECIMALS[selectedToken.symbol] ?? 18)} {selectedToken.symbol}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">Platform fee (2.5%):</span>
+                      <span className="text-white">{fromWei((priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n, TOKEN_DECIMALS[selectedToken.symbol] ?? 18)} {selectedToken.symbol}</span>
+                    </div>
+                    <div className="flex justify-between text-xs font-semibold border-t border-blue-500/20 pt-1">
+                      <span className="text-blue-200">Total:</span>
+                      <span className="text-blue-200">{fromWei(priceBigInt + (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n, TOKEN_DECIMALS[selectedToken.symbol] ?? 18)} {selectedToken.symbol}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="text-sm text-gray-400">Currency</label>
-              <Select value={tokenSym} onValueChange={setTokenSym}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select token" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PAYMENT_TOKENS.map((t) => (
-                    <SelectItem key={t.symbol} value={t.symbol}>
-                      {t.symbol}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="mt-1 text-sm">{selectedToken.symbol}</div>
+              <div className="mt-1 text-[10px] text-gray-500 break-all">{currencyAddress}</div>
             </div>
             <div>
               <label className="text-sm text-gray-400">Listing duration</label>
               <Select value={duration} onValueChange={setDuration}>
-                <SelectTrigger className="mt-1">
+                <SelectTrigger className="mt-1 bg-black/50">
                   <SelectValue placeholder="Select duration" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-[#0b0b0f] border-gray-800">
                   {DURATION_SELECT_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
+                    <SelectItem key={option.value} value={option.value} className="focus:bg-gray-800/50">
                       {option.label}
                     </SelectItem>
                   ))}
@@ -424,6 +478,9 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
               ) : (
                 <span>Enter a price to view the estimated network fee.</span>
               )}
+            </div>
+            <div className="text-[10px] text-gray-500 break-all">
+              Marketplace: {getContractByName(provider.manifest, NAMESPACE, "Marketplace").address}
             </div>
             {error && <p className="text-sm text-red-400">{error}</p>}
             <div className="flex justify-end gap-2">
