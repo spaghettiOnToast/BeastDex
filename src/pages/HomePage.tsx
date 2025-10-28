@@ -250,7 +250,7 @@ function HomePage() {
     return items;
   }, [highlights, formatOwner]);
 
-  const topBar = <TopBar />;
+  const topBar = <TopBar onLogoClick={handleResetFilters} />;
 
   const filtersControl = (
     <FiltersButton

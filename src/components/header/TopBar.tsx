@@ -9,14 +9,15 @@ import { useGlobalSearch } from "../../hooks/useGlobalSearch";
 
 type Props = {
   filtersControl?: ReactNode;
+  onLogoClick?: () => void;
 };
 
-export default function TopBar({ filtersControl }: Props) {
+export default function TopBar({ filtersControl, onLogoClick }: Props) {
   const { searchValue, setSearchValue, handleSearch } = useGlobalSearch();
 
   return (
     <div className="flex flex-wrap items-center gap-4">
-      <Logo scale="sm" />
+      <Logo scale="sm" onClick={onLogoClick} />
       <div className="flex flex-1 min-w-[300px] items-center gap-3 justify-center md:justify-center">
         <SearchBar value={searchValue} onChange={setSearchValue} onSubmit={handleSearch} />
         {filtersControl}
