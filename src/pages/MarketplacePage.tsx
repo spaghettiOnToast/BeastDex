@@ -1135,6 +1135,12 @@ export default function MarketplacePage() {
       .filter((listing) => listing.seller.toLowerCase() === lower);
   }, [sortedListings, listings, address, showAllMyListings]);
 
+  // Track which token IDs are already actively listed to prevent duplicate listings
+  const alreadyListedTokenIds = useMemo(() => {
+    const activeListings = myActiveListings.filter(l => l.status === 'active');
+    return new Set(activeListings.map(l => l.tokenId));
+  }, [myActiveListings]);
+
   const ownerAddresses = useMemo(
     () =>
       sortedListings
@@ -1158,6 +1164,13 @@ export default function MarketplacePage() {
   );
 
   const handleToggleCart = (beast: Beast) => {
+    // Check if beast is already listed
+    const tokenId = beast.id.split(':').pop() || beast.id;
+    if (alreadyListedTokenIds.has(tokenId)) {
+      toast.error("This beast is already listed on the marketplace");
+      return;
+    }
+
     setCartBeasts((prev) => {
       // Check if already in cart
       const inCart = prev.some((b) => b.id === beast.id);
@@ -2118,6 +2131,8 @@ export default function MarketplacePage() {
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                     {sortedUserBeasts.map((beast) => {
                       const inCart = cartBeasts.some((b) => b.id === beast.id);
+                      const tokenId = beast.id.split(':').pop() || beast.id;
+                      const isAlreadyListed = alreadyListedTokenIds.has(tokenId);
                       return (
                         <ListingCard
                           key={beast.id}
@@ -2129,6 +2144,7 @@ export default function MarketplacePage() {
                           compact
                           primaryActionLabel={inCart ? "Added ✓" : "List"}
                           inCart={inCart}
+                          isAlreadyListed={isAlreadyListed}
                         />
                       );
                     })}

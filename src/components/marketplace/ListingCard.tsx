@@ -23,6 +23,7 @@ type Props = {
   buyDisabled?: boolean;
   pendingCancel?: boolean;
   status?: ListingStatus;
+  isAlreadyListed?: boolean;
 };
 
 export default function ListingCard({
@@ -44,6 +45,7 @@ export default function ListingCard({
   buyDisabled = false,
   pendingCancel = false,
   status,
+  isAlreadyListed = false,
 }: Props) {
   const displayName = beast?.name ?? (tokenId ? `Beast #${tokenId}` : "Unknown Beast");
   const imageSrc = beast?.image;
@@ -136,15 +138,17 @@ export default function ListingCard({
             <>
               <Button
                 className={
-                  inCart
+                  isAlreadyListed
+                    ? "flex-1 text-xs px-3 py-2 h-9 bg-orange-500/20 text-orange-300 border-orange-400/50 cursor-not-allowed font-semibold"
+                    : inCart
                     ? "flex-1 text-xs px-3 py-2 h-9 bg-[#39ff14] text-black hover:bg-[#39ff14]/90 border-[#39ff14] font-semibold"
                     : "flex-1 text-xs px-3 py-2 h-9 font-semibold hover:bg-gray-800/50 border-white text-white"
                 }
                 variant={inCart ? "default" : "outline"}
                 onClick={onEdit}
-                disabled={pendingCancel}
+                disabled={pendingCancel || isAlreadyListed}
               >
-                {pendingCancel ? "Cancelling…" : (primaryActionLabel ?? "Edit")}
+                {pendingCancel ? "Cancelling…" : isAlreadyListed ? "Already Listed" : (primaryActionLabel ?? "Edit")}
               </Button>
               {onCancel && !pendingCancel ? (
                 <Button
