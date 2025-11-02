@@ -42,6 +42,9 @@ export function useBeastHighlights(enabled: boolean = true) {
     items.push({
       title: `${data.animatedCount.toLocaleString()} Animated beasts collected`,
     });
+    items.push({
+      title: `${data.standardCount.toLocaleString()} Standard beasts collected`,
+    });
 
     if (data.leaders.overall.value > 0) {
       items.push({

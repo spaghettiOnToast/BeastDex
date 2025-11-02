@@ -25,6 +25,8 @@ class ApiCache {
     this.cacheConfigs.set("beast-collection-leaderboard", { ttl: 3 * 60 * 1000 }); // 3 minutes
     this.cacheConfigs.set("most-collected-beast", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("beast-of-the-day", { ttl: 2 * 60 * 1000 }); // 2 minutes
+    this.cacheConfigs.set("beast-rarity-leaderboard", { ttl: 3 * 60 * 1000 }); // 3 minutes
+    this.cacheConfigs.set("beast-slayer-leaderboard", { ttl: 3 * 60 * 1000 }); // 3 minutes
   }
 
   private getCacheKey(endpoint: string, params: any): string {

@@ -2,11 +2,17 @@ import { useState } from "react";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import { RankLeaderboard } from "../components/leaderboard/RankLeaderboard";
-import { MostBeastsCollected } from "../components/leaderboard/MostBeastsCollected";
 import { MostCollectedBeast } from "../components/leaderboard/MostCollectedBeast";
 import { BeastOfTheDay } from "../components/leaderboard/BeastOfTheDay";
+import { BeastCollectionStats } from "../components/leaderboard/BeastCollectionStats";
+import { BeastSlayerLeaderboard } from "../components/leaderboard/BeastSlayerLeaderboard";
 
-type LeaderboardTab = "power" | "beasts" | "beastNames" | "beastOfTheDay";
+type LeaderboardTab =
+  | "power"
+  | "beastNames"
+  | "stats"
+  | "beastOfTheDay"
+  | "slayer";
 
 function LeaderboardPage() {
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("power");
@@ -20,19 +26,24 @@ function LeaderboardPage() {
       description: "Top players by total power",
     },
     {
-      id: "beasts" as const,
-      label: "Most Beasts",
-      description: "Top collectors",
-    },
-    {
       id: "beastNames" as const,
       label: "Most Collected Beast",
-      description: "Most collected beast across all players",
+      description: "Top collectors by total beasts owned",
+    },
+    {
+      id: "stats" as const,
+      label: "Collection Stats",
+      description: "Detailed breakdowns by shiny, animated, and standard hunts",
     },
     {
       id: "beastOfTheDay" as const,
       label: "Beast of the Day",
       description: "Most prestigious beasts fallen in the past 24 hours",
+    },
+    {
+      id: "slayer" as const,
+      label: "Slayer",
+      description: "Beasts with the highest adventurer body counts",
     },
   ];
 
@@ -83,9 +94,10 @@ function LeaderboardPage() {
           <div className="absolute inset-0 bg-gradient-to-br from-[#8bff72]/5 via-transparent to-lsGold/5 rounded-2xl pointer-events-none"></div>
           <div className="relative z-10">
             {activeTab === "power" && <RankLeaderboard />}
-            {activeTab === "beasts" && <MostBeastsCollected />}
             {activeTab === "beastNames" && <MostCollectedBeast />}
+            {activeTab === "stats" && <BeastCollectionStats />}
             {activeTab === "beastOfTheDay" && <BeastOfTheDay />}
+            {activeTab === "slayer" && <BeastSlayerLeaderboard />}
           </div>
         </div>
       </div>
