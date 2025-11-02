@@ -405,20 +405,15 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
                       ≈ {formatPriceInSymbol(priceBigInt, selectedToken.symbol, 'USDC', priceRates)}
                     </div>
                   )}
-                  {/* Buyer's Total Cost */}
-                  <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-2 space-y-1">
-                    <p className="text-xs text-blue-200 font-medium">Buyer will pay:</p>
+                  {/* Listing Fee (Seller Pays) */}
+                  <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2 space-y-1">
+                    <p className="text-xs text-amber-200 font-medium">Listing fee (paid by you):</p>
                     <div className="flex justify-between text-xs">
-                      <span className="text-gray-400">Your listing:</span>
-                      <span className="text-white">{fromWei(priceBigInt, TOKEN_DECIMALS[selectedToken.symbol] ?? 18)} {selectedToken.symbol}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-400">Platform fee (2.5%):</span>
+                      <span className="text-gray-400">Platform fee (2%):</span>
                       <span className="text-white">{fromWei((priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n, TOKEN_DECIMALS[selectedToken.symbol] ?? 18)} {selectedToken.symbol}</span>
                     </div>
-                    <div className="flex justify-between text-xs font-semibold border-t border-blue-500/20 pt-1">
-                      <span className="text-blue-200">Total:</span>
-                      <span className="text-blue-200">{fromWei(priceBigInt + (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n, TOKEN_DECIMALS[selectedToken.symbol] ?? 18)} {selectedToken.symbol}</span>
+                    <div className="border-t border-amber-500/20 pt-1">
+                      <p className="text-[10px] text-amber-200/80">Buyer will pay exactly your listing price ({fromWei(priceBigInt, TOKEN_DECIMALS[selectedToken.symbol] ?? 18)} {selectedToken.symbol}) - no additional fees.</p>
                     </div>
                   </div>
                 </div>

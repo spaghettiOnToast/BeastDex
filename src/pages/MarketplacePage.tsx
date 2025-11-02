@@ -12,12 +12,21 @@ import {
   BEASTS_COLLECTION_ADDRESS,
   CLIENT_FEE_BP,
   CLIENT_FEE_RECEIVER,
+  DEFAULT_LISTING_DURATION_SECONDS,
 } from "../services/marketplace/constants";
+import { cancelListingFlow } from "../services/marketplace/flows";
 import {
-  cancelListingFlow,
-} from "../services/marketplace/flows";
-import { useMarketplaceActions, useMarketplace, type OrderModel, type SaleEvent } from "@cartridge/marketplace";
-import { useArcadeListedTokensForCollection, useArcadeIsTokenListed } from "../hooks/useArcadeOrders";
+  useMarketplaceActions,
+  useMarketplace,
+  type OrderModel,
+  type SaleEvent,
+  NAMESPACE,
+} from "@cartridge/marketplace";
+import { parseDojoCall } from "@dojoengine/core";
+import {
+  useArcadeListedTokensForCollection,
+  useArcadeIsTokenListed,
+} from "../hooks/useArcadeOrders";
 import { hydrateOrders } from "../services/marketplace";
 import type { Beast, BeastAttributeFilters } from "../services/beast";
 import { fetchBeastAttributeFilters, fetchBeasts } from "../services/beast";
@@ -25,8 +34,14 @@ import FiltersButton from "../components/filters/FiltersButton";
 import { FiltersDrawer } from "../components/filters/FiltersDrawer";
 import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
 import { cn } from "../lib/utils";
-import { formatPrice, fromWei, TOKEN_DECIMALS, formatPriceInSymbol } from "../utils/price";
-import { usePriceRates } from "../services/marketplace/rates";
+import {
+  formatPrice,
+  fromWei,
+  toWei,
+  TOKEN_DECIMALS,
+  formatPriceInSymbol,
+} from "../utils/price";
+import { usePriceRates, type RatesInSTRK } from "../services/marketplace/rates";
 import { toBigIntSafe } from "../utils/bigint";
 import CartListDialog from "../components/marketplace/CartListDialog";
 import EditListingDialog from "../components/marketplace/EditListingDialog";
@@ -34,9 +49,13 @@ import PurchaseConfirmDialog from "../components/marketplace/PurchaseConfirmDial
 import PurchaseCartDialog from "../components/marketplace/PurchaseCartDialog";
 import MakeOfferDialog from "../components/marketplace/MakeOfferDialog";
 import OffersDialog from "../components/marketplace/OffersDialog";
+import UnifiedCartDialog from "../components/marketplace/UnifiedCartDialog";
 import { ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
-import { checkSufficientBalance, ensureErc20Allowance } from "../services/marketplace/approvals";
+import {
+  checkSufficientBalance,
+  ensureErc20Allowance,
+} from "../services/marketplace/approvals";
 
 const HIDDEN_FILTER_TRAITS = new Set([
   "adventurerkilledcount",
@@ -51,7 +70,10 @@ const HIDDEN_FILTER_TRAITS = new Set([
 // Use shared safe BigInt conversion to handle scientific-notation strings
 const toBigInt = toBigIntSafe;
 
-function getAttributeValues(beast: Beast | null | undefined, trait: string): string[] {
+function getAttributeValues(
+  beast: Beast | null | undefined,
+  trait: string
+): string[] {
   if (!beast) return [];
   const target = trait.toLowerCase();
   return (beast.attributes ?? [])
@@ -59,14 +81,20 @@ function getAttributeValues(beast: Beast | null | undefined, trait: string): str
     .map((attr) => String(attr.value ?? ""));
 }
 
-function getNumericAttribute(beast: Beast | null | undefined, trait: string): number | null {
+function getNumericAttribute(
+  beast: Beast | null | undefined,
+  trait: string
+): number | null {
   const values = getAttributeValues(beast, trait);
   if (values.length === 0) return null;
   const numberValue = Number(values[0]);
   return Number.isFinite(numberValue) ? numberValue : null;
 }
 
-function matchesAttributeFilters(listing: Listing, filters: BeastAttributeFilters): boolean {
+function matchesAttributeFilters(
+  listing: Listing,
+  filters: BeastAttributeFilters
+): boolean {
   const entries = Object.entries(filters || {});
   if (entries.length === 0) {
     return true;
@@ -84,7 +112,10 @@ function matchesAttributeFilters(listing: Listing, filters: BeastAttributeFilter
   });
 }
 
-function matchesBeastFilters(beast: Beast, filters: BeastAttributeFilters): boolean {
+function matchesBeastFilters(
+  beast: Beast,
+  filters: BeastAttributeFilters
+): boolean {
   const entries = Object.entries(filters || {});
   if (entries.length === 0) {
     return true;
@@ -104,44 +135,105 @@ function matchesBeastFilters(beast: Beast, filters: BeastAttributeFilters): bool
   });
 }
 
-function sortListings(listings: Listing[], option: SortOption): Listing[] {
+function sortListings(
+  listings: Listing[],
+  option: SortOption,
+  priceRates?: RatesInSTRK | null
+): Listing[] {
   const copy = [...listings];
 
-  const compareStrings = (a: string | null | undefined, b: string | null | undefined) => {
+  const compareStrings = (
+    a: string | null | undefined,
+    b: string | null | undefined
+  ) => {
     const left = (a ?? "").toLowerCase();
     const right = (b ?? "").toLowerCase();
     return left.localeCompare(right);
   };
 
+  // Helper to normalize price to STRK for comparison
+  const getPriceInSTRK = (listing: Listing): bigint => {
+    try {
+      const price = BigInt(listing.price);
+      const token = getPaymentTokenByAddress(listing.paymentToken);
+      const tokenSymbol = token?.symbol?.toUpperCase() ?? "STRK";
+
+      // If no rates available or token is STRK, return as-is
+      if (!priceRates || tokenSymbol === "STRK") {
+        return price;
+      }
+
+      // Get the rate for this token (e.g., rates.LORDS means "X STRK = 1 LORDS")
+      const rate = priceRates[tokenSymbol as keyof typeof priceRates];
+      if (!rate || rate <= 0) {
+        return price; // Fall back to raw price if rate unavailable
+      }
+
+      // Convert to STRK: price_in_token * rate = price_in_strk
+      // Use floating point for the multiplication, then convert back to BigInt
+      const priceNum = Number(price);
+      const normalizedPrice = priceNum * rate;
+      return BigInt(Math.floor(normalizedPrice));
+    } catch {
+      return BigInt(listing.price);
+    }
+  };
+
   switch (option) {
     case "beast-asc":
       return copy.sort((a, b) => {
-        const traitA = getAttributeValues(a.beast ?? null, "Beast")[0] ?? a.beast?.name ?? "";
-        const traitB = getAttributeValues(b.beast ?? null, "Beast")[0] ?? b.beast?.name ?? "";
-        return compareStrings(traitA, traitB) || a.tokenId.localeCompare(b.tokenId);
+        const traitA =
+          getAttributeValues(a.beast ?? null, "Beast")[0] ??
+          a.beast?.name ??
+          "";
+        const traitB =
+          getAttributeValues(b.beast ?? null, "Beast")[0] ??
+          b.beast?.name ??
+          "";
+        return (
+          compareStrings(traitA, traitB) || a.tokenId.localeCompare(b.tokenId)
+        );
       });
     case "beast-desc":
       return copy.sort((a, b) => {
-        const traitA = getAttributeValues(a.beast ?? null, "Beast")[0] ?? a.beast?.name ?? "";
-        const traitB = getAttributeValues(b.beast ?? null, "Beast")[0] ?? b.beast?.name ?? "";
-        return compareStrings(traitB, traitA) || a.tokenId.localeCompare(b.tokenId);
+        const traitA =
+          getAttributeValues(a.beast ?? null, "Beast")[0] ??
+          a.beast?.name ??
+          "";
+        const traitB =
+          getAttributeValues(b.beast ?? null, "Beast")[0] ??
+          b.beast?.name ??
+          "";
+        return (
+          compareStrings(traitB, traitA) || a.tokenId.localeCompare(b.tokenId)
+        );
       });
     case "tier-asc":
       return copy.sort((a, b) => {
-        const tierA = getNumericAttribute(a.beast ?? null, "Tier") ?? Number.POSITIVE_INFINITY;
-        const tierB = getNumericAttribute(b.beast ?? null, "Tier") ?? Number.POSITIVE_INFINITY;
+        const tierA =
+          getNumericAttribute(a.beast ?? null, "Tier") ??
+          Number.POSITIVE_INFINITY;
+        const tierB =
+          getNumericAttribute(b.beast ?? null, "Tier") ??
+          Number.POSITIVE_INFINITY;
         return tierA - tierB || a.tokenId.localeCompare(b.tokenId);
       });
     case "tier-desc":
       return copy.sort((a, b) => {
-        const tierA = getNumericAttribute(a.beast ?? null, "Tier") ?? Number.POSITIVE_INFINITY;
-        const tierB = getNumericAttribute(b.beast ?? null, "Tier") ?? Number.POSITIVE_INFINITY;
+        const tierA =
+          getNumericAttribute(a.beast ?? null, "Tier") ??
+          Number.POSITIVE_INFINITY;
+        const tierB =
+          getNumericAttribute(b.beast ?? null, "Tier") ??
+          Number.POSITIVE_INFINITY;
         return tierB - tierA || a.tokenId.localeCompare(b.tokenId);
       });
     case "health-desc":
       return copy.sort((a, b) => {
-        const healthA = getNumericAttribute(a.beast ?? null, "Health") ?? -Infinity;
-        const healthB = getNumericAttribute(b.beast ?? null, "Health") ?? -Infinity;
+        const healthA =
+          getNumericAttribute(a.beast ?? null, "Health") ?? -Infinity;
+        const healthB =
+          getNumericAttribute(b.beast ?? null, "Health") ?? -Infinity;
         if (healthA === healthB) {
           return a.tokenId.localeCompare(b.tokenId);
         }
@@ -149,8 +241,10 @@ function sortListings(listings: Listing[], option: SortOption): Listing[] {
       });
     case "health-asc":
       return copy.sort((a, b) => {
-        const healthA = getNumericAttribute(a.beast ?? null, "Health") ?? -Infinity;
-        const healthB = getNumericAttribute(b.beast ?? null, "Health") ?? -Infinity;
+        const healthA =
+          getNumericAttribute(a.beast ?? null, "Health") ?? -Infinity;
+        const healthB =
+          getNumericAttribute(b.beast ?? null, "Health") ?? -Infinity;
         if (healthA === healthB) {
           return a.tokenId.localeCompare(b.tokenId);
         }
@@ -158,14 +252,22 @@ function sortListings(listings: Listing[], option: SortOption): Listing[] {
       });
     case "rank-asc":
       return copy.sort((a, b) => {
-        const rankA = getNumericAttribute(a.beast ?? null, "Rank") ?? Number.POSITIVE_INFINITY;
-        const rankB = getNumericAttribute(b.beast ?? null, "Rank") ?? Number.POSITIVE_INFINITY;
+        const rankA =
+          getNumericAttribute(a.beast ?? null, "Rank") ??
+          Number.POSITIVE_INFINITY;
+        const rankB =
+          getNumericAttribute(b.beast ?? null, "Rank") ??
+          Number.POSITIVE_INFINITY;
         return rankA - rankB || a.tokenId.localeCompare(b.tokenId);
       });
     case "rank-desc":
       return copy.sort((a, b) => {
-        const rankA = getNumericAttribute(a.beast ?? null, "Rank") ?? Number.POSITIVE_INFINITY;
-        const rankB = getNumericAttribute(b.beast ?? null, "Rank") ?? Number.POSITIVE_INFINITY;
+        const rankA =
+          getNumericAttribute(a.beast ?? null, "Rank") ??
+          Number.POSITIVE_INFINITY;
+        const rankB =
+          getNumericAttribute(b.beast ?? null, "Rank") ??
+          Number.POSITIVE_INFINITY;
         return rankB - rankA || a.tokenId.localeCompare(b.tokenId);
       });
     case "last-death-desc":
@@ -201,8 +303,8 @@ function sortListings(listings: Listing[], option: SortOption): Listing[] {
     case "price-asc":
       return copy.sort((a, b) => {
         try {
-          const priceA = BigInt(a.price);
-          const priceB = BigInt(b.price);
+          const priceA = getPriceInSTRK(a);
+          const priceB = getPriceInSTRK(b);
           if (priceA === priceB) {
             return a.tokenId.localeCompare(b.tokenId);
           }
@@ -214,8 +316,8 @@ function sortListings(listings: Listing[], option: SortOption): Listing[] {
     case "price-desc":
       return copy.sort((a, b) => {
         try {
-          const priceA = BigInt(a.price);
-          const priceB = BigInt(b.price);
+          const priceA = getPriceInSTRK(a);
+          const priceB = getPriceInSTRK(b);
           if (priceA === priceB) {
             return a.tokenId.localeCompare(b.tokenId);
           }
@@ -265,8 +367,10 @@ function sortBeasts(beasts: Beast[], option: SortOption): Beast[] {
       });
     case "tier-asc":
       return copy.sort((a, b) => {
-        const tierA = getNumericAttribute(a, "Tier") ?? Number.POSITIVE_INFINITY;
-        const tierB = getNumericAttribute(b, "Tier") ?? Number.POSITIVE_INFINITY;
+        const tierA =
+          getNumericAttribute(a, "Tier") ?? Number.POSITIVE_INFINITY;
+        const tierB =
+          getNumericAttribute(b, "Tier") ?? Number.POSITIVE_INFINITY;
         if (tierA === tierB) {
           return a.numericId - b.numericId;
         }
@@ -274,8 +378,10 @@ function sortBeasts(beasts: Beast[], option: SortOption): Beast[] {
       });
     case "tier-desc":
       return copy.sort((a, b) => {
-        const tierA = getNumericAttribute(a, "Tier") ?? Number.POSITIVE_INFINITY;
-        const tierB = getNumericAttribute(b, "Tier") ?? Number.POSITIVE_INFINITY;
+        const tierA =
+          getNumericAttribute(a, "Tier") ?? Number.POSITIVE_INFINITY;
+        const tierB =
+          getNumericAttribute(b, "Tier") ?? Number.POSITIVE_INFINITY;
         if (tierA === tierB) {
           return a.numericId - b.numericId;
         }
@@ -301,8 +407,10 @@ function sortBeasts(beasts: Beast[], option: SortOption): Beast[] {
       });
     case "rank-asc":
       return copy.sort((a, b) => {
-        const rankA = getNumericAttribute(a, "Rank") ?? Number.POSITIVE_INFINITY;
-        const rankB = getNumericAttribute(b, "Rank") ?? Number.POSITIVE_INFINITY;
+        const rankA =
+          getNumericAttribute(a, "Rank") ?? Number.POSITIVE_INFINITY;
+        const rankB =
+          getNumericAttribute(b, "Rank") ?? Number.POSITIVE_INFINITY;
         if (rankA === rankB) {
           return a.numericId - b.numericId;
         }
@@ -310,8 +418,10 @@ function sortBeasts(beasts: Beast[], option: SortOption): Beast[] {
       });
     case "rank-desc":
       return copy.sort((a, b) => {
-        const rankA = getNumericAttribute(a, "Rank") ?? Number.POSITIVE_INFINITY;
-        const rankB = getNumericAttribute(b, "Rank") ?? Number.POSITIVE_INFINITY;
+        const rankA =
+          getNumericAttribute(a, "Rank") ?? Number.POSITIVE_INFINITY;
+        const rankB =
+          getNumericAttribute(b, "Rank") ?? Number.POSITIVE_INFINITY;
         if (rankA === rankB) {
           return a.numericId - b.numericId;
         }
@@ -375,7 +485,7 @@ function ViewToggle({
     {
       value: "explore",
       label: "Explore Listings",
-      description: "Browse every active sale on BeastDex.",
+      description: "Browse and purchase beasts from other users.",
     },
     {
       value: "my",
@@ -420,21 +530,30 @@ export default function MarketplacePage() {
   // Debug: Log marketplace provider configuration
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    console.log('=== MARKETPLACE PROVIDER CONFIG ===');
-    console.log('Provider:', marketplace.provider);
-    console.log('Chain ID:', marketplace.chainId);
-    console.log('Manifest:', marketplace.provider?.manifest);
-    console.log('Torii URL from config:', (marketplace.provider as any)?.url || 'N/A');
+    console.log("=== MARKETPLACE PROVIDER CONFIG ===");
+    console.log("Provider:", marketplace.provider);
+    console.log("Chain ID:", marketplace.chainId);
+    console.log("Manifest:", marketplace.provider?.manifest);
+    console.log(
+      "Torii URL from config:",
+      (marketplace.provider as any)?.url || "N/A"
+    );
   }, [marketplace]);
 
   const [activeTab, setActiveTab] = useState<MarketplaceView>("explore");
-  const [exploreSubTab, setExploreSubTab] = useState<"browse" | "recent-listed" | "recent-sold">("browse");
-  const [myActivitySubTab, setMyActivitySubTab] = useState<"listings" | "beasts" | "transactions">("listings");
+  const [exploreSubTab, setExploreSubTab] = useState<
+    "browse" | "recent-listed" | "recent-sold"
+  >("browse");
+  const [myActivitySubTab, setMyActivitySubTab] = useState<
+    "listings" | "beasts" | "transactions"
+  >("listings");
   const [listings, setListings] = useState<Listing[]>([]);
   const [showAllMyListings, setShowAllMyListings] = useState(false);
   const [hydratingListings, setHydratingListings] = useState(false);
   const [listingsError, setListingsError] = useState<string | null>(null);
-  const [recentSales, setRecentSales] = useState<Array<{ sale: SaleEvent; beast: Beast | null }>>([]);
+  const [recentSales, setRecentSales] = useState<
+    Array<{ sale: SaleEvent; beast: Beast | null }>
+  >([]);
   const [loadingSales, setLoadingSales] = useState(false);
   const [recentListings, setRecentListings] = useState<Listing[]>([]);
   const [loadingRecentListings, setLoadingRecentListings] = useState(false);
@@ -442,21 +561,32 @@ export default function MarketplacePage() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingListing, setEditingListing] = useState<Listing | null>(null);
   const [purchaseConfirmOpen, setPurchaseConfirmOpen] = useState(false);
-  const [purchasingListing, setPurchasingListing] = useState<Listing | null>(null);
+  const [purchasingListing, setPurchasingListing] = useState<Listing | null>(
+    null
+  );
   const [purchaseCartOpen, setPurchaseCartOpen] = useState(false);
   const [purchasingBatch, setPurchasingBatch] = useState(false);
   const [makeOfferOpen, setMakeOfferOpen] = useState(false);
   const [offerBeast, setOfferBeast] = useState<Beast | null>(null);
-  const [offerTokenId, setOfferTokenId] = useState<string | undefined>(undefined);
+  const [offerTokenId, setOfferTokenId] = useState<string | undefined>(
+    undefined
+  );
   const [offersDialogOpen, setOffersDialogOpen] = useState(false);
-  const [selectedListingForOffers, setSelectedListingForOffers] = useState<Listing | null>(null);
+  const [selectedListingForOffers, setSelectedListingForOffers] =
+    useState<Listing | null>(null);
   const [offersForToken, setOffersForToken] = useState<OrderModel[]>([]);
   const [cartBeasts, setCartBeasts] = useState<Beast[]>([]);
   const [purchaseCart, setPurchaseCart] = useState<Listing[]>([]);
+  const [unifiedCartOpen, setUnifiedCartOpen] = useState(false);
+  const [beastPrices, setBeastPrices] = useState<Map<string, string>>(new Map());
+  const [selectedPaymentToken, setSelectedPaymentToken] = useState(DEFAULT_PAYMENT_TOKEN);
+  const [listingBatch, setListingBatch] = useState(false);
   const [visibleListingCount, setVisibleListingCount] = useState(120);
 
-  const [availableFilters, setAvailableFilters] = useState<BeastAttributeFilters>({});
-  const [attributeFilters, setAttributeFilters] = useState<BeastAttributeFilters>({});
+  const [availableFilters, setAvailableFilters] =
+    useState<BeastAttributeFilters>({});
+  const [attributeFilters, setAttributeFilters] =
+    useState<BeastAttributeFilters>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filtersLoading, setFiltersLoading] = useState(true);
   const [filtersError, setFiltersError] = useState<string | null>(null);
@@ -466,25 +596,36 @@ export default function MarketplacePage() {
   const [userBeastsLoading, setUserBeastsLoading] = useState(false);
   const [userBeastsError, setUserBeastsError] = useState<string | null>(null);
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
-  const [displayCurrency, setDisplayCurrency] = useState<'STRK' | 'LORDS' | 'USDC' | 'ETH' | 'SURVIVOR'>('LORDS');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'expired' | 'canceled' | 'sold'>('active');
+  const [displayCurrency, setDisplayCurrency] = useState<
+    "STRK" | "LORDS" | "USDC" | "ETH" | "SURVIVOR"
+  >("LORDS");
   const [hideExpired, setHideExpired] = useState(false);
   const { data: priceRates } = usePriceRates();
 
   const [buyingListingId, setBuyingListingId] = useState<string | null>(null);
-  const [cancelingListingId, setCancelingListingId] = useState<string | null>(null);
+  const [cancelingListingId, setCancelingListingId] = useState<string | null>(
+    null
+  );
   const [acceptingOfferId, setAcceptingOfferId] = useState<string | null>(null);
-  const [hiddenListingIds, setHiddenListingIds] = useState<Set<string>>(new Set());
-  type TxEntry = { type: 'list'|'cancel'|'buy'|'edit'|'offer'; tokenId: string; txHash?: string; timestamp: number; note?: string };
+  const [hiddenListingIds, setHiddenListingIds] = useState<Set<string>>(
+    new Set()
+  );
+  type TxEntry = {
+    type: "list" | "cancel" | "buy" | "edit" | "offer";
+    tokenId: string;
+    txHash?: string;
+    timestamp: number;
+    note?: string;
+  };
   const [myTxs, setMyTxs] = useState<TxEntry[]>([]);
-  const ACTIVITY_STORAGE_KEY = 'beastdex:my-activity';
-  const VOYAGER_BASE = 'https://voyager.online';
-  const HIDDEN_STORAGE_KEY = 'beastdex:hidden-listings';
+  const ACTIVITY_STORAGE_KEY = "beastdex:my-activity";
+  const VOYAGER_BASE = "https://voyager.online";
+  const HIDDEN_STORAGE_KEY = "beastdex:hidden-listings";
 
   // Debug: Log price rates when they change
   useEffect(() => {
-    console.log('[MarketplacePage] Price Rates:', priceRates);
-    console.log('[MarketplacePage] Display Currency:', displayCurrency);
+    console.log("[MarketplacePage] Price Rates:", priceRates);
+    console.log("[MarketplacePage] Display Currency:", displayCurrency);
   }, [priceRates, displayCurrency]);
 
   // Load saved activity on mount
@@ -495,10 +636,10 @@ export default function MarketplacePage() {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         const cleaned: TxEntry[] = parsed
-          .filter((e) => e && typeof e === 'object')
+          .filter((e) => e && typeof e === "object")
           .map((e) => ({
             type: e.type,
-            tokenId: String(e.tokenId ?? ''),
+            tokenId: String(e.tokenId ?? ""),
             txHash: e.txHash ? String(e.txHash) : undefined,
             timestamp: Number(e.timestamp ?? Date.now()),
             note: e.note ? String(e.note) : undefined,
@@ -529,7 +670,10 @@ export default function MarketplacePage() {
   // Persist hidden listings when changed
   useEffect(() => {
     try {
-      localStorage.setItem(HIDDEN_STORAGE_KEY, JSON.stringify(Array.from(hiddenListingIds)));
+      localStorage.setItem(
+        HIDDEN_STORAGE_KEY,
+        JSON.stringify(Array.from(hiddenListingIds))
+      );
     } catch {}
   }, [hiddenListingIds]);
 
@@ -541,31 +685,44 @@ export default function MarketplacePage() {
     isFetching: ordersFetching,
     refetch: refetchOrders,
     error: ordersError,
-  } = useArcadeListedTokensForCollection(BEASTS_COLLECTION_ADDRESS) as unknown as {
+  } = useArcadeListedTokensForCollection(
+    BEASTS_COLLECTION_ADDRESS
+  ) as unknown as {
     data: OrderModel[];
     isLoading: boolean;
     isFetching: boolean;
     refetch: () => Promise<any>;
     error: unknown;
   };
-  const { executeListing, cancel, list, executeOffer } = useMarketplaceActions();
+  const { executeListing, cancel, list, executeOffer } =
+    useMarketplaceActions();
 
   // Debug: Check for errors fetching orders
   useEffect(() => {
     if (ordersError) {
-      console.error('❌ ERROR fetching orders from Cartridge SDK:', ordersError);
+      console.error(
+        "❌ ERROR fetching orders from Cartridge SDK:",
+        ordersError
+      );
     }
   }, [ordersError]);
 
   // Debug: Check direct listing status for beast 1278
-  const tokenIdForDebug = '1278';
-  const { data: listedCheck } = useArcadeIsTokenListed(BEASTS_COLLECTION_ADDRESS, tokenIdForDebug) as unknown as {
+  const tokenIdForDebug = "1278";
+  const { data: listedCheck } = useArcadeIsTokenListed(
+    BEASTS_COLLECTION_ADDRESS,
+    tokenIdForDebug
+  ) as unknown as {
     data: { isListed: boolean; listing: OrderModel | null };
   };
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     if (listedCheck) {
-      console.log('🔎 isTokenListed check for 1278:', listedCheck.isListed, listedCheck.listing);
+      console.log(
+        "🔎 isTokenListed check for 1278:",
+        listedCheck.isListed,
+        listedCheck.listing
+      );
     }
   }, [listedCheck]);
 
@@ -575,30 +732,41 @@ export default function MarketplacePage() {
     const checkOrderDirectly = async () => {
       try {
         // Build the Torii SQL URL from the same config the SDK uses
-        const { configs } = await import('@cartridge/marketplace');
-        const { constants } = await import('starknet');
+        const { configs } = await import("@cartridge/marketplace");
+        const { constants } = await import("starknet");
         const dojoConfig = configs[constants.StarknetChainId.SN_MAIN];
-        const base = dojoConfig.toriiUrl?.replace(/\/$/, '') || 'https://api.cartridge.gg/x/arcade-main/torii';
+        const base =
+          dojoConfig.toriiUrl?.replace(/\/$/, "") ||
+          "https://api.cartridge.gg/x/arcade-main/torii";
         const sqlUrl = `${base}/sql`;
 
         // Helper to run a GET SQL query with ?query= to match Torii API
         const run = async (query: string) => {
           const url = `${sqlUrl}?query=${encodeURIComponent(query)}`;
-          const res = await fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } });
+          const res = await fetch(url, {
+            method: "GET",
+            headers: { Accept: "application/json" },
+          });
           const text = await res.text();
           let json: any = null;
-          try { json = JSON.parse(text); } catch {}
+          try {
+            json = JSON.parse(text);
+          } catch {}
           return { ok: res.ok, status: res.status, bodyText: text, body: json };
         };
 
-        console.log('🔎 Torii SQL endpoint:', sqlUrl);
+        console.log("🔎 Torii SQL endpoint:", sqlUrl);
 
         // First, discover tables so we stop guessing names
-        const tables = await run('SHOW TABLES');
+        const tables = await run("SHOW TABLES");
         if (!tables.ok) {
-          console.log('❌ SHOW TABLES failed:', tables.status, tables.body || tables.bodyText);
+          console.log(
+            "❌ SHOW TABLES failed:",
+            tables.status,
+            tables.body || tables.bodyText
+          );
         } else {
-          console.log('📋 SHOW TABLES:', tables.body || tables.bodyText);
+          console.log("📋 SHOW TABLES:", tables.body || tables.bodyText);
         }
 
         // Try Arcade and Marketplace model names (DuckDB-style quoting for '-')
@@ -611,17 +779,22 @@ export default function MarketplacePage() {
         ];
 
         for (const query of queries) {
-          console.log('🔍 Trying SQL query:', query);
+          console.log("🔍 Trying SQL query:", query);
           const res = await run(query);
           if (res.ok && res.body && !res.body.error) {
-            console.log('✅ SQL query succeeded:', query);
-            console.log('Result:', res.body);
+            console.log("✅ SQL query succeeded:", query);
+            console.log("Result:", res.body);
             break;
           }
-          console.log('❌ SQL query failed:', query, res.status, res.body || res.bodyText);
+          console.log(
+            "❌ SQL query failed:",
+            query,
+            res.status,
+            res.body || res.bodyText
+          );
         }
       } catch (error) {
-        console.error('❌ Direct SQL check failed:', error);
+        console.error("❌ Direct SQL check failed:", error);
       }
     };
 
@@ -635,25 +808,30 @@ export default function MarketplacePage() {
     if (!import.meta.env.DEV) return;
     if (ordersLoading || ordersFetching) return;
 
-    console.log('=== RAW MARKETPLACE ORDERS ===');
-    console.log('Collection:', BEASTS_COLLECTION_ADDRESS);
-    console.log('Orders count:', listedOrders.length);
-    console.log('Loading:', ordersLoading, 'Fetching:', ordersFetching);
-    console.log('All orders:', listedOrders.map(o => ({
-      id: o.id,
-      identifier: o.identifier,
-      tokenId: o.tokenId?.toString(),
-      quantity: o.quantity,
-      price: o.price,
-      category: o.category?.value,
-      status: o.status?.value,
-      owner: o.owner,
-      expiration: o.expiration,
-    })));
+    console.log("=== RAW MARKETPLACE ORDERS ===");
+    console.log("Collection:", BEASTS_COLLECTION_ADDRESS);
+    console.log("Orders count:", listedOrders.length);
+    console.log("Loading:", ordersLoading, "Fetching:", ordersFetching);
+    console.log(
+      "All orders:",
+      listedOrders.map((o) => ({
+        id: o.id,
+        identifier: o.identifier,
+        tokenId: o.tokenId?.toString(),
+        quantity: o.quantity,
+        price: o.price,
+        category: o.category?.value,
+        status: o.status?.value,
+        owner: o.owner,
+        expiration: o.expiration,
+      }))
+    );
 
-    const order1278 = listedOrders.find(o => o.tokenId?.toString() === '1278');
+    const order1278 = listedOrders.find(
+      (o) => o.tokenId?.toString() === "1278"
+    );
     if (order1278) {
-      console.log('✅ Found order for beast 1278:', {
+      console.log("✅ Found order for beast 1278:", {
         id: order1278.id,
         identifier: order1278.identifier,
         tokenId: order1278.tokenId?.toString(),
@@ -664,10 +842,12 @@ export default function MarketplacePage() {
         owner: order1278.owner,
         currency: order1278.currency,
         expiration: order1278.expiration,
-        expirationDate: order1278.expiration ? new Date(order1278.expiration * 1000).toLocaleString() : 'N/A',
+        expirationDate: order1278.expiration
+          ? new Date(order1278.expiration * 1000).toLocaleString()
+          : "N/A",
       });
     } else if (listedOrders.length > 0) {
-      console.log('❌ No order found for beast 1278 in raw data');
+      console.log("❌ No order found for beast 1278 in raw data");
     }
   }, [listedOrders, ordersLoading, ordersFetching]);
 
@@ -680,16 +860,21 @@ export default function MarketplacePage() {
         setFiltersError(null);
         const filters = await fetchBeastAttributeFilters();
         if (cancelled) return;
-        const cleanedEntries = (Array.isArray(Object.entries(filters))
-          ? (Object.entries(filters) as Array<[string, string[]]> )
-          : [])
-          .filter(([trait]) => !HIDDEN_FILTER_TRAITS.has(trait.toLowerCase()));
-        const cleaned = Object.fromEntries(cleanedEntries) as BeastAttributeFilters;
+        const cleanedEntries = (
+          Array.isArray(Object.entries(filters))
+            ? (Object.entries(filters) as Array<[string, string[]]>)
+            : []
+        ).filter(([trait]) => !HIDDEN_FILTER_TRAITS.has(trait.toLowerCase()));
+        const cleaned = Object.fromEntries(
+          cleanedEntries
+        ) as BeastAttributeFilters;
         setAvailableFilters(cleaned);
         setAttributeFilters((prev) => {
-          const nextEntries = (Object.entries(prev) as Array<[string, string[]]>).filter(([
-            trait,
-          ]) => Object.prototype.hasOwnProperty.call(cleaned, trait));
+          const nextEntries = (
+            Object.entries(prev) as Array<[string, string[]]>
+          ).filter(([trait]) =>
+            Object.prototype.hasOwnProperty.call(cleaned, trait)
+          );
           return Object.fromEntries(nextEntries) as BeastAttributeFilters;
         });
       } catch (error) {
@@ -737,14 +922,14 @@ export default function MarketplacePage() {
       // Only show skeletons if we have a reasonable number
       // Otherwise it causes performance issues
       if (listedOrders.length <= 200) {
-        const skeletons = listedOrders.map(order => ({
+        const skeletons = listedOrders.map((order) => ({
           listingId: order.identifier,
           tokenId: order.tokenId.toString(),
           seller: order.owner,
           price: order.price.toString(),
           paymentToken: order.currency,
           active: false, // Will be updated after hydration
-          status: 'active' as const,
+          status: "active" as const,
           quantity: order.quantity,
           expiration: order.expiration,
           beast: null,
@@ -759,13 +944,14 @@ export default function MarketplacePage() {
 
         // Enhanced debugging for marketplace listings
         if (import.meta.env.DEV) {
-          console.log('=== MARKETPLACE LISTINGS DEBUG ===');
-          console.log('Total orders from indexer:', listingsData.length);
-          console.log('Status breakdown:', {
-            active: listingsData.filter(l => l.status === 'active').length,
-            expired: listingsData.filter(l => l.status === 'expired').length,
-            canceled: listingsData.filter(l => l.status === 'canceled').length,
-            sold: listingsData.filter(l => l.status === 'sold').length,
+          console.log("=== MARKETPLACE LISTINGS DEBUG ===");
+          console.log("Total orders from indexer:", listingsData.length);
+          console.log("Status breakdown:", {
+            active: listingsData.filter((l) => l.status === "active").length,
+            expired: listingsData.filter((l) => l.status === "expired").length,
+            canceled: listingsData.filter((l) => l.status === "canceled")
+              .length,
+            sold: listingsData.filter((l) => l.status === "sold").length,
           });
         }
 
@@ -776,11 +962,19 @@ export default function MarketplacePage() {
         console.error("Failed to hydrate marketplace listings", error);
         if (!cancelled) {
           setListings([]);
-          const errorMsg = error instanceof Error ? error.message : "Failed to load listings";
-          if (errorMsg.includes("502") || errorMsg.includes("can't reach deployment")) {
-            setListingsError("Indexer service is temporarily unavailable. Listings data cannot be displayed right now. Please try again in a few minutes.");
+          const errorMsg =
+            error instanceof Error ? error.message : "Failed to load listings";
+          if (
+            errorMsg.includes("502") ||
+            errorMsg.includes("can't reach deployment")
+          ) {
+            setListingsError(
+              "Indexer service is temporarily unavailable. Listings data cannot be displayed right now. Please try again in a few minutes."
+            );
           } else {
-            setListingsError("Failed to load marketplace listings. Please try again.");
+            setListingsError(
+              "Failed to load marketplace listings. Please try again."
+            );
           }
         }
       } finally {
@@ -826,14 +1020,20 @@ export default function MarketplacePage() {
       }
 
       if (import.meta.env.DEV) {
-        console.log('reloadUserBeasts: Loaded', results.length, 'beasts');
+        console.log("reloadUserBeasts: Loaded", results.length, "beasts");
       }
       setUserBeasts(results);
     } catch (error) {
       console.error("Failed to load user beasts", error);
-      const errorMsg = error instanceof Error ? error.message : "Failed to load beasts";
-      if (errorMsg.includes("502") || errorMsg.includes("can't reach deployment")) {
-        setUserBeastsError("Indexer service is temporarily unavailable. Your beasts are safe on-chain, but can't be displayed right now. Please try again in a few minutes.");
+      const errorMsg =
+        error instanceof Error ? error.message : "Failed to load beasts";
+      if (
+        errorMsg.includes("502") ||
+        errorMsg.includes("can't reach deployment")
+      ) {
+        setUserBeastsError(
+          "Indexer service is temporarily unavailable. Your beasts are safe on-chain, but can't be displayed right now. Please try again in a few minutes."
+        );
       } else {
         setUserBeastsError("Failed to load beasts. Please try again.");
       }
@@ -847,7 +1047,7 @@ export default function MarketplacePage() {
     const load = async () => {
       if (!address) {
         if (import.meta.env.DEV) {
-          console.log('User Beasts: No address, clearing beasts');
+          console.log("User Beasts: No address, clearing beasts");
         }
         setUserBeasts([]);
         setUserBeastsError(null);
@@ -855,7 +1055,7 @@ export default function MarketplacePage() {
         return;
       }
       if (import.meta.env.DEV) {
-        console.log('User Beasts: Loading for address:', address);
+        console.log("User Beasts: Loading for address:", address);
       }
       setUserBeastsLoading(true);
       setUserBeastsError(null);
@@ -882,7 +1082,7 @@ export default function MarketplacePage() {
 
         if (!cancelled) {
           if (import.meta.env.DEV) {
-            console.log('User Beasts: Loaded', results.length, 'beasts');
+            console.log("User Beasts: Loaded", results.length, "beasts");
           }
           setUserBeasts(results);
           setUserBeastsError(null);
@@ -890,9 +1090,15 @@ export default function MarketplacePage() {
       } catch (error) {
         console.error("Failed to fetch user beasts", error);
         if (!cancelled) {
-          const errorMsg = error instanceof Error ? error.message : "Failed to load beasts";
-          if (errorMsg.includes("502") || errorMsg.includes("can't reach deployment")) {
-            setUserBeastsError("Indexer service is temporarily unavailable. Your beasts are safe on-chain, but can't be displayed right now. Please try again in a few minutes.");
+          const errorMsg =
+            error instanceof Error ? error.message : "Failed to load beasts";
+          if (
+            errorMsg.includes("502") ||
+            errorMsg.includes("can't reach deployment")
+          ) {
+            setUserBeastsError(
+              "Indexer service is temporarily unavailable. Your beasts are safe on-chain, but can't be displayed right now. Please try again in a few minutes."
+            );
           } else {
             setUserBeastsError("Failed to load beasts. Please try again.");
           }
@@ -961,7 +1167,12 @@ export default function MarketplacePage() {
     let cancelled = false;
 
     const loadRecentSales = async () => {
-      if (activeTab !== "explore" || exploreSubTab !== "recent-sold" || !marketplace.sales) return;
+      if (
+        activeTab !== "explore" ||
+        exploreSubTab !== "recent-sold" ||
+        !marketplace.sales
+      )
+        return;
 
       setLoadingSales(true);
       try {
@@ -1017,28 +1228,33 @@ export default function MarketplacePage() {
         )
         .filter((listing) => {
           // Apply "Hide Expired" toggle
-          if (hideExpired && listing.status === 'expired') return false;
-
-          // Apply status filter
-          if (statusFilter === 'all') return true;
-          return listing.status === statusFilter;
+          if (hideExpired && listing.status === "expired") return false;
+          return true;
         })
-        .filter((listing) => matchesAttributeFilters(listing, attributeFilters)),
-    [listings, attributeFilters, hiddenListingIds, statusFilter, hideExpired]
+        .filter((listing) =>
+          matchesAttributeFilters(listing, attributeFilters)
+        ),
+    [listings, attributeFilters, hiddenListingIds, hideExpired]
   );
 
   const sortedListings = useMemo(
-    () => sortListings(filteredListings, sortOption),
-    [filteredListings, sortOption]
+    () => sortListings(filteredListings, sortOption, priceRates),
+    [filteredListings, sortOption, priceRates]
   );
 
   const namedRecentListings = useMemo(
-    () => recentListings.filter((listing) => listing.beast?.name && listing.beast.name.trim().length > 0),
+    () =>
+      recentListings.filter(
+        (listing) => listing.beast?.name && listing.beast.name.trim().length > 0
+      ),
     [recentListings]
   );
 
   const namedRecentSales = useMemo(
-    () => recentSales.filter(({ beast }) => beast?.name && beast.name.trim().length > 0),
+    () =>
+      recentSales.filter(
+        ({ beast }) => beast?.name && beast.name.trim().length > 0
+      ),
     [recentSales]
   );
 
@@ -1085,10 +1301,13 @@ export default function MarketplacePage() {
         window.clearTimeout(timer);
       }
     };
-  }, [sortedListings, activeTab, statusFilter, hideExpired]);
+  }, [sortedListings, activeTab, hideExpired]);
 
   const filteredUserBeasts = useMemo(
-    () => userBeasts.filter((beast) => matchesBeastFilters(beast, attributeFilters)),
+    () =>
+      userBeasts.filter((beast) =>
+        matchesBeastFilters(beast, attributeFilters)
+      ),
     [userBeasts, attributeFilters]
   );
 
@@ -1102,7 +1321,9 @@ export default function MarketplacePage() {
         const beastTypeAttr = beast.attributes.find(
           (attr) => attr.trait_type?.toLowerCase() === "beast"
         );
-        const key = beastTypeAttr?.value ? String(beastTypeAttr.value).trim().toLowerCase() : `unique_${beast.id}`;
+        const key = beastTypeAttr?.value
+          ? String(beastTypeAttr.value).trim().toLowerCase()
+          : `unique_${beast.id}`;
         beastCounts.set(key, (beastCounts.get(key) || 0) + 1);
       });
 
@@ -1111,7 +1332,9 @@ export default function MarketplacePage() {
         const beastTypeAttr = beast.attributes.find(
           (attr) => attr.trait_type?.toLowerCase() === "beast"
         );
-        const key = beastTypeAttr?.value ? String(beastTypeAttr.value).trim().toLowerCase() : `unique_${beast.id}`;
+        const key = beastTypeAttr?.value
+          ? String(beastTypeAttr.value).trim().toLowerCase()
+          : `unique_${beast.id}`;
         return (beastCounts.get(key) || 0) > 1;
       });
     }
@@ -1131,14 +1354,15 @@ export default function MarketplacePage() {
     if (!address) return [] as Listing[];
     const lower = address.toLowerCase();
     const base = showAllMyListings ? listings : sortedListings;
-    return base
-      .filter((listing) => listing.seller.toLowerCase() === lower);
+    return base.filter((listing) => listing.seller.toLowerCase() === lower);
   }, [sortedListings, listings, address, showAllMyListings]);
 
   // Track which token IDs are already actively listed to prevent duplicate listings
   const alreadyListedTokenIds = useMemo(() => {
-    const activeListings = myActiveListings.filter(l => l.status === 'active');
-    return new Set(activeListings.map(l => l.tokenId));
+    const activeListings = myActiveListings.filter(
+      (l) => l.status === "active"
+    );
+    return new Set(activeListings.map((l) => l.tokenId));
   }, [myActiveListings]);
 
   const ownerAddresses = useMemo(
@@ -1165,7 +1389,7 @@ export default function MarketplacePage() {
 
   const handleToggleCart = (beast: Beast) => {
     // Check if beast is already listed
-    const tokenId = beast.id.split(':').pop() || beast.id;
+    const tokenId = beast.id.split(":").pop() || beast.id;
     if (alreadyListedTokenIds.has(tokenId)) {
       toast.error("This beast is already listed on the marketplace");
       return;
@@ -1219,56 +1443,243 @@ export default function MarketplacePage() {
     setPurchaseCart([]);
   };
 
-  const formatPriceLabel = useCallback((listing: Listing) => {
-    const token = getPaymentTokenByAddress(listing.paymentToken ?? undefined);
-    const fromSymbol = token?.symbol ?? "STRK";
+  const handleUpdateBeastPrice = (beastId: string, price: string) => {
+    setBeastPrices((prev) => {
+      const newPrices = new Map(prev);
+      newPrices.set(beastId, price);
+      return newPrices;
+    });
+  };
 
-    // Show price in user's chosen display currency if available
-    if (displayCurrency && priceRates && fromSymbol.toUpperCase() !== displayCurrency.toUpperCase()) {
-      const result = formatPriceInSymbol(listing.price, fromSymbol, displayCurrency, priceRates as any);
+  const { buildListCalls } = useMarketplaceActions();
+
+  const handleExecuteUnifiedCart = useCallback(async () => {
+    if (!account?.address) {
+      toast.error("Please connect your wallet");
+      return;
+    }
+
+    // Check if we have items to process
+    const hasListings = cartBeasts.length > 0;
+    const hasPurchases = purchaseCart.length > 0;
+
+    if (!hasListings && !hasPurchases) {
+      toast.error("Cart is empty");
+      return;
+    }
+
+    const toastId = toast.loading("Processing cart...");
+
+    try {
+      // Process listings first if any
+      if (hasListings) {
+        setListingBatch(true);
+
+        // Filter beasts with valid prices
+        const beastsWithPrices = cartBeasts.filter(beast => {
+          const priceStr = beastPrices.get(beast.id);
+          return priceStr && priceStr.trim() !== "" && Number(priceStr) > 0;
+        });
+
+        if (beastsWithPrices.length === 0) {
+          toast.error("Please set prices for all beasts", { id: toastId });
+          setListingBatch(false);
+          return;
+        }
+
+        // Build all listing calls
+        const allCalls: any[] = [];
+        const expirationSeconds = Math.floor(Date.now() / 1000) + DEFAULT_LISTING_DURATION_SECONDS;
+        const expirationBigInt = BigInt(expirationSeconds);
+
+        for (const beast of beastsWithPrices) {
+          const rawTokenId = beast.id.split(':').pop() || beast.id;
+          const tokenIdBigInt = toBigInt(rawTokenId);
+          const priceStr = beastPrices.get(beast.id) || "0";
+          const decimals = TOKEN_DECIMALS[selectedPaymentToken.symbol] ?? 18;
+          const priceBigInt = toWei(priceStr, decimals);
+
+          // Use buildListCalls with quantity=0 for ERC721
+          const [approvalCall, listCall] = buildListCalls(
+            BEASTS_COLLECTION_ADDRESS,
+            tokenIdBigInt,
+            0n, // quantity = 0 for ERC721 (non-fungible)
+            priceBigInt,
+            selectedPaymentToken.address,
+            expirationBigInt
+          );
+
+          // Parse the list call through Dojo
+          const parsedListCall = (parseDojoCall as any)(marketplace.provider.manifest, NAMESPACE, listCall);
+
+          allCalls.push(approvalCall, parsedListCall);
+        }
+
+        // Execute listing transaction
+        if (allCalls.length > 0) {
+          await (account as any).execute(allCalls);
+          toast.success(`Listed ${beastsWithPrices.length} beast(s)!`, { id: toastId });
+        }
+
+        // Clear listed beasts from cart
+        setCartBeasts([]);
+        setBeastPrices(new Map());
+      }
+
+      // Process purchases if any
+      if (hasPurchases) {
+        setPurchasingBatch(true);
+
+        let successCount = 0;
+        for (const listing of purchaseCart) {
+          try {
+            if (!listing.active) {
+              continue;
+            }
+
+            const tokenIdBigInt = toBigInt(listing.tokenId);
+            const priceBigInt = toBigInt(listing.price);
+            const currency = listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
+            const orderId = toBigInt(listing.orderId ?? 0);
+
+            // Check balance
+            const { sufficient } = await checkSufficientBalance(account, currency, priceBigInt);
+            if (!sufficient) {
+              continue;
+            }
+
+            // Ensure approval
+            await ensureErc20Allowance(account, currency, priceBigInt.toString());
+
+            // Execute purchase
+            await executeListing(
+              account as any,
+              orderId,
+              BEASTS_COLLECTION_ADDRESS,
+              tokenIdBigInt,
+              BigInt(listing.quantity ?? 1),
+              true,
+              currency,
+              priceBigInt,
+              BigInt(CLIENT_FEE_BP),
+              CLIENT_FEE_RECEIVER
+            );
+
+            successCount++;
+          } catch (error) {
+            console.error(`Failed to purchase listing ${listing.listingId}:`, error);
+          }
+        }
+
+        if (successCount > 0) {
+          toast.success(`Purchased ${successCount} beast(s)!`, { id: toastId });
+        }
+
+        // Clear purchase cart
+        setPurchaseCart([]);
+      }
+
+      // Close the cart dialog
+      setUnifiedCartOpen(false);
+
+      // Refresh data
+      await refetchOrders();
+      await reloadUserBeasts();
+
+    } catch (error) {
+      console.error("Error executing unified cart:", error);
+      toast.error("Failed to execute cart operations", { id: toastId });
+    } finally {
+      setListingBatch(false);
+      setPurchasingBatch(false);
+    }
+  }, [account, cartBeasts, purchaseCart, beastPrices, selectedPaymentToken, executeListing, refetchOrders, reloadUserBeasts, buildListCalls, marketplace]);
+
+  const formatPriceLabel = useCallback(
+    (listing: Listing) => {
+      const token = getPaymentTokenByAddress(listing.paymentToken ?? undefined);
+      const fromSymbol = token?.symbol ?? "STRK";
+
+      // Show price in user's chosen display currency if available
+      if (
+        displayCurrency &&
+        priceRates &&
+        fromSymbol.toUpperCase() !== displayCurrency.toUpperCase()
+      ) {
+        const result = formatPriceInSymbol(
+          listing.price,
+          fromSymbol,
+          displayCurrency,
+          priceRates as any
+        );
+        if (import.meta.env.DEV) {
+          console.log(
+            `[formatPriceLabel] Converting ${listing.price} from ${fromSymbol} to ${displayCurrency}:`,
+            result,
+            "rates:",
+            priceRates
+          );
+        }
+        return result;
+      }
+
+      // Otherwise show native listing token
+      return formatPrice(listing.price, fromSymbol);
+    },
+    [displayCurrency, priceRates]
+  );
+
+  const formatSubtitlePrice = useCallback(
+    (listing: Listing) => {
+      const token = getPaymentTokenByAddress(listing.paymentToken ?? undefined);
+      const fromSymbol = token?.symbol ?? "STRK";
+
+      // Always show USDC equivalent as subtitle
+      if (!priceRates) {
+        if (import.meta.env.DEV)
+          console.log("[formatSubtitlePrice] No priceRates");
+        return undefined;
+      }
+
+      // Don't show subtitle if already displaying in USDC
+      if (displayCurrency?.toUpperCase() === "USDC") {
+        if (import.meta.env.DEV)
+          console.log("[formatSubtitlePrice] Already displaying in USDC");
+        return undefined;
+      }
+      if (!displayCurrency && fromSymbol.toUpperCase() === "USDC") {
+        if (import.meta.env.DEV)
+          console.log(
+            "[formatSubtitlePrice] Listing is in USDC and no displayCurrency selected"
+          );
+        return undefined;
+      }
+
+      // Convert to USDC
+      const result = formatPriceInSymbol(
+        listing.price,
+        fromSymbol,
+        "USDC",
+        priceRates as any
+      );
       if (import.meta.env.DEV) {
-        console.log(`[formatPriceLabel] Converting ${listing.price} from ${fromSymbol} to ${displayCurrency}:`, result, 'rates:', priceRates);
+        console.log(
+          `[formatSubtitlePrice] Converting ${listing.price} from ${fromSymbol} to USDC:`,
+          result,
+          "rates:",
+          priceRates
+        );
       }
       return result;
-    }
-
-    // Otherwise show native listing token
-    return formatPrice(listing.price, fromSymbol);
-  }, [displayCurrency, priceRates]);
-
-  const formatSubtitlePrice = useCallback((listing: Listing) => {
-    const token = getPaymentTokenByAddress(listing.paymentToken ?? undefined);
-    const fromSymbol = token?.symbol ?? "STRK";
-
-    // Always show USDC equivalent as subtitle
-    if (!priceRates) {
-      if (import.meta.env.DEV) console.log('[formatSubtitlePrice] No priceRates');
-      return undefined;
-    }
-
-    // Don't show subtitle if already displaying in USDC
-    if (displayCurrency?.toUpperCase() === 'USDC') {
-      if (import.meta.env.DEV) console.log('[formatSubtitlePrice] Already displaying in USDC');
-      return undefined;
-    }
-    if (!displayCurrency && fromSymbol.toUpperCase() === 'USDC') {
-      if (import.meta.env.DEV) console.log('[formatSubtitlePrice] Listing is in USDC and no displayCurrency selected');
-      return undefined;
-    }
-
-    // Convert to USDC
-    const result = formatPriceInSymbol(listing.price, fromSymbol, 'USDC', priceRates as any);
-    if (import.meta.env.DEV) {
-      console.log(`[formatSubtitlePrice] Converting ${listing.price} from ${fromSymbol} to USDC:`, result, 'rates:', priceRates);
-    }
-    return result;
-  }, [displayCurrency, priceRates]);
+    },
+    [displayCurrency, priceRates]
+  );
 
   const handleListed = useCallback(async () => {
     // Poll for new listings since indexer takes time to sync
     const pollForUpdates = async (attempts = 3, delay = 2000) => {
       for (let i = 0; i < attempts; i++) {
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
         await refetchOrders();
       }
     };
@@ -1279,92 +1690,112 @@ export default function MarketplacePage() {
     void pollForUpdates();
   }, [refetchOrders, reloadUserBeasts]);
 
-  const handlePurchase = useCallback(async (listing: Listing) => {
-    if (!account) {
-      toast.error("Please connect your wallet");
-      return;
-    }
-    if (buyingListingId) return; // Prevent double-click
-
-    const listingId = listing.listingId;
-    setBuyingListingId(listingId);
-    const toastId = toast.loading("Checking balance...");
-
-    try {
-      if (!listing.active) {
-        toast.error("This listing is no longer available", { id: toastId });
-        setBuyingListingId(null);
+  const handlePurchase = useCallback(
+    async (listing: Listing) => {
+      if (!account) {
+        toast.error("Please connect your wallet");
         return;
       }
-      const tokenIdBigInt = toBigInt(listing.tokenId);
-      const priceBigInt = toBigInt(listing.price);
-      const currency = listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
-      const orderId = toBigInt(listing.orderId ?? 0);
+      if (buyingListingId) return; // Prevent double-click
 
-      // Check balance
-      const { sufficient, balance } = await checkSufficientBalance(
-        account,
-        currency,
-        priceBigInt
-      );
+      const listingId = listing.listingId;
+      setBuyingListingId(listingId);
+      const toastId = toast.loading("Checking balance...");
 
-      if (!sufficient) {
-        const token = getPaymentTokenByAddress(currency);
-        const symbol = token?.symbol ?? "tokens";
-        const decimals = TOKEN_DECIMALS[symbol] ?? 18;
-        const requiredFormatted = fromWei(priceBigInt, decimals);
-        const balanceFormatted = fromWei(balance, decimals);
-        toast.error(
-          `Insufficient balance. Required: ${requiredFormatted} ${symbol}, Available: ${balanceFormatted} ${symbol}`,
+      try {
+        if (!listing.active) {
+          toast.error("This listing is no longer available", { id: toastId });
+          setBuyingListingId(null);
+          return;
+        }
+        const tokenIdBigInt = toBigInt(listing.tokenId);
+        const priceBigInt = toBigInt(listing.price);
+        const currency = listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
+        const orderId = toBigInt(listing.orderId ?? 0);
+
+        // Check balance
+        const { sufficient, balance } = await checkSufficientBalance(
+          account,
+          currency,
+          priceBigInt
+        );
+
+        if (!sufficient) {
+          const token = getPaymentTokenByAddress(currency);
+          const symbol = token?.symbol ?? "tokens";
+          const decimals = TOKEN_DECIMALS[symbol] ?? 18;
+          const requiredFormatted = fromWei(priceBigInt, decimals);
+          const balanceFormatted = fromWei(balance, decimals);
+          toast.error(
+            `Insufficient balance. Required: ${requiredFormatted} ${symbol}, Available: ${balanceFormatted} ${symbol}`,
+            { id: toastId }
+          );
+          setBuyingListingId(null);
+          return;
+        }
+
+        // Close confirmation dialog and ensure approval
+        setPurchaseConfirmOpen(false);
+        toast.loading("Checking approval...", { id: toastId });
+        await ensureErc20Allowance(account, currency, priceBigInt.toString());
+
+        toast.loading("Processing purchase...", { id: toastId });
+        const result = await executeListing(
+          account as any,
+          orderId,
+          BEASTS_COLLECTION_ADDRESS,
+          tokenIdBigInt,
+          BigInt(listing.quantity ?? 1),
+          true,
+          currency,
+          priceBigInt,
+          BigInt(CLIENT_FEE_BP),
+          CLIENT_FEE_RECEIVER
+        );
+
+        const extractTxHash = (res: any): string | undefined =>
+          res?.transaction_hash ||
+          res?.hash ||
+          res?.txHash ||
+          res?.transactionHash;
+        const txHash = extractTxHash(result);
+
+        // Record tx in local activity
+        const buyEntry: TxEntry = {
+          type: "buy",
+          tokenId: listing.tokenId,
+          txHash,
+          timestamp: Date.now(),
+        };
+        setMyTxs((prev): TxEntry[] => [buyEntry, ...prev].slice(0, 50));
+
+        toast.success(
+          txHash
+            ? `Purchase successful! Tx: ${txHash.slice(0, 8)}…${txHash.slice(
+                -6
+              )}`
+            : "Purchase successful!",
           { id: toastId }
         );
+        await refetchOrders();
+        await reloadUserBeasts();
+      } catch (error) {
+        const errorMessage = (error as Error).message || "Purchase failed";
+        toast.error(errorMessage, { id: toastId });
+      } finally {
         setBuyingListingId(null);
-        return;
       }
-
-      // Close confirmation dialog and ensure approval
-      setPurchaseConfirmOpen(false);
-      toast.loading("Checking approval...", { id: toastId });
-      await ensureErc20Allowance(account, currency, priceBigInt.toString());
-
-      toast.loading("Processing purchase...", { id: toastId });
-      const result = await executeListing(
-        account as any,
-        orderId,
-        BEASTS_COLLECTION_ADDRESS,
-        tokenIdBigInt,
-        BigInt(listing.quantity ?? 1),
-        true,
-        currency,
-        priceBigInt,
-        BigInt(CLIENT_FEE_BP),
-        CLIENT_FEE_RECEIVER
-      );
-
-      const extractTxHash = (res: any): string | undefined =>
-        res?.transaction_hash || res?.hash || res?.txHash || res?.transactionHash;
-      const txHash = extractTxHash(result);
-
-      // Record tx in local activity
-      const buyEntry: TxEntry = { type: 'buy', tokenId: listing.tokenId, txHash, timestamp: Date.now() };
-      setMyTxs((prev): TxEntry[] => [buyEntry, ...prev].slice(0, 50));
-
-      toast.success(txHash ? `Purchase successful! Tx: ${txHash.slice(0,8)}…${txHash.slice(-6)}` : "Purchase successful!", { id: toastId });
-      await refetchOrders();
-      await reloadUserBeasts();
-    } catch (error) {
-      const errorMessage = (error as Error).message || "Purchase failed";
-      toast.error(errorMessage, { id: toastId });
-    } finally {
-      setBuyingListingId(null);
-    }
-  }, [account, buyingListingId, executeListing, refetchOrders, reloadUserBeasts]);
+    },
+    [account, buyingListingId, executeListing, refetchOrders, reloadUserBeasts]
+  );
 
   const handlePurchaseAll = useCallback(async () => {
     if (!account || purchaseCart.length === 0 || purchasingBatch) return;
 
     setPurchasingBatch(true);
-    const toastId = toast.loading(`Processing ${purchaseCart.length} purchases...`);
+    const toastId = toast.loading(
+      `Processing ${purchaseCart.length} purchases...`
+    );
     let successCount = 0;
     let failCount = 0;
 
@@ -1378,11 +1809,16 @@ export default function MarketplacePage() {
 
           const tokenIdBigInt = toBigInt(listing.tokenId);
           const priceBigInt = toBigInt(listing.price);
-          const currency = listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
+          const currency =
+            listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
           const orderId = toBigInt(listing.orderId ?? 0);
 
           // Check balance
-          const { sufficient } = await checkSufficientBalance(account, currency, priceBigInt);
+          const { sufficient } = await checkSufficientBalance(
+            account,
+            currency,
+            priceBigInt
+          );
           if (!sufficient) {
             failCount++;
             continue;
@@ -1408,14 +1844,22 @@ export default function MarketplacePage() {
           successCount++;
           handleRemoveFromPurchaseCart(listing.listingId);
         } catch (error) {
-          console.error(`Failed to purchase listing ${listing.listingId}:`, error);
+          console.error(
+            `Failed to purchase listing ${listing.listingId}:`,
+            error
+          );
           failCount++;
         }
       }
 
       // Show results
       if (successCount > 0) {
-        toast.success(`Successfully purchased ${successCount} beast${successCount > 1 ? 's' : ''}!`, { id: toastId });
+        toast.success(
+          `Successfully purchased ${successCount} beast${
+            successCount > 1 ? "s" : ""
+          }!`,
+          { id: toastId }
+        );
         await refetchOrders();
         await reloadUserBeasts();
       } else {
@@ -1423,7 +1867,9 @@ export default function MarketplacePage() {
       }
 
       if (failCount > 0) {
-        toast.warning(`${failCount} purchase${failCount > 1 ? 's' : ''} failed or skipped`);
+        toast.warning(
+          `${failCount} purchase${failCount > 1 ? "s" : ""} failed or skipped`
+        );
       }
 
       // Close dialog if all successful
@@ -1437,52 +1883,65 @@ export default function MarketplacePage() {
     } finally {
       setPurchasingBatch(false);
     }
-  }, [account, purchaseCart, purchasingBatch, executeListing, refetchOrders, reloadUserBeasts, handleRemoveFromPurchaseCart, handleClearPurchaseCart]);
+  }, [
+    account,
+    purchaseCart,
+    purchasingBatch,
+    executeListing,
+    refetchOrders,
+    reloadUserBeasts,
+    handleRemoveFromPurchaseCart,
+    handleClearPurchaseCart,
+  ]);
 
-  const handleAcceptOffer = useCallback(async (order: OrderModel) => {
-    if (!account) {
-      toast.error("Please connect your wallet");
-      return;
-    }
-    if (acceptingOfferId) return; // Prevent double-click
+  const handleAcceptOffer = useCallback(
+    async (order: OrderModel) => {
+      if (!account) {
+        toast.error("Please connect your wallet");
+        return;
+      }
+      if (acceptingOfferId) return; // Prevent double-click
 
-    const offerId = order.id?.toString() || "";
-    setAcceptingOfferId(offerId);
-    const toastId = toast.loading("Accepting offer...");
+      const offerId = order.id?.toString() || "";
+      setAcceptingOfferId(offerId);
+      const toastId = toast.loading("Accepting offer...");
 
-    try {
-      const tokenIdBigInt = toBigInt(order.tokenId);
-      const priceBigInt = toBigInt(order.price);
-      const currency = order.currency;
-      const orderId = toBigInt(order.id);
+      try {
+        const tokenIdBigInt = toBigInt(order.tokenId);
+        const priceBigInt = toBigInt(order.price);
+        const currency = order.currency;
+        const orderId = toBigInt(order.id);
 
-      // Execute the offer (seller accepts buyer's offer)
-      await executeOffer(
-        account as any,
-        orderId,
-        BEASTS_COLLECTION_ADDRESS,
-        tokenIdBigInt,
-        BigInt(order.quantity ?? 1),
-        true, // taker fulfills taker
-        currency,
-        priceBigInt,
-        BigInt(CLIENT_FEE_BP),
-        CLIENT_FEE_RECEIVER
-      );
+        // Execute the offer (seller accepts buyer's offer)
+        await executeOffer(
+          account as any,
+          orderId,
+          BEASTS_COLLECTION_ADDRESS,
+          tokenIdBigInt,
+          BigInt(order.quantity ?? 1),
+          true, // taker fulfills taker
+          currency,
+          priceBigInt,
+          BigInt(CLIENT_FEE_BP),
+          CLIENT_FEE_RECEIVER
+        );
 
-      toast.success("Offer accepted successfully!", { id: toastId });
+        toast.success("Offer accepted successfully!", { id: toastId });
 
-      // Close the offers dialog and refresh data
-      setOffersDialogOpen(false);
-      await refetchOrders();
-      await reloadUserBeasts();
-    } catch (error) {
-      const errorMessage = (error as Error).message || "Failed to accept offer";
-      toast.error(errorMessage, { id: toastId });
-    } finally {
-      setAcceptingOfferId(null);
-    }
-  }, [account, acceptingOfferId, executeOffer, refetchOrders, reloadUserBeasts]);
+        // Close the offers dialog and refresh data
+        setOffersDialogOpen(false);
+        await refetchOrders();
+        await reloadUserBeasts();
+      } catch (error) {
+        const errorMessage =
+          (error as Error).message || "Failed to accept offer";
+        toast.error(errorMessage, { id: toastId });
+      } finally {
+        setAcceptingOfferId(null);
+      }
+    },
+    [account, acceptingOfferId, executeOffer, refetchOrders, reloadUserBeasts]
+  );
 
   const handleFilterChange = useCallback((trait: string, value: string) => {
     setAttributeFilters((prev) => {
@@ -1530,54 +1989,127 @@ export default function MarketplacePage() {
   }, [sortedListings]);
 
   const totalListingsCount = sortedListings.length;
+
+  // Split floor price into value and currency for better display
+  const floorPriceParts = useMemo(() => {
+    if (!floorPriceLabel || floorPriceLabel === "—") {
+      return { value: "—", currency: "" };
+    }
+    // Format is like "10.5 LORDS" or "0.5 ETH"
+    const parts = floorPriceLabel.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      const currency = parts[parts.length - 1]; // Last part is currency
+      const value = parts.slice(0, -1).join(" "); // Everything before last part is the value
+      return { value, currency };
+    }
+    return { value: floorPriceLabel, currency: "" };
+  }, [floorPriceLabel]);
+
   const heroStats = useMemo(
     () => [
       {
         label: "Floor Price",
-        value: floorPriceLabel,
+        value: floorPriceParts.value,
+        currency: floorPriceParts.currency,
+        icon: "💰",
+        color: "rgb(253, 224, 71)",
+        bgGradient: "bg-gradient-to-br from-yellow-500/15 to-yellow-500/5",
+        borderColor: "border-yellow-400/30",
+        isFloorPrice: true,
       },
       {
         label: "Active Listings",
         value: totalListingsCount.toLocaleString(),
+        currency: "",
+        icon: "🏪",
+        color: "rgb(59, 130, 246)",
+        bgGradient: "bg-gradient-to-br from-blue-500/15 to-blue-500/5",
+        borderColor: "border-blue-400/30",
+        isFloorPrice: false,
       },
       {
         label: "Your Listings",
         value: myActiveListings.length.toLocaleString(),
+        currency: "",
+        icon: "📋",
+        color: "rgb(34, 197, 94)",
+        bgGradient: "bg-gradient-to-br from-green-500/15 to-green-500/5",
+        borderColor: "border-green-400/30",
+        isFloorPrice: false,
       },
       {
         label: "Unique Sellers",
         value: uniqueSellers.toLocaleString(),
+        currency: "",
+        icon: "👥",
+        color: "rgb(168, 85, 247)",
+        bgGradient: "bg-gradient-to-br from-purple-500/15 to-purple-500/5",
+        borderColor: "border-purple-400/30",
+        isFloorPrice: false,
       },
     ],
-    [floorPriceLabel, myActiveListings.length, totalListingsCount, uniqueSellers]
+    [
+      floorPriceParts,
+      myActiveListings.length,
+      totalListingsCount,
+      uniqueSellers,
+    ]
   );
 
   return (
     <AppLayout topBar={<TopBar />}>
       <div className="space-y-4">
-        <section className="rounded-xl border border-gray-800/50 bg-gradient-to-br from-[#0b0b0f] via-[#0f0f13] to-[#0b0b0f] p-4 shadow-xl">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="max-w-2xl space-y-1.5">
-              <h1 className="text-xl font-bold text-lsGold">
+        <section className="relative overflow-hidden rounded-xl border border-gray-800/50 bg-gradient-to-br from-[#0b0b0f] via-[#0f0f13] to-[#0b0b0f] p-6 shadow-2xl">
+          {/* Animated gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-r from-lsGold/5 via-transparent to-[#8bff72]/5 opacity-50" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(208,201,141,0.1),transparent_50%)]" />
+
+          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-2xl space-y-2">
+              <h1 className="bg-gradient-to-r from-[#f9e08a] via-[#fbdc5e] to-[#39ff14] bg-clip-text text-3xl font-bold uppercase tracking-wider text-transparent drop-shadow-[0_0_15px_rgba(251,234,160,0.3)]">
                 Beast Marketplace
               </h1>
-              <p className="text-xs text-gray-400">
-                Trade beasts straight from the on-chain bestiary. Discover, buy, sell, and make offers on unique NFTs.
+              <p className="text-sm text-gray-300 leading-relaxed">
+                Discover, buy, sell, and make offers on unique NFTs from Loot
+                Survivor.
               </p>
             </div>
             <div className="grid w-full gap-3 sm:grid-cols-2 lg:w-auto lg:grid-cols-2 xl:grid-cols-4">
               {heroStats.map((stat) => (
                 <div
                   key={stat.label}
-                  className="group relative overflow-hidden rounded-lg border border-gray-800/50 bg-gradient-to-br from-black/50 to-gray-900/30 p-3 backdrop-blur-sm transition-all duration-300 hover:border-lsGold/30 hover:shadow-lg hover:shadow-lsGold/10"
+                  className={`${stat.bgGradient} ${stat.borderColor} backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-md min-h-[75px] flex flex-col relative overflow-hidden rounded-lg border p-2.5 min-w-[110px]`}
                 >
-                  <div className="absolute inset-0 bg-gradient-to-br from-lsGold/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-                  <p className="relative text-[10px] font-medium uppercase tracking-wider text-gray-400 group-hover:text-gray-300">
-                    {stat.label}
-                  </p>
-                  <p className="relative mt-1 text-lg font-bold text-white group-hover:text-lsGold transition-colors">
-                    {stat.value}
-                  </p>
+                  <div className="flex flex-col items-center text-center gap-0.5 mb-1 relative z-10">
+                    <span className="text-xs flex-shrink-0">{stat.icon}</span>
+                    <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium truncate">
+                      {stat.label}
+                    </p>
+                  </div>
+                  <div className="flex-1 flex flex-col justify-center text-center relative z-10">
+                    {stat.isFloorPrice ? (
+                      <>
+                        <p
+                          className="text-base font-bold leading-none whitespace-nowrap overflow-hidden text-ellipsis px-1"
+                          style={{ color: stat.color }}
+                        >
+                          {stat.value}
+                        </p>
+                        {stat.currency && (
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            {stat.currency}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p
+                        className="text-base font-bold leading-none whitespace-nowrap overflow-hidden text-ellipsis px-1"
+                        style={{ color: stat.color }}
+                      >
+                        {stat.value}
+                      </p>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -1592,46 +2124,19 @@ export default function MarketplacePage() {
 
         {hydratingListings && listings.length > 0 && (
           <div className="rounded-md border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-xs text-blue-200">
-            Loading beast metadata for {listings.length} listings…
+            Loading beast metadata for listings…
           </div>
         )}
 
         {!hydratingListings && listings.length >= 450 && (
           <div className="rounded-md border border-yellow-500/20 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-200">
-            Showing first ~500 listings for performance. Use filters to narrow down results.
+            Showing first ~500 listings for performance. Use filters to narrow
+            down results.
           </div>
         )}
 
         {/* Filters row */}
         <div className="flex flex-wrap items-center gap-4 text-xs text-gray-300">
-          {/* Status filter */}
-          <div className="flex items-center gap-2">
-            <span>Show:</span>
-            <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-1">
-              {([
-                { value: 'active', label: 'Active' },
-                { value: 'expired', label: 'Expired' },
-                { value: 'canceled', label: 'Canceled' },
-                { value: 'sold', label: 'Sold' },
-                { value: 'all', label: 'All' },
-              ] as const).map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setStatusFilter(option.value)}
-                  className={cn(
-                    "rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wider transition",
-                    statusFilter === option.value
-                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white"
-                      : "text-gray-400 hover:text-lsGold"
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Hide Expired toggle */}
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-2 cursor-pointer group">
@@ -1651,59 +2156,33 @@ export default function MarketplacePage() {
           <div className="flex items-center gap-2">
             <span>Display prices in:</span>
             <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-1">
-              {(['LORDS','STRK','ETH','USDC','SURVIVOR'] as const).map((sym) => (
-                <button
-                  key={sym}
-                  type="button"
-                  onClick={() => setDisplayCurrency(sym)}
-                  className={cn(
-                    "rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wider transition",
-                    displayCurrency === sym
-                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white"
-                      : "text-gray-400 hover:text-lsGold"
-                  )}
-                >
-                  {sym}
-                </button>
-              ))}
+              {(["LORDS", "STRK", "ETH", "USDC", "SURVIVOR"] as const).map(
+                (sym) => (
+                  <button
+                    key={sym}
+                    type="button"
+                    onClick={() => setDisplayCurrency(sym)}
+                    className={cn(
+                      "rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wider transition",
+                      displayCurrency === sym
+                        ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white"
+                        : "text-gray-400 hover:text-lsGold"
+                    )}
+                  >
+                    {sym}
+                  </button>
+                )
+              )}
             </div>
           </div>
 
-          {/* Cart controls */}
-          <div className="flex flex-wrap items-center gap-2 ml-auto">
-            <Button
-              onClick={handleOpenCart}
-              disabled={cartBeasts.length === 0}
-              className={cn(
-                "flex items-center gap-2",
-                cartBeasts.length > 0
-                  ? "bg-[#39ff14] text-black hover:bg-[#39ff14]/90 shadow-[0_0_15px_rgba(57,255,20,0.5)]"
-                  : "bg-gray-800 text-gray-400"
-              )}
-              size="sm"
-            >
-              <ShoppingCart className="h-4 w-4" />
-              List Cart ({cartBeasts.length})
-            </Button>
-            <Button
-              onClick={() => setPurchaseCartOpen(true)}
-              disabled={purchaseCart.length === 0}
-              className={cn(
-                "flex items-center gap-2",
-                purchaseCart.length > 0
-                  ? "bg-green-600 text-white hover:bg-green-600/90 shadow-lg shadow-green-600/20"
-                  : "bg-gray-800 text-gray-400"
-              )}
-              size="sm"
-            >
-              <ShoppingCart className="h-4 w-4" />
-              Buy Cart ({purchaseCart.length})
-            </Button>
-          </div>
         </div>
 
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <ViewToggle value={activeTab} onChange={(value) => setActiveTab(value)} />
+          <ViewToggle
+            value={activeTab}
+            onChange={(value) => setActiveTab(value)}
+          />
           <div className="flex flex-wrap items-center gap-3">
             {filterControls}
             {activeTab === "my" && (
@@ -1760,7 +2239,7 @@ export default function MarketplacePage() {
             </div>
 
             {exploreSubTab === "browse" ? (
-              <> 
+              <>
                 {listingsError ? (
                   <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-4">
                     <p className="text-sm text-yellow-200">{listingsError}</p>
@@ -1783,7 +2262,9 @@ export default function MarketplacePage() {
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                       {listingsToRender.map((listing) => {
-                        const inPurchaseCart = purchaseCart.some((l) => l.listingId === listing.listingId);
+                        const inPurchaseCart = purchaseCart.some(
+                          (l) => l.listingId === listing.listingId
+                        );
                         return (
                           <ListingCard
                             key={`${listing.listingId}-${listing.tokenId}`}
@@ -1794,7 +2275,9 @@ export default function MarketplacePage() {
                             status={listing.status}
                             buyDisabled={!listing.active}
                             inCart={inPurchaseCart}
-                            primaryActionLabel={inPurchaseCart ? "In Cart" : undefined}
+                            primaryActionLabel={
+                              inPurchaseCart ? "In Cart" : undefined
+                            }
                             onBuy={() => handleAddToPurchaseCart(listing)}
                             onMakeOffer={() => {
                               setOfferBeast(listing.beast ?? null);
@@ -1805,43 +2288,60 @@ export default function MarketplacePage() {
                               setSelectedListingForOffers(listing);
                               setOffersDialogOpen(true);
                             }}
-                            ownedByUser={address?.toLowerCase() === listing.seller?.toLowerCase()}
+                            ownedByUser={
+                              address?.toLowerCase() ===
+                              listing.seller?.toLowerCase()
+                            }
                             onEdit={() => {
                               setEditingListing(listing);
                               setEditDialogOpen(true);
                             }}
-                            onCancel={listing.active ? async () => {
-                              if (!account) {
-                                toast.error("Please connect your wallet");
-                                return;
-                              }
-                              if (cancelingListingId) return;
+                            onCancel={
+                              listing.active
+                                ? async () => {
+                                    if (!account) {
+                                      toast.error("Please connect your wallet");
+                                      return;
+                                    }
+                                    if (cancelingListingId) return;
 
-                              const listingId = listing.listingId;
-                              setCancelingListingId(listingId);
-                              const toastId = toast.loading("Canceling listing...");
+                                    const listingId = listing.listingId;
+                                    setCancelingListingId(listingId);
+                                    const toastId = toast.loading(
+                                      "Canceling listing..."
+                                    );
 
-                              try {
-                                await cancelListingFlow(
-                                  { cancel },
-                                  {
-                                    account: account as any,
-                                    collectionAddress: BEASTS_COLLECTION_ADDRESS,
-                                    tokenId: listing.tokenId,
-                                    orderId: listing.orderId ?? 0,
+                                    try {
+                                      await cancelListingFlow(
+                                        { cancel },
+                                        {
+                                          account: account as any,
+                                          collectionAddress:
+                                            BEASTS_COLLECTION_ADDRESS,
+                                          tokenId: listing.tokenId,
+                                          orderId: listing.orderId ?? 0,
+                                        }
+                                      );
+
+                                      toast.success(
+                                        "Listing canceled successfully!",
+                                        { id: toastId }
+                                      );
+                                      await refetchOrders();
+                                      await reloadUserBeasts();
+                                    } catch (error) {
+                                      const errorMessage =
+                                        (error as Error).message ||
+                                        "Failed to cancel listing";
+                                      toast.error(errorMessage, {
+                                        id: toastId,
+                                      });
+                                    } finally {
+                                      setCancelingListingId(null);
+                                    }
                                   }
-                                );
-
-                                toast.success("Listing canceled successfully!", { id: toastId });
-                                await refetchOrders();
-                                await reloadUserBeasts();
-                              } catch (error) {
-                                const errorMessage = (error as Error).message || "Failed to cancel listing";
-                                toast.error(errorMessage, { id: toastId });
-                              } finally {
-                                setCancelingListingId(null);
-                              }
-                            } : undefined}
+                                : undefined
+                            }
                             compact
                           />
                         );
@@ -1849,7 +2349,9 @@ export default function MarketplacePage() {
                     </div>
                     {listingsToRender.length < sortedListings.length && (
                       <p className="text-[10px] text-gray-500 text-center">
-                        Rendering {listingsToRender.length} / {sortedListings.length} listings… refining as the browser is idle.
+                        Rendering {listingsToRender.length} /{" "}
+                        {sortedListings.length} listings… refining as the
+                        browser is idle.
                       </p>
                     )}
                   </div>
@@ -1858,13 +2360,21 @@ export default function MarketplacePage() {
             ) : exploreSubTab === "recent-listed" ? (
               <div className="space-y-3">
                 <div>
-                  <h2 className="text-sm font-semibold text-lsGold">Recently Listed</h2>
-                  <p className="text-xs text-gray-400">Latest beasts added to the marketplace.</p>
+                  <h2 className="text-sm font-semibold text-lsGold">
+                    Recently Listed
+                  </h2>
+                  <p className="text-xs text-gray-400">
+                    Latest beasts added to the marketplace.
+                  </p>
                 </div>
                 {loadingRecentListings ? (
-                  <p className="text-xs text-gray-400">Loading recent listings…</p>
+                  <p className="text-xs text-gray-400">
+                    Loading recent listings…
+                  </p>
                 ) : namedRecentListings.length === 0 ? (
-                  <p className="text-xs text-gray-400">No recent listings with custom names found.</p>
+                  <p className="text-xs text-gray-400">
+                    No recent listings with custom names found.
+                  </p>
                 ) : (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                     {namedRecentListings.map((listing) => (
@@ -1898,20 +2408,31 @@ export default function MarketplacePage() {
             ) : (
               <div className="space-y-3">
                 <div>
-                  <h2 className="text-sm font-semibold text-lsGold">Recently Sold</h2>
-                  <p className="text-xs text-gray-400">Beasts that were recently purchased.</p>
+                  <h2 className="text-sm font-semibold text-lsGold">
+                    Recently Sold
+                  </h2>
+                  <p className="text-xs text-gray-400">
+                    Beasts that were recently purchased.
+                  </p>
                 </div>
                 {loadingSales ? (
                   <p className="text-xs text-gray-400">Loading recent sales…</p>
                 ) : namedRecentSales.length === 0 ? (
-                  <p className="text-xs text-gray-400">No recent sales with custom names found.</p>
+                  <p className="text-xs text-gray-400">
+                    No recent sales with custom names found.
+                  </p>
                 ) : (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                     {namedRecentSales.map(({ sale, beast }) => {
                       const tokenId = sale.order.tokenId.toString();
-                      const token = getPaymentTokenByAddress(sale.order.currency);
+                      const token = getPaymentTokenByAddress(
+                        sale.order.currency
+                      );
                       const symbol = token?.symbol ?? "STRK";
-                      const priceLabel = formatPrice(sale.order.price.toString(), symbol);
+                      const priceLabel = formatPrice(
+                        sale.order.price.toString(),
+                        symbol
+                      );
 
                       return (
                         <div
@@ -1931,14 +2452,18 @@ export default function MarketplacePage() {
                               </div>
                             )}
                             <div className="absolute bottom-2 left-2 bg-green-500/90 backdrop-blur-md border border-green-400/50 rounded px-2 py-1">
-                              <p className="text-[10px] font-bold text-white">SOLD</p>
+                              <p className="text-[10px] font-bold text-white">
+                                SOLD
+                              </p>
                             </div>
                           </div>
                           <div className="p-3 space-y-1">
                             <p className="text-xs font-semibold text-white truncate">
                               {beast?.name || `Beast #${tokenId}`}
                             </p>
-                            <p className="text-xs text-lsGold font-bold">{priceLabel}</p>
+                            <p className="text-xs text-lsGold font-bold">
+                              {priceLabel}
+                            </p>
                             <p className="text-[10px] text-gray-400">
                               {new Date(sale.time * 1000).toLocaleDateString()}
                             </p>
@@ -2025,75 +2550,93 @@ export default function MarketplacePage() {
                   </div>
                 </div>
                 {ordersLoading || ordersFetching || hydratingListings ? (
-                <p className="text-xs text-gray-400">Loading your listings…</p>
-              ) : myActiveListings.length === 0 ? (
-                <p className="text-xs text-gray-400">
-                  You have no listings that match your filters.
-                </p>
-              ) : (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                  {myActiveListings.map((listing) => (
-                    <ListingCard
-                      key={`${listing.listingId}-${listing.tokenId}`}
-                      beast={listing.beast}
-                      tokenId={listing.tokenId}
-                      priceLabel={formatPriceLabel(listing)}
-                      subtitlePriceLabel={formatSubtitlePrice(listing)}
-                      status={listing.status}
-                      pendingCancel={hiddenListingIds.has(listing.listingId)}
-                      ownedByUser
-                      onEdit={() => {
-                        setEditingListing(listing);
-                        setEditDialogOpen(true);
-                      }}
-                      onCancel={listing.active ? async () => {
-                        if (!account) {
-                          toast.error("Please connect your wallet");
-                          return;
+                  <p className="text-xs text-gray-400">
+                    Loading your listings…
+                  </p>
+                ) : myActiveListings.length === 0 ? (
+                  <p className="text-xs text-gray-400">
+                    You have no listings that match your filters.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                    {myActiveListings.map((listing) => (
+                      <ListingCard
+                        key={`${listing.listingId}-${listing.tokenId}`}
+                        beast={listing.beast}
+                        tokenId={listing.tokenId}
+                        priceLabel={formatPriceLabel(listing)}
+                        subtitlePriceLabel={formatSubtitlePrice(listing)}
+                        status={listing.status}
+                        pendingCancel={hiddenListingIds.has(listing.listingId)}
+                        ownedByUser
+                        onEdit={() => {
+                          setEditingListing(listing);
+                          setEditDialogOpen(true);
+                        }}
+                        onCancel={
+                          listing.active
+                            ? async () => {
+                                if (!account) {
+                                  toast.error("Please connect your wallet");
+                                  return;
+                                }
+                                if (cancelingListingId) return; // Prevent double-click
+
+                                const listingId = listing.listingId;
+                                setCancelingListingId(listingId);
+                                const toastId = toast.loading(
+                                  "Canceling listing..."
+                                );
+
+                                try {
+                                  await cancelListingFlow(
+                                    { cancel },
+                                    {
+                                      account: account as any,
+                                      collectionAddress:
+                                        BEASTS_COLLECTION_ADDRESS,
+                                      tokenId: listing.tokenId,
+                                      orderId: listing.orderId ?? 0,
+                                    }
+                                  );
+
+                                  toast.success(
+                                    "Listing canceled successfully!",
+                                    { id: toastId }
+                                  );
+                                  await refetchOrders();
+                                  await reloadUserBeasts();
+                                } catch (error) {
+                                  const errorMessage =
+                                    (error as Error).message ||
+                                    "Failed to cancel listing";
+                                  toast.error(errorMessage, { id: toastId });
+                                } finally {
+                                  setCancelingListingId(null);
+                                }
+                              }
+                            : undefined
                         }
-                        if (cancelingListingId) return; // Prevent double-click
-
-                        const listingId = listing.listingId;
-                        setCancelingListingId(listingId);
-                        const toastId = toast.loading("Canceling listing...");
-
-                        try {
-                          await cancelListingFlow(
-                            { cancel },
-                            {
-                              account: account as any,
-                              collectionAddress: BEASTS_COLLECTION_ADDRESS,
-                              tokenId: listing.tokenId,
-                              orderId: listing.orderId ?? 0,
-                            }
-                          );
-
-                          toast.success("Listing canceled successfully!", { id: toastId });
-                          await refetchOrders();
-                          await reloadUserBeasts();
-                        } catch (error) {
-                          const errorMessage = (error as Error).message || "Failed to cancel listing";
-                          toast.error(errorMessage, { id: toastId });
-                        } finally {
-                          setCancelingListingId(null);
-                        }
-                      } : undefined}
-                      onViewOffers={() => {
-                        setSelectedListingForOffers(listing);
-                        setOffersDialogOpen(true);
-                      }}
-                      compact
-                    />
-                  ))}
-                </div>
+                        onViewOffers={() => {
+                          setSelectedListingForOffers(listing);
+                          setOffersDialogOpen(true);
+                        }}
+                        compact
+                      />
+                    ))}
+                  </div>
                 )}
               </div>
             ) : myActivitySubTab === "beasts" ? (
               <div className="space-y-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <h2 className="text-sm font-semibold text-lsGold">Your Beasts</h2>
-                    <p className="text-xs text-gray-400">List directly from your collection.</p>
+                    <h2 className="text-sm font-semibold text-lsGold">
+                      Your Beasts
+                    </h2>
+                    <p className="text-xs text-gray-400">
+                      List directly from your collection.
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
@@ -2107,78 +2650,108 @@ export default function MarketplacePage() {
                       {showDuplicatesOnly ? "Show All" : "Show Duplicates"}
                     </Button>
                   </div>
-              </div>
-              {address ? (
-                userBeastsError ? (
-                  <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-4">
-                    <p className="text-sm text-yellow-200">{userBeastsError}</p>
-                    <Button
-                      onClick={() => reloadUserBeasts()}
-                      variant="outline"
-                      size="sm"
-                      className="mt-3"
-                    >
-                      Retry
-                    </Button>
-                  </div>
-                ) : userBeastsLoading ? (
-                  <p className="text-xs text-gray-400">Loading your beasts…</p>
-                ) : userBeasts.length === 0 ? (
-                  <p className="text-xs text-gray-400">No beasts found for this wallet.</p>
-                ) : sortedUserBeasts.length === 0 ? (
-                  <p className="text-xs text-gray-400">No beasts match your current filters.</p>
+                </div>
+                {address ? (
+                  userBeastsError ? (
+                    <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-4">
+                      <p className="text-sm text-yellow-200">
+                        {userBeastsError}
+                      </p>
+                      <Button
+                        onClick={() => reloadUserBeasts()}
+                        variant="outline"
+                        size="sm"
+                        className="mt-3"
+                      >
+                        Retry
+                      </Button>
+                    </div>
+                  ) : userBeastsLoading ? (
+                    <p className="text-xs text-gray-400">
+                      Loading your beasts…
+                    </p>
+                  ) : userBeasts.length === 0 ? (
+                    <p className="text-xs text-gray-400">
+                      No beasts found for this wallet.
+                    </p>
+                  ) : sortedUserBeasts.length === 0 ? (
+                    <p className="text-xs text-gray-400">
+                      No beasts match your current filters.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                      {sortedUserBeasts.map((beast) => {
+                        const inCart = cartBeasts.some(
+                          (b) => b.id === beast.id
+                        );
+                        const tokenId = beast.id.split(":").pop() || beast.id;
+                        const isAlreadyListed =
+                          alreadyListedTokenIds.has(tokenId);
+                        return (
+                          <ListingCard
+                            key={beast.id}
+                            beast={beast}
+                            tokenId={beast.id}
+                            ownedByUser
+                            onEdit={() => handleToggleCart(beast)}
+                            onCancel={undefined}
+                            compact
+                            primaryActionLabel={inCart ? "Added ✓" : "List"}
+                            inCart={inCart}
+                            isAlreadyListed={isAlreadyListed}
+                          />
+                        );
+                      })}
+                    </div>
+                  )
                 ) : (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                    {sortedUserBeasts.map((beast) => {
-                      const inCart = cartBeasts.some((b) => b.id === beast.id);
-                      const tokenId = beast.id.split(':').pop() || beast.id;
-                      const isAlreadyListed = alreadyListedTokenIds.has(tokenId);
-                      return (
-                        <ListingCard
-                          key={beast.id}
-                          beast={beast}
-                          tokenId={beast.id}
-                          ownedByUser
-                          onEdit={() => handleToggleCart(beast)}
-                          onCancel={undefined}
-                          compact
-                          primaryActionLabel={inCart ? "Added ✓" : "List"}
-                          inCart={inCart}
-                          isAlreadyListed={isAlreadyListed}
-                        />
-                      );
-                    })}
-                  </div>
-                )
-              ) : (
-                <p className="text-xs text-gray-400">Connect your wallet to see your beasts.</p>
-              )}
+                  <p className="text-xs text-gray-400">
+                    Connect your wallet to see your beasts.
+                  </p>
+                )}
               </div>
             ) : (
               <div className="space-y-3">
                 <div>
-                  <h2 className="text-sm font-semibold text-lsGold">Recent Transactions</h2>
-                  <p className="text-xs text-gray-400">Actions you performed in this session.</p>
+                  <h2 className="text-sm font-semibold text-lsGold">
+                    Recent Transactions
+                  </h2>
+                  <p className="text-xs text-gray-400">
+                    Actions you performed in this session.
+                  </p>
                 </div>
                 {myTxs.length === 0 ? (
-                  <p className="text-xs text-gray-400">No recent actions yet.</p>
+                  <p className="text-xs text-gray-400">
+                    No recent actions yet.
+                  </p>
                 ) : (
                   <div className="space-y-2">
                     {myTxs.map((tx, idx) => {
                       const hash = tx.txHash;
-                      const explorerHref = hash ? `${VOYAGER_BASE}/tx/${hash}` : undefined;
+                      const explorerHref = hash
+                        ? `${VOYAGER_BASE}/tx/${hash}`
+                        : undefined;
                       const actionLabel = tx.type.toUpperCase();
                       const description = tx.note
                         ? tx.note
                         : `Beast #${tx.tokenId}`;
 
                       return (
-                        <div key={idx} className="flex items-center justify-between rounded-lg border border-gray-800 bg-gray-900/40 p-3">
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between rounded-lg border border-gray-800 bg-gray-900/40 p-3"
+                        >
                           <div className="text-xs text-gray-300">
-                            <div className="font-semibold text-white">{actionLabel}: {description}</div>
-                            <div className="text-gray-400">{new Date(tx.timestamp).toLocaleString()}</div>
+                            <div className="font-semibold text-white">
+                              {actionLabel}: {description}
+                            </div>
+                            <div className="text-gray-400">
+                              {new Date(tx.timestamp).toLocaleString()}
+                            </div>
                             {hash ? (
-                              <div className="mt-1 text-[11px] text-gray-400 font-mono break-all">{hash}</div>
+                              <div className="mt-1 text-[11px] text-gray-400 font-mono break-all">
+                                {hash}
+                              </div>
                             ) : null}
                           </div>
                           <div className="flex items-center gap-2">
@@ -2187,7 +2760,9 @@ export default function MarketplacePage() {
                                 <button
                                   type="button"
                                   className="text-[11px] rounded border border-gray-700 px-2 py-1 text-gray-200 hover:bg-gray-800"
-                                  onClick={() => navigator.clipboard?.writeText(hash)}
+                                  onClick={() =>
+                                    navigator.clipboard?.writeText(hash)
+                                  }
                                   title="Copy transaction hash"
                                 >
                                   Copy Hash
@@ -2202,7 +2777,9 @@ export default function MarketplacePage() {
                                 </a>
                               </>
                             ) : (
-                              <span className="text-[11px] text-gray-500">Pending hash</span>
+                              <span className="text-[11px] text-gray-500">
+                                Pending hash
+                              </span>
                             )}
                           </div>
                         </div>
@@ -2223,13 +2800,15 @@ export default function MarketplacePage() {
           onListed={async (results) => {
             // Record listing transactions in My Activity
             const listEntries: TxEntry[] = results.map((result) => ({
-              type: 'list',
+              type: "list",
               tokenId: result.tokenId,
               txHash: result.txHash,
               timestamp: Date.now(),
               note: `${result.beastName} for ${result.price} ${result.currency}`,
             }));
-            setMyTxs((prev): TxEntry[] => [...listEntries, ...prev].slice(0, 100));
+            setMyTxs((prev): TxEntry[] =>
+              [...listEntries, ...prev].slice(0, 100)
+            );
 
             handleListed();
             handleClearCart();
@@ -2259,7 +2838,9 @@ export default function MarketplacePage() {
           open={purchaseConfirmOpen}
           onOpenChange={setPurchaseConfirmOpen}
           listing={purchasingListing}
-          priceLabel={purchasingListing ? formatPriceLabel(purchasingListing) : ""}
+          priceLabel={
+            purchasingListing ? formatPriceLabel(purchasingListing) : ""
+          }
           onConfirm={() => {
             if (purchasingListing) {
               handlePurchase(purchasingListing);
@@ -2284,7 +2865,10 @@ export default function MarketplacePage() {
           onOpenChange={setOffersDialogOpen}
           tokenId={selectedListingForOffers?.tokenId ?? ""}
           orders={offersForToken}
-          isOwner={address?.toLowerCase() === selectedListingForOffers?.seller?.toLowerCase()}
+          isOwner={
+            address?.toLowerCase() ===
+            selectedListingForOffers?.seller?.toLowerCase()
+          }
           onAcceptOffer={handleAcceptOffer}
           isAccepting={!!acceptingOfferId}
         />
@@ -2311,6 +2895,48 @@ export default function MarketplacePage() {
           onFilterChange={handleFilterChange}
           onResetFilters={handleResetFilters}
         />
+
+        {/* Unified Cart Dialog */}
+        <UnifiedCartDialog
+          open={unifiedCartOpen}
+          onOpenChange={setUnifiedCartOpen}
+          buyItems={purchaseCart}
+          listBeasts={cartBeasts}
+          beastPrices={beastPrices}
+          onRemoveBuyItem={handleRemoveFromPurchaseCart}
+          onRemoveListBeast={handleRemoveFromCart}
+          onUpdateBeastPrice={handleUpdateBeastPrice}
+          onClearAll={() => {
+            setCartBeasts([]);
+            setPurchaseCart([]);
+            setBeastPrices(new Map());
+          }}
+          onExecuteAll={handleExecuteUnifiedCart}
+          isProcessing={purchasingBatch || listingBatch}
+          displayCurrency={displayCurrency}
+          priceRates={priceRates}
+          selectedToken={selectedPaymentToken}
+        />
+
+        {/* Floating Cart Button - Fixed position */}
+        {(cartBeasts.length > 0 || purchaseCart.length > 0) && (
+          <button
+            onClick={() => setUnifiedCartOpen(true)}
+            className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-green-600 to-amber-600 text-white rounded-full shadow-2xl hover:shadow-3xl hover:scale-110 transition-all duration-300 font-semibold text-sm group animate-bounce"
+            style={{
+              animationDuration: '2s',
+              animationIterationCount: '3'
+            }}
+          >
+            <ShoppingCart className="h-5 w-5 group-hover:rotate-12 transition-transform" />
+            <span className="flex items-center gap-1.5">
+              Cart
+              <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs font-bold">
+                {cartBeasts.length + purchaseCart.length}
+              </span>
+            </span>
+          </button>
+        )}
       </div>
     </AppLayout>
   );

@@ -104,6 +104,7 @@ export const ENTRYPOINTS = {
 } as const;
 
 // Client fee configuration
-// Fee is in basis points where 10000 = 100%, so 250 = 2.5%
-export const CLIENT_FEE_BP = 250; // 2.5% fee in basis points
+// Fee is in basis points where 10000 = 100%, so 200 = 2%
+// Applied only on listing creation, not on buying
+export const CLIENT_FEE_BP = 200; // 2% fee in basis points
 export const CLIENT_FEE_RECEIVER = "0x0495fc00f87ab20ae908dd24c763c9553b67955e6301113809320da20e8ecb5b";

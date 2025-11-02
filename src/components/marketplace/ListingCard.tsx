@@ -103,7 +103,7 @@ export default function ListingCard({
           )}
         </div>
       </CardContent>
-      <CardFooter className="flex flex-col gap-2.5 p-4 bg-gradient-to-br from-black/30 to-gray-900/20 min-h-[140px]">
+      <CardFooter className="flex flex-col gap-2 p-3 bg-gradient-to-br from-black/30 to-gray-900/20 min-h-[120px]">
         {/* Beast Name */}
         <div className="flex items-center justify-center w-full">
           <div className="text-base font-semibold truncate text-center text-white group-hover:text-lsGold transition-colors">

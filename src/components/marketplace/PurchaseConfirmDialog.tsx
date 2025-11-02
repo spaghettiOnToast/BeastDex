@@ -9,7 +9,7 @@ import {
 import { Button } from "../ui/button";
 import type { Listing } from "../../services/marketplace/types";
 import { formatPrice } from "../../utils/price";
-import { getPaymentTokenByAddress, CLIENT_FEE_BP } from "../../services/marketplace/constants";
+import { getPaymentTokenByAddress } from "../../services/marketplace/constants";
 
 type Props = {
   open: boolean;
@@ -30,14 +30,12 @@ export default function PurchaseConfirmDialog({
 }: Props) {
   if (!listing) return null;
 
-  // Calculate fee and total
+  // No buyer fee - seller pays on listing
   const priceBigInt = BigInt(listing.price);
-  const feeBigInt = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
-  const totalBigInt = priceBigInt + feeBigInt;
+  const totalBigInt = priceBigInt;
 
   const token = getPaymentTokenByAddress(listing.paymentToken);
   const tokenSymbol = token?.symbol || 'STRK';
-  const feeLabel = formatPrice(feeBigInt, tokenSymbol);
   const totalLabel = formatPrice(totalBigInt, tokenSymbol);
 
   return (
@@ -70,19 +68,18 @@ export default function PurchaseConfirmDialog({
             </div>
 
             <div className="flex justify-between">
-              <span className="text-sm text-gray-400">Listing Price:</span>
+              <span className="text-sm text-gray-400">Price:</span>
               <span className="text-sm font-medium text-lsGold">{priceLabel}</span>
             </div>
 
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-400">Platform Fee (2.5%):</span>
-              <span className="text-sm font-medium text-gray-300">{feeLabel}</span>
-            </div>
-
             <div className="flex justify-between border-t border-gray-700 pt-2">
-              <span className="text-sm font-semibold text-white">Total:</span>
+              <span className="text-sm font-semibold text-white">Total to Pay:</span>
               <span className="text-sm font-semibold text-lsGold">{totalLabel}</span>
             </div>
+
+            <p className="text-[10px] text-gray-500 italic">
+              No buyer fee - platform fee was paid by seller on listing
+            </p>
 
             <div className="flex justify-between">
               <span className="text-sm text-gray-400">Seller:</span>

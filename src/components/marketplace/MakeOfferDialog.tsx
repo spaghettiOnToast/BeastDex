@@ -17,10 +17,9 @@ import {
   BEASTS_COLLECTION_ADDRESS,
   DEFAULT_LISTING_DURATION_SECONDS,
   LISTING_DURATION_OPTIONS,
-  CLIENT_FEE_BP,
 } from "../../services/marketplace/constants";
 import { useMarketplaceActions } from "@cartridge/marketplace";
-import { toWei, TOKEN_DECIMALS, fromWei, formatPriceInSymbol } from "../../utils/price";
+import { toWei, TOKEN_DECIMALS, formatPriceInSymbol } from "../../utils/price";
 import { toast } from "sonner";
 import { usePriceRates } from "../../services/marketplace/rates";
 
@@ -252,30 +251,9 @@ export default function MakeOfferDialog({
               placeholder={`e.g., 1.5 ${selectedToken.symbol}`}
               className="mt-1"
             />
-            {priceBigInt && priceBigInt > 0n && (
-              <div className="mt-2 space-y-1">
-                {/* USDC Conversion */}
-                {priceRates && selectedToken.symbol.toUpperCase() !== 'USDC' && (
-                  <div className="text-xs text-gray-400">
-                    ≈ {formatPriceInSymbol(priceBigInt, selectedToken.symbol, 'USDC', priceRates)}
-                  </div>
-                )}
-                {/* Total Cost if Accepted */}
-                <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-2 space-y-1">
-                  <p className="text-xs text-blue-200 font-medium">If accepted, you'll pay:</p>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400">Your offer:</span>
-                    <span className="text-white">{fromWei(priceBigInt, TOKEN_DECIMALS[selectedToken.symbol] ?? 18)} {selectedToken.symbol}</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400">Platform fee (2.5%):</span>
-                    <span className="text-white">{fromWei((priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n, TOKEN_DECIMALS[selectedToken.symbol] ?? 18)} {selectedToken.symbol}</span>
-                  </div>
-                  <div className="flex justify-between text-xs font-semibold border-t border-blue-500/20 pt-1">
-                    <span className="text-blue-200">Total:</span>
-                    <span className="text-blue-200">{fromWei(priceBigInt + (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n, TOKEN_DECIMALS[selectedToken.symbol] ?? 18)} {selectedToken.symbol}</span>
-                  </div>
-                </div>
+            {priceBigInt && priceBigInt > 0n && priceRates && selectedToken.symbol.toUpperCase() !== 'USDC' && (
+              <div className="mt-2 text-xs text-gray-400">
+                ≈ {formatPriceInSymbol(priceBigInt, selectedToken.symbol, 'USDC', priceRates)}
               </div>
             )}
           </div>

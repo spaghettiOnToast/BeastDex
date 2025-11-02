@@ -10,7 +10,7 @@ import { Button } from "../ui/button";
 import type { Listing } from "../../services/marketplace/types";
 import { X } from "lucide-react";
 import { formatPrice, formatPriceInSymbol, type RatesInSTRK } from "../../utils/price";
-import { getPaymentTokenByAddress, CLIENT_FEE_BP } from "../../services/marketplace/constants";
+import { getPaymentTokenByAddress } from "../../services/marketplace/constants";
 
 type Props = {
   open: boolean;
@@ -43,9 +43,8 @@ export default function PurchaseCartDialog({
     }
   }, 0n);
 
-  // Calculate platform fee and total
-  const platformFee = (subtotal * BigInt(CLIENT_FEE_BP)) / 10000n;
-  const totalPrice = subtotal + platformFee;
+  // No buyer fee - seller pays on listing
+  const totalPrice = subtotal;
 
   // Get the most common payment token for fee display (or first listing's token)
   const firstToken = listings[0] ? getPaymentTokenByAddress(listings[0].paymentToken) : null;
@@ -115,18 +114,13 @@ export default function PurchaseCartDialog({
                 <span className="text-gray-400">Items:</span>
                 <span className="font-medium">{listings.length}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Subtotal:</span>
-                <span className="font-medium text-lsGold">{formatPrice(subtotal, tokenSymbol)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Platform Fee (2.5%):</span>
-                <span className="font-medium text-gray-300">{formatPrice(platformFee, tokenSymbol)}</span>
-              </div>
               <div className="flex justify-between text-base font-semibold border-t border-gray-700 pt-2">
-                <span className="text-white">Total:</span>
+                <span className="text-white">Total to Pay:</span>
                 <span className="text-lsGold">{formatPrice(totalPrice, tokenSymbol)}</span>
               </div>
+              <p className="text-[10px] text-gray-500 italic">
+                No buyer fee - platform fees were paid by sellers on listing
+              </p>
               <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-3">
                 <p className="text-xs text-yellow-200">
                   ⚠️ All purchases will be executed in a single transaction. This cannot be reversed.

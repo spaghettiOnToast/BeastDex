@@ -457,7 +457,6 @@ export default function CartListDialog({
                         if (Number.isFinite(priceNum) && priceNum > 0) {
                           const priceBigInt = toWei(priceStr, TOKEN_DECIMALS[selectedToken.symbol] ?? 18);
                           const platformFeeBigInt = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
-                          const totalBigInt = priceBigInt + platformFeeBigInt;
                           return (
                             <div className="text-[10px] space-y-0.5">
                               {priceRates && selectedToken.symbol.toUpperCase() !== 'USDC' && (
@@ -465,8 +464,8 @@ export default function CartListDialog({
                                   ≈ {formatPriceInSymbol(priceBigInt, selectedToken.symbol, 'USDC', priceRates)}
                                 </div>
                               )}
-                              <div className="text-blue-300">
-                                Buyer pays: {fromWei(totalBigInt, TOKEN_DECIMALS[selectedToken.symbol] ?? 18)} {selectedToken.symbol} (+2.5% fee)
+                              <div className="text-amber-300">
+                                You pay 2% fee: {fromWei(platformFeeBigInt, TOKEN_DECIMALS[selectedToken.symbol] ?? 18)} {selectedToken.symbol}
                               </div>
                             </div>
                           );
