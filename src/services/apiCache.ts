@@ -14,12 +14,17 @@ class ApiCache {
 
   constructor() {
     // Set default cache configurations for different API endpoints
-    // Note: Shorter TTLs to account for SQL endpoint sync delays
-    this.cacheConfigs.set("beast-filters", { ttl: 10 * 60 * 1000 }); // 10 minutes (static data)
-    this.cacheConfigs.set("beast-by-id", { ttl: 30 * 1000 }); // 30 seconds (can change frequently)
-    this.cacheConfigs.set("beast-query", { ttl: 15 * 1000 }); // 15 seconds (ownership changes)
-    this.cacheConfigs.set("adventurer-deaths", { ttl: 1 * 60 * 1000 }); // 1 minute
-    this.cacheConfigs.set("beast-power-rank", { ttl: 1 * 60 * 1000 }); // 1 minute
+    // Note: Longer TTLs to reduce load on slow Torii backend
+    this.cacheConfigs.set("beast-filters", { ttl: 30 * 60 * 1000 }); // 30 minutes (static data)
+    this.cacheConfigs.set("beast-by-id", { ttl: 2 * 60 * 1000 }); // 2 minutes
+    this.cacheConfigs.set("beast-query", { ttl: 1 * 60 * 1000 }); // 1 minute (reduced backend load)
+    this.cacheConfigs.set("adventurer-deaths", { ttl: 3 * 60 * 1000 }); // 3 minutes
+    this.cacheConfigs.set("beast-power-rank", { ttl: 3 * 60 * 1000 }); // 3 minutes
+    this.cacheConfigs.set("beast-stats", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("beast-highlights", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("beast-collection-leaderboard", { ttl: 3 * 60 * 1000 }); // 3 minutes
+    this.cacheConfigs.set("most-collected-beast", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("beast-of-the-day", { ttl: 2 * 60 * 1000 }); // 2 minutes
   }
 
   private getCacheKey(endpoint: string, params: any): string {

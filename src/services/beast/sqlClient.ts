@@ -17,7 +17,11 @@ async function fetchWithRetry(
   let lastError: unknown = null;
   while (attempt <= retries) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort('timeout'), timeoutMs);
+    let isTimeout = false;
+    const timer = setTimeout(() => {
+      isTimeout = true;
+      controller.abort();
+    }, timeoutMs);
     try {
       const response = await fetch(url, {
         ...init,
@@ -41,21 +45,23 @@ async function fetchWithRetry(
         );
       }
     } catch (err) {
+      clearTimeout(timer);
       // Distinguish timeouts vs other aborts
-      if (
-        controller.signal.aborted &&
-        (controller.signal as any).reason === 'timeout'
-      ) {
+      if (controller.signal.aborted && isTimeout) {
         lastError = new Error(`SQL API request timed out after ${timeoutMs}ms`);
         console.warn(`[SQL] Request timeout, will retry. Attempt ${attempt + 1}/${retries + 1}`);
       } else if (err instanceof Error && err.message.includes('Failed to fetch')) {
         // Network error, also retryable
         lastError = err;
         console.warn(`[SQL] Network error, will retry. Attempt ${attempt + 1}/${retries + 1}`);
+      } else if (err instanceof Error && err.name === 'AbortError' && isTimeout) {
+        lastError = new Error(`SQL API request timed out after ${timeoutMs}ms`);
+        console.warn(`[SQL] Request timeout, will retry. Attempt ${attempt + 1}/${retries + 1}`);
       } else {
         lastError = err;
       }
       // AbortError or network error eligible for retry
+      continue;
     } finally {
       clearTimeout(timer);
     }
@@ -85,7 +91,7 @@ export async function runBeastSql<T = unknown>(
         method: "GET",
         headers: { Accept: "application/json" },
       },
-      { retries: 3, baseDelayMs: 500, timeoutMs: 30_000, ...(options || {}) }
+      { retries: 2, baseDelayMs: 1000, timeoutMs: 90_000, ...(options || {}) }
     );
 
     const data = (await response.json()) as T;
