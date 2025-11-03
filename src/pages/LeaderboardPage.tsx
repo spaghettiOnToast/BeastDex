@@ -23,27 +23,22 @@ function LeaderboardPage() {
     {
       id: "power" as const,
       label: "Power Rank",
-      description: "Top players by total power",
     },
     {
       id: "beastNames" as const,
       label: "Most Collected Beast",
-      description: "Top collectors by total beasts owned",
     },
     {
       id: "stats" as const,
       label: "Collection Stats",
-      description: "Detailed breakdowns by shiny, animated, and standard hunts",
     },
     {
       id: "beastOfTheDay" as const,
       label: "Beast of the Day",
-      description: "Most prestigious beasts fallen in the past 24 hours",
     },
     {
       id: "slayer" as const,
       label: "Slayer",
-      description: "Beasts with the highest adventurer body counts",
     },
   ];
 
@@ -80,13 +75,6 @@ function LeaderboardPage() {
               </button>
             ))}
           </div>
-        </div>
-
-        {/* Tab Description */}
-        <div className="text-center">
-          <p className="text-sm text-gray-400">
-            {tabs.find((tab) => tab.id === activeTab)?.description}
-          </p>
         </div>
 
         {/* Tab Content */}

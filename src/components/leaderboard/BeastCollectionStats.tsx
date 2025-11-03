@@ -12,37 +12,31 @@ const CATEGORY_CONFIG: Array<{
   id: BeastRarityLeaderboardCategory;
   label: string;
   highlightClass: string;
-  description: string;
 }> = [
   {
     id: "all",
     label: "All",
     highlightClass: "from-[#8bff72] to-[#39ff14]",
-    description: "Top collectors across every beast",
   },
   {
     id: "animatedShiny",
     label: "Animated Shiny",
     highlightClass: "from-[#ff7cf7] to-[#7dfbff]",
-    description: "Collectors of animated shinies",
   },
   {
     id: "shiny",
     label: "Shiny",
     highlightClass: "from-[#ffe66d] to-[#ffaf1d]",
-    description: "Shiniest beast hoarders",
   },
   {
     id: "animated",
     label: "Animated",
     highlightClass: "from-[#7dfbff] to-[#39ff14]",
-    description: "Animated beast fanatics",
   },
   {
     id: "standard",
     label: "Standard",
     highlightClass: "from-gray-200 to-gray-400",
-    description: "Champions of the classics",
   },
 ];
 
@@ -190,9 +184,6 @@ export function BeastCollectionStats() {
                 className={`inline-flex items-center rounded-full border border-gray-700 bg-gradient-to-r ${activeCategoryMeta?.highlightClass ?? ""} px-3 py-1 text-xs font-bold uppercase tracking-wide text-gray-900`}
               >
                 {activeCategoryMeta?.label ?? ""}
-              </span>
-              <span className="text-sm text-gray-400">
-                {activeCategoryMeta?.description ?? ""}
               </span>
             </div>
           </div>
