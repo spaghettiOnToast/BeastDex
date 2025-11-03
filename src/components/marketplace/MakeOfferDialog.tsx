@@ -40,7 +40,7 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   beast: Beast | null;
   tokenId?: string;
-  onOfferMade?: () => void;
+  onOfferMade?: (result?: { tokenId: string; beastName: string; offerPrice: string; currency: string }) => void;
 };
 
 export default function MakeOfferDialog({
@@ -205,7 +205,14 @@ export default function MakeOfferDialog({
       toast.success("Offer made successfully!", { id: toastId });
       onOpenChange(false);
       setPrice("");
-      onOfferMade?.();
+
+      const actualTokenId = (tokenId || beast?.id.split(":").pop() || beast?.id || "");
+      onOfferMade?.({
+        tokenId: actualTokenId,
+        beastName: beast?.name || `Beast #${actualTokenId}`,
+        offerPrice: price,
+        currency: selectedToken.symbol,
+      });
     } catch (e) {
       const errorMessage = (e as Error).message || "Failed to make offer";
 

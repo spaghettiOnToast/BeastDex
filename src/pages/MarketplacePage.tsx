@@ -2327,6 +2327,16 @@ export default function MarketplacePage() {
                                         "Listing canceled successfully!",
                                         { id: toastId }
                                       );
+
+                                      // Record cancel transaction
+                                      const cancelEntry: TxEntry = {
+                                        type: "cancel",
+                                        tokenId: listing.tokenId,
+                                        timestamp: Date.now(),
+                                        note: `${listing.beast?.name || `Beast #${listing.tokenId}`}`,
+                                      };
+                                      setMyTxs((prev): TxEntry[] => [cancelEntry, ...prev].slice(0, 100));
+
                                       await refetchOrders();
                                       await reloadUserBeasts();
                                     } catch (error) {
@@ -2604,6 +2614,16 @@ export default function MarketplacePage() {
                                     "Listing canceled successfully!",
                                     { id: toastId }
                                   );
+
+                                  // Record cancel transaction
+                                  const cancelEntry: TxEntry = {
+                                    type: "cancel",
+                                    tokenId: listing.tokenId,
+                                    timestamp: Date.now(),
+                                    note: `${listing.beast?.name || `Beast #${listing.tokenId}`}`,
+                                  };
+                                  setMyTxs((prev): TxEntry[] => [cancelEntry, ...prev].slice(0, 100));
+
                                   await refetchOrders();
                                   await reloadUserBeasts();
                                 } catch (error) {
@@ -2687,6 +2707,7 @@ export default function MarketplacePage() {
                         const tokenId = beast.id.split(":").pop() || beast.id;
                         const isAlreadyListed =
                           alreadyListedTokenIds.has(tokenId);
+
                         return (
                           <ListingCard
                             key={beast.id}
@@ -2816,6 +2837,10 @@ export default function MarketplacePage() {
               await refetchOrders();
               await reloadUserBeasts();
             } catch {}
+
+            // Switch to My tab and My Active Listings subtab to show the new listings
+            setActiveTab("my");
+            setMyActivitySubTab("listings");
           }}
           onRemoveBeast={handleRemoveFromCart}
           onClearCart={handleClearCart}
@@ -2828,7 +2853,18 @@ export default function MarketplacePage() {
           account={account}
           cancel={cancel}
           list={list}
-          onEdited={async () => {
+          onEdited={async (result) => {
+            // Record edit transaction
+            if (result) {
+              const editEntry: TxEntry = {
+                type: "edit",
+                tokenId: result.tokenId,
+                timestamp: Date.now(),
+                note: `${result.beastName} - New price: ${result.newPrice} ${result.currency}`,
+              };
+              setMyTxs((prev): TxEntry[] => [editEntry, ...prev].slice(0, 100));
+            }
+
             await refetchOrders();
             await reloadUserBeasts();
           }}
@@ -2854,7 +2890,18 @@ export default function MarketplacePage() {
           onOpenChange={setMakeOfferOpen}
           beast={offerBeast}
           tokenId={offerTokenId}
-          onOfferMade={() => {
+          onOfferMade={(result) => {
+            // Record offer transaction
+            if (result) {
+              const offerEntry: TxEntry = {
+                type: "offer",
+                tokenId: result.tokenId,
+                timestamp: Date.now(),
+                note: `${result.beastName} - Offer: ${result.offerPrice} ${result.currency}`,
+              };
+              setMyTxs((prev): TxEntry[] => [offerEntry, ...prev].slice(0, 100));
+            }
+
             // Refresh listings to show new offer count
             refetchOrders();
           }}

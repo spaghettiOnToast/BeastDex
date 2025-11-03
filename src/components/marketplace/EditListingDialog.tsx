@@ -42,7 +42,7 @@ type Props = {
   account: AccountInterface | undefined;
   cancel: any;
   list: any;
-  onEdited?: () => void;
+  onEdited?: (result?: { tokenId: string; beastName: string; newPrice: string; currency: string }) => void;
 };
 
 export default function EditListingDialog({
@@ -215,7 +215,12 @@ export default function EditListingDialog({
       toast.success("Listing updated successfully!", { id: toastId });
       onOpenChange(false);
       setPrice("");
-      onEdited?.();
+      onEdited?.({
+        tokenId: listing.tokenId,
+        beastName: listing.beast?.name || `Beast #${listing.tokenId}`,
+        newPrice: price,
+        currency: selectedToken.symbol,
+      });
     } catch (e) {
       const errorMessage = (e as Error).message || "Failed to update listing";
       setError(errorMessage);

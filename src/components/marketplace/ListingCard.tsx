@@ -136,20 +136,24 @@ export default function ListingCard({
         <div className="flex items-center justify-center gap-2 w-full">
           {ownedByUser ? (
             <>
-              <Button
-                className={
-                  isAlreadyListed
-                    ? "flex-1 text-xs px-3 py-2 h-9 bg-orange-500/20 text-orange-300 border-orange-400/50 cursor-not-allowed font-semibold"
-                    : inCart
-                    ? "flex-1 text-xs px-3 py-2 h-9 bg-[#39ff14] text-black hover:bg-[#39ff14]/90 border-[#39ff14] font-semibold"
-                    : "flex-1 text-xs px-3 py-2 h-9 font-semibold hover:bg-gray-800/50 border-white text-white"
-                }
-                variant={inCart ? "default" : "outline"}
-                onClick={onEdit}
-                disabled={pendingCancel || isAlreadyListed}
-              >
-                {pendingCancel ? "Cancelling…" : isAlreadyListed ? "Already Listed" : (primaryActionLabel ?? "Edit")}
-              </Button>
+              {isAlreadyListed ? (
+                <div className="flex-1 text-xs px-3 py-2 h-9 bg-orange-500/20 text-orange-300 border border-orange-400/50 rounded-md flex items-center justify-center font-semibold">
+                  Already Listed
+                </div>
+              ) : (
+                <Button
+                  className={
+                    inCart
+                      ? "flex-1 text-xs px-3 py-2 h-9 bg-[#39ff14] text-black hover:bg-[#39ff14]/90 border-[#39ff14] font-semibold"
+                      : "flex-1 text-xs px-3 py-2 h-9 font-semibold hover:bg-gray-800/50 border-white text-white"
+                  }
+                  variant={inCart ? "default" : "outline"}
+                  onClick={onEdit}
+                  disabled={pendingCancel}
+                >
+                  {pendingCancel ? "Cancelling…" : (primaryActionLabel ?? "Edit")}
+                </Button>
+              )}
               {onCancel && !pendingCancel ? (
                 <Button
                   className="flex-1 text-xs px-3 py-2 h-9 font-semibold"
