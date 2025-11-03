@@ -731,7 +731,32 @@ export async function fetchBeastRarityBeastLeaderboard({
       const orderDirection = ascending ? "ASC" : "DESC";
 
       const query = `
-        WITH token_attrs AS (
+        WITH all_token_attrs AS (
+          SELECT
+            t.id,
+            json_extract(attr.value, '$.trait_type') AS trait,
+            json_extract(attr.value, '$.value') AS value
+          FROM tokens t
+          JOIN json_each(
+            CASE
+              WHEN json_valid(t.metadata) = 1 THEN t.metadata
+              ELSE '{"attributes":[]}'
+            END,
+            '$.attributes'
+          ) attr
+          WHERE t.contract_address = '${CONTRACT_ADDRESS}'
+            AND json_valid(t.metadata) = 1
+            AND json_extract(attr.value, '$.trait_type') IS NOT NULL
+            AND json_extract(attr.value, '$.value') IS NOT NULL
+        ),
+        all_beasts AS (
+          SELECT DISTINCT
+            MAX(CASE WHEN LOWER(trait) = 'beast' THEN value END) AS beast_name
+          FROM all_token_attrs
+          WHERE LOWER(trait) = 'beast'
+          GROUP BY id
+        ),
+        owned_token_attrs AS (
           SELECT
             t.id,
             json_extract(attr.value, '$.trait_type') AS trait,
@@ -762,7 +787,7 @@ export async function fetchBeastRarityBeastLeaderboard({
             MAX(CASE WHEN LOWER(trait) LIKE 'shiny%' AND value IN ('1','true','True','TRUE') THEN 1 ELSE 0 END) AS is_shiny,
             MAX(CASE WHEN LOWER(trait) LIKE 'animated%' AND value IN ('1','true','True','TRUE') THEN 1 ELSE 0 END) AS is_animated,
             MAX(CASE WHEN LOWER(trait) = 'beast' THEN value END) AS beast_name
-          FROM token_attrs
+          FROM owned_token_attrs
           GROUP BY id
         ),
         filtered AS (
@@ -774,10 +799,12 @@ export async function fetchBeastRarityBeastLeaderboard({
         ),
         counts AS (
           SELECT
-            beast_name,
-            COUNT(*) AS total
-          FROM filtered
-          GROUP BY beast_name
+            ab.beast_name,
+            COUNT(f.beast_name) AS total
+          FROM all_beasts ab
+          LEFT JOIN filtered f ON ab.beast_name = f.beast_name
+          WHERE ab.beast_name IS NOT NULL
+          GROUP BY ab.beast_name
         )
         SELECT
           ROW_NUMBER() OVER (ORDER BY total ${orderDirection}, beast_name ASC) AS rank,
