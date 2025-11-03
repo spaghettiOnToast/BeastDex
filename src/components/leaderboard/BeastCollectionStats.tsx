@@ -210,7 +210,7 @@ export function BeastCollectionStats() {
             onClick={toggleSortOrder}
             className="inline-flex items-center gap-2 rounded-xl border border-gray-700 bg-gradient-to-r from-gray-800 to-gray-900 px-4 py-2 text-sm font-bold uppercase tracking-wider text-lsGold shadow-lg transition-all duration-200 hover:border-[#8bff72]/50 hover:bg-gray-800 hover:text-[#8bff72]"
           >
-            <span>{ascending ? "📈" : "📉"}</span>
+            <span>{ascending ? "📉" : "📈"}</span>
             <span>Sort by: {ascending ? "Least" : "Most"} Collected</span>
           </button>
         </div>
