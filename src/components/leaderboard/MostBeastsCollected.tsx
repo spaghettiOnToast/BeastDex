@@ -88,9 +88,9 @@ export function MostBeastsCollected() {
         <p className="text-red-400 mb-4">❌ {error}</p>
         <button
           onClick={() => setPage(1)}
-          className="text-lsGold hover:text-lsGreen transition-colors"
+          className="px-6 py-3 bg-gradient-to-r from-lsGold to-lsGreen text-black font-bold rounded-lg hover:scale-105 transition-transform shadow-lg hover:shadow-lsGreen/50 uppercase tracking-wider"
         >
-          Try again
+          Try Again
         </button>
       </div>
     );

@@ -16,6 +16,7 @@ type Props = {
   disabled?: boolean;
   duplicateCount?: number;
   selected?: boolean;
+  hasAllVariants?: boolean;
 };
 
 const BeastCard = memo(function BeastCard({
@@ -28,6 +29,7 @@ const BeastCard = memo(function BeastCard({
   disabled = false,
   duplicateCount,
   selected = false,
+  hasAllVariants = false,
 }: Props) {
   const { image, name, owner } = beast;
 
@@ -129,7 +131,10 @@ const BeastCard = memo(function BeastCard({
         </div>
       </CardContent>
       <CardFooter className="flex flex-col items-center gap-1.5 px-0 py-3 bg-gradient-to-b from-background/50 to-background">
-        <p className="font-medium text-sm truncate w-full text-center">
+        <p className={cn(
+          "font-medium text-sm truncate w-full text-center transition-all duration-300",
+          hasAllVariants && !missing && "text-[#39ff14] drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] animate-pulse"
+        )}>
           {name}
         </p>
         <div className="w-full text-center">{renderOwner()}</div>

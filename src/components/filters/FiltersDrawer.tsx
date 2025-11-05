@@ -106,7 +106,41 @@ export function FiltersDrawer({
           ) : (
             <div className="space-y-3">
               {(Object.entries(availableFilters || {}) as Array<[string, string[]]>)
-                .sort(([a], [b]) => a.localeCompare(b))
+                .sort(([a], [b]) => {
+                  // Custom sort order for filters
+                  const order = [
+                    "shiny",
+                    "animated",
+                    "genesis",
+                    "beast",
+                    "beast id",
+                    "prefix",
+                    "suffix",
+                    "rank",
+                    "tier",
+                    "type",
+                    "token id",
+                    "health",
+                    "level",
+                    "power",
+                  ];
+
+                  const aLower = a.toLowerCase();
+                  const bLower = b.toLowerCase();
+                  const aIndex = order.indexOf(aLower);
+                  const bIndex = order.indexOf(bLower);
+
+                  // If both are in the order array, sort by their position
+                  if (aIndex !== -1 && bIndex !== -1) {
+                    return aIndex - bIndex;
+                  }
+                  // If only a is in the order array, it comes first
+                  if (aIndex !== -1) return -1;
+                  // If only b is in the order array, it comes first
+                  if (bIndex !== -1) return 1;
+                  // Otherwise, sort alphabetically
+                  return a.localeCompare(b);
+                })
                 .map(([trait, values]) => {
                   const normalisedTrait = trait.toLowerCase();
                   const BOOLEAN_FILTER_TRAITS = new Set([

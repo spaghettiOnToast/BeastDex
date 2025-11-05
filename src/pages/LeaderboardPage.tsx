@@ -2,9 +2,17 @@ import { useState } from "react";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import { RankLeaderboard } from "../components/leaderboard/RankLeaderboard";
-import { MostBeastsCollected } from "../components/leaderboard/MostBeastsCollected";
+import { MostCollectedBeast } from "../components/leaderboard/MostCollectedBeast";
+import { BeastOfTheDay } from "../components/leaderboard/BeastOfTheDay";
+import { BeastCollectionStats } from "../components/leaderboard/BeastCollectionStats";
+import { BeastSlayerLeaderboard } from "../components/leaderboard/BeastSlayerLeaderboard";
 
-type LeaderboardTab = "power" | "beasts";
+type LeaderboardTab =
+  | "power"
+  | "beastNames"
+  | "stats"
+  | "beastOfTheDay"
+  | "slayer";
 
 function LeaderboardPage() {
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("power");
@@ -12,8 +20,26 @@ function LeaderboardPage() {
   const topBar = <TopBar />;
 
   const tabs = [
-    { id: "power" as const, label: "Power Rank", description: "Top players by total power" },
-    { id: "beasts" as const, label: "Most Beasts", description: "Top collectors by beast count" },
+    {
+      id: "power" as const,
+      label: "Power Rank",
+    },
+    {
+      id: "beastNames" as const,
+      label: "Most Collected Beast",
+    },
+    {
+      id: "stats" as const,
+      label: "Collection Stats",
+    },
+    {
+      id: "beastOfTheDay" as const,
+      label: "Beast of the Day",
+    },
+    {
+      id: "slayer" as const,
+      label: "Slayer",
+    },
   ];
 
   return (
@@ -51,19 +77,15 @@ function LeaderboardPage() {
           </div>
         </div>
 
-        {/* Tab Description */}
-        <div className="text-center">
-          <p className="text-sm text-gray-400">
-            {tabs.find(tab => tab.id === activeTab)?.description}
-          </p>
-        </div>
-
         {/* Tab Content */}
         <div className="min-h-[400px] relative">
           <div className="absolute inset-0 bg-gradient-to-br from-[#8bff72]/5 via-transparent to-lsGold/5 rounded-2xl pointer-events-none"></div>
           <div className="relative z-10">
             {activeTab === "power" && <RankLeaderboard />}
-            {activeTab === "beasts" && <MostBeastsCollected />}
+            {activeTab === "beastNames" && <MostCollectedBeast />}
+            {activeTab === "stats" && <BeastCollectionStats />}
+            {activeTab === "beastOfTheDay" && <BeastOfTheDay />}
+            {activeTab === "slayer" && <BeastSlayerLeaderboard />}
           </div>
         </div>
       </div>

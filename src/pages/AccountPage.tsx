@@ -19,7 +19,6 @@ import { useBeasts } from "../hooks/useBeasts";
 import {
   fetchBeastAttributeFilters,
   fetchBeasts,
-  fetchAdventurerDeaths,
   fetchBeastPowerRank,
   type BeastAttributeFilters,
   type Beast,
@@ -33,7 +32,6 @@ import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
 import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
 import type { OverviewCard } from "@/components/account/OverviewCards";
 import {
-  calculateKdRatio,
   calculateTotalPower,
   computeBeastCollectionStats,
   EMPTY_BEAST_COLLECTION_STATS,
@@ -72,7 +70,6 @@ function AccountPage() {
   );
   const [collectionTotal, setCollectionTotal] = useState(0);
   const [collectionPower, setCollectionPower] = useState(0);
-  const [accountDeaths, setAccountDeaths] = useState(0);
   const [accountRanking, setAccountRanking] = useState<BeastPowerRank | null>(
     null
   );
@@ -292,7 +289,6 @@ function AccountPage() {
       setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
       setCollectionTotal(0);
       setCollectionPower(0);
-      setAccountDeaths(0);
       setAccountRanking(null);
       setSummaryError(identifierError);
       setSummaryLoading(false);
@@ -305,72 +301,59 @@ function AccountPage() {
     setSummaryError(null);
 
     try {
-      const limit = 120; // Larger batch size for fewer requests
-      const MAX_INITIAL_PAGES = 3; // Limit initial pages for faster loading
-      let accumulated: Beast[] = [];
+      // Load ALL beasts for accurate stats calculation (like ProfilePage and CollectionPage)
+      // Use batched loading to handle large collections (11,000+ beasts)
+      const batchSize = 200;
+      let allUserBeasts: Beast[] = [];
+      let currentPage = 1;
+      let hasMoreData = true;
       let totalCount = 0;
 
-      // Load first batch to get total count
-      const { beasts: firstBatch, total: batchTotal } = await fetchBeasts({
-        limit,
-        page: 1,
-        ownerAddresses: [resolvedAddress],
-        sort: "default",
+      while (hasMoreData && allUserBeasts.length < 15000) {
+        const { beasts: batch, total } = await fetchBeasts({
+          limit: batchSize,
+          page: currentPage,
+          ownerAddresses: [resolvedAddress],
+          sort: "default",
+        });
+
+        if (summaryRequestRef.current !== requestId) {
+          return;
+        }
+
+        allUserBeasts = [...allUserBeasts, ...batch];
+        totalCount = total;
+
+        hasMoreData = batch.length === batchSize && allUserBeasts.length < total;
+        currentPage++;
+
+        if (allUserBeasts.length >= total || batch.length < batchSize) {
+          hasMoreData = false;
+        }
+      }
+
+      if (summaryRequestRef.current !== requestId) {
+        return;
+      }
+
+      const ranking = await fetchBeastPowerRank(resolvedAddress).catch((err) => {
+        console.error("Failed to fetch account rank", err);
+        return null;
       });
 
       if (summaryRequestRef.current !== requestId) {
         return;
       }
 
-      accumulated = [...firstBatch];
-      totalCount = batchTotal;
+      // Set collection total and compute stats with ALL beasts for accuracy
+      setCollectionTotal(totalCount);
 
-      // Load additional pages up to limit (sequential for better caching)
-      if (totalCount > firstBatch.length) {
-        const totalPages = Math.ceil(totalCount / limit);
-        const pagesToLoad = Math.min(totalPages, MAX_INITIAL_PAGES);
-
-        for (let p = 2; p <= pagesToLoad; p++) {
-          try {
-            const result = await fetchBeasts({
-              limit,
-              page: p,
-              ownerAddresses: [resolvedAddress],
-              sort: "default",
-            });
-            accumulated = accumulated.concat(result.beasts);
-          } catch (error) {
-            console.warn(`Failed to load page ${p}:`, error);
-            // Continue with partial data rather than fail completely
-          }
-        }
-      }
-
-      const [deaths, ranking] = await Promise.all([
-        fetchAdventurerDeaths(resolvedAddress).catch((err) => {
-          console.error("Failed to fetch account deaths", err);
-          return 0;
-        }),
-        fetchBeastPowerRank(resolvedAddress).catch((err) => {
-          console.error("Failed to fetch account rank", err);
-          return null;
-        }),
-      ]);
-
-      if (summaryRequestRef.current !== requestId) {
-        return;
-      }
-
-      // Use totalCount first, only compute stats with sample for speed
-      setCollectionTotal(totalCount || accumulated.length);
-
-      // Compute stats with available sample (partial data is better than slow loading)
-      const stats = computeBeastCollectionStats(accumulated);
-      const power = calculateTotalPower(accumulated);
+      // Compute stats with complete data (like ProfilePage and CollectionPage)
+      const stats = computeBeastCollectionStats(allUserBeasts);
+      const power = calculateTotalPower(allUserBeasts);
 
       setCollectionStats(stats);
       setCollectionPower(power);
-      setAccountDeaths(deaths);
       setAccountRanking(ranking);
     } catch (err: unknown) {
       if (summaryRequestRef.current !== requestId) {
@@ -380,7 +363,6 @@ function AccountPage() {
       setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
       setCollectionTotal(0);
       setCollectionPower(0);
-      setAccountDeaths(0);
       setAccountRanking(null);
       setSummaryError(getErrorMessage(err, "Failed to load account summary"));
     } finally {
@@ -419,11 +401,6 @@ function AccountPage() {
     void reload();
     void loadSummary();
   }, [loadSummary, reload, resolvedAddress]);
-
-  const kdRatio = useMemo(
-    () => calculateKdRatio(collectionTotal, accountDeaths),
-    [collectionTotal, accountDeaths]
-  );
 
   const rankDisplay =
     accountRanking?.rank != null
@@ -509,13 +486,6 @@ function AccountPage() {
   const overviewCards: OverviewCard[] = useMemo(
     () => [
       {
-        key: "kd",
-        icon: "⚔️",
-        label: "K:D Ratio",
-        value: kdRatio,
-        sub: `${collectionTotal.toLocaleString()} K / ${accountDeaths.toLocaleString()} D`,
-      },
-      {
         key: "beasts",
         icon: "🐾",
         label: "Beasts Collected",
@@ -536,10 +506,8 @@ function AccountPage() {
       },
     ],
     [
-      accountDeaths,
       collectionPower,
       collectionTotal,
-      kdRatio,
       rankDisplay,
       rankSubheading,
     ]

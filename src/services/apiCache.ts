@@ -14,11 +14,23 @@ class ApiCache {
 
   constructor() {
     // Set default cache configurations for different API endpoints
-    this.cacheConfigs.set("beast-filters", { ttl: 10 * 60 * 1000 }); // 10 minutes
-    this.cacheConfigs.set("beast-by-id", { ttl: 5 * 60 * 1000 }); // 5 minutes
-    this.cacheConfigs.set("beast-query", { ttl: 2 * 60 * 1000 }); // 2 minutes
-    this.cacheConfigs.set("adventurer-deaths", { ttl: 5 * 60 * 1000 }); // 5 minutes
-    this.cacheConfigs.set("beast-power-rank", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    // Note: Reduced TTLs to ensure fresher data, especially after beast updates/purchases
+    this.cacheConfigs.set("beast-filters", { ttl: 30 * 60 * 1000 }); // 30 minutes (static data)
+    this.cacheConfigs.set("beast-by-id", { ttl: 30 * 1000 }); // 30 seconds (frequently updated data)
+    this.cacheConfigs.set("beast-query", { ttl: 30 * 1000 }); // 30 seconds (frequently updated data)
+    this.cacheConfigs.set("adventurer-deaths", { ttl: 2 * 60 * 1000 }); // 2 minutes
+    this.cacheConfigs.set("beast-power-rank", { ttl: 2 * 60 * 1000 }); // 2 minutes
+    this.cacheConfigs.set("beast-stats", { ttl: 3 * 60 * 1000 }); // 3 minutes
+    this.cacheConfigs.set("beast-highlights", { ttl: 3 * 60 * 1000 }); // 3 minutes
+    this.cacheConfigs.set("beast-collection-leaderboard", { ttl: 2 * 60 * 1000 }); // 2 minutes
+    this.cacheConfigs.set("most-collected-beast", { ttl: 3 * 60 * 1000 }); // 3 minutes
+    this.cacheConfigs.set("beast-of-the-day", { ttl: 1 * 60 * 1000 }); // 1 minute
+    this.cacheConfigs.set("beast-rarity-leaderboard", { ttl: 2 * 60 * 1000 }); // 2 minutes
+    this.cacheConfigs.set("beast-slayer-leaderboard", { ttl: 2 * 60 * 1000 }); // 2 minutes
+    this.cacheConfigs.set("power-rank-leaderboard", { ttl: 2 * 60 * 1000 }); // 2 minutes
+    this.cacheConfigs.set("most-collected-beast-leaderboard", { ttl: 2 * 60 * 1000 }); // 2 minutes
+    this.cacheConfigs.set("beast-of-the-day-leaderboard", { ttl: 1 * 60 * 1000 }); // 1 minute
+    this.cacheConfigs.set("beast-slayer-leaderboard", { ttl: 2 * 60 * 1000 }); // 2 minutes
   }
 
   private getCacheKey(endpoint: string, params: any): string {
@@ -95,6 +107,27 @@ class ApiCache {
         this.cache.delete(key);
       }
     }
+  }
+
+  // Clear all beast-related caches (useful after purchases/updates)
+  clearBeastCaches(): void {
+    const beastEndpoints = [
+      'beast-by-id',
+      'beast-query',
+      'beast-stats',
+      'beast-highlights',
+      'beast-collection-leaderboard',
+      'most-collected-beast',
+      'beast-of-the-day',
+      'beast-rarity-leaderboard',
+      'beast-slayer-leaderboard',
+      'power-rank-leaderboard',
+      'most-collected-beast-leaderboard',
+      'beast-of-the-day-leaderboard',
+      'beast-slayer-leaderboard',
+    ];
+
+    beastEndpoints.forEach(endpoint => this.clearEndpoint(endpoint));
   }
 
   // Get cache statistics

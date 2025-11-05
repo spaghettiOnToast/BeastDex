@@ -10,6 +10,7 @@ import {
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { ChevronLeft, ChevronRight, ArrowRightLeft } from "lucide-react";
+import { normaliseStarknetAddress } from "../../utils/address";
 
 type BeastModalProps = {
   beast: Beast | null;
@@ -42,8 +43,9 @@ export function BeastModal({
     return null;
   }
 
-  const ownerUsername = beast.owner
-    ? ownerUsernames[beast.owner.toLowerCase()] ?? null
+  const normalizedOwner = beast.owner ? normaliseStarknetAddress(beast.owner) : null;
+  const ownerUsername = normalizedOwner
+    ? ownerUsernames[normalizedOwner] ?? null
     : null;
 
   const detailPath = Number.isFinite(beast.numericId) && beast.numericId > 0

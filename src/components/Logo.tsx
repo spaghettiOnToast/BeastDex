@@ -2,15 +2,17 @@ import { Link } from "react-router-dom";
 
 type LogoProps = {
   scale?: "sm" | "md";
+  onClick?: () => void;
 };
 
-export default function Logo({ scale = "md" }: LogoProps) {
+export default function Logo({ scale = "md", onClick }: LogoProps) {
   const sizeClasses = scale === "sm" ? "h-16 w-28" : "h-36 w-56";
   const spacing = scale === "sm" ? "gap-3" : "gap-5";
 
   return (
     <Link
       to="/"
+      onClick={onClick}
       className={`flex items-center ${spacing} hover:opacity-80 transition-opacity cursor-pointer`}
     >
       <div className="relative">

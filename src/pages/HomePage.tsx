@@ -205,12 +205,12 @@ function HomePage() {
   const formatOwner = useCallback(
     (leader: BeastHighlightsLeader) => {
       if (!leader.owner) return "Unknown";
-      const username = ownerUsernames[leader.owner.toLowerCase()];
-      if (username) return username;
+      // Use the username from the highlights data (already looked up)
+      if (leader.username) return leader.username;
       if (leader.owner.length <= 12) return leader.owner;
       return `${leader.owner.slice(0, 6)}…${leader.owner.slice(-4)}`;
     },
-    [ownerUsernames]
+    []
   );
 
   const highlightItems = useMemo(() => {
@@ -250,7 +250,7 @@ function HomePage() {
     return items;
   }, [highlights, formatOwner]);
 
-  const topBar = <TopBar />;
+  const topBar = <TopBar onLogoClick={handleResetFilters} />;
 
   const filtersControl = (
     <FiltersButton

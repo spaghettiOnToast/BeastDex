@@ -50,6 +50,12 @@ class StarknetIdService {
 
       const results = await this.navigator.getStarkNames(addresses);
 
+      // Handle case where results is not an array (API error)
+      if (!Array.isArray(results)) {
+        console.warn("Starknet.id API returned non-array result:", results);
+        return addresses.reduce((acc, addr) => ({ ...acc, [addr.toLowerCase()]: null }), {});
+      }
+
       // Convert to our expected format
       const resolved: Record<string, string | null> = {};
       addresses.forEach((address, index) => {

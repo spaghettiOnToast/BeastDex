@@ -1,39 +1,103 @@
 import { TORII_SQL_ENDPOINT } from "./constants";
 
-export async function runBeastSql<T = unknown>(query: string, debugLabel: string) {
-  console.log(`🔎 Running SQL (${debugLabel}):`, query);
+async function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  {
+    retries = 3,
+    baseDelayMs = 500,
+    timeoutMs = 30_000,
+  }: { retries?: number; baseDelayMs?: number; timeoutMs?: number } = {}
+) {
+  let attempt = 0;
+  let lastError: unknown = null;
+  while (attempt <= retries) {
+    const controller = new AbortController();
+    let isTimeout = false;
+    const timer = setTimeout(() => {
+      isTimeout = true;
+      controller.abort();
+    }, timeoutMs);
+    try {
+      const response = await fetch(url, {
+        ...init,
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (response.ok) return response;
+
+      // Retry on transient 5xx errors (including 502 Bad Gateway)
+      if (response.status >= 500 && response.status < 600) {
+        const text = await response.text().catch(() => "");
+        lastError = new Error(
+          `SQL API error: ${response.status} ${response.statusText} ${text}`
+        );
+        console.warn(`[SQL] Server error (${response.status}), will retry. Attempt ${attempt + 1}/${retries + 1}`);
+      } else {
+        // Non-retryable
+        const text = await response.text().catch(() => "");
+        throw new Error(
+          `SQL API error: ${response.status} ${response.statusText} ${text}`
+        );
+      }
+    } catch (err) {
+      clearTimeout(timer);
+      // Distinguish timeouts vs other aborts
+      if (controller.signal.aborted && isTimeout) {
+        lastError = new Error(`SQL API request timed out after ${timeoutMs}ms`);
+        console.warn(`[SQL] Request timeout, will retry. Attempt ${attempt + 1}/${retries + 1}`);
+      } else if (err instanceof Error && err.message.includes('Failed to fetch')) {
+        // Network error, also retryable
+        lastError = err;
+        console.warn(`[SQL] Network error, will retry. Attempt ${attempt + 1}/${retries + 1}`);
+      } else if (err instanceof Error && err.name === 'AbortError' && isTimeout) {
+        lastError = new Error(`SQL API request timed out after ${timeoutMs}ms`);
+        console.warn(`[SQL] Request timeout, will retry. Attempt ${attempt + 1}/${retries + 1}`);
+      } else {
+        lastError = err;
+      }
+      // AbortError or network error eligible for retry
+      continue;
+    } finally {
+      clearTimeout(timer);
+    }
+
+    attempt += 1;
+    if (attempt > retries) break;
+    const backoff = baseDelayMs * 2 ** (attempt - 1);
+    const jitter = Math.floor(Math.random() * 200);
+    await sleep(backoff + jitter);
+  }
+  const finalMessage =
+    lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`SQL request failed after ${retries + 1} attempts: ${finalMessage}`);
+}
+
+export async function runBeastSql<T = unknown>(
+  query: string,
+  debugLabel: string,
+  options?: { retries?: number; baseDelayMs?: number; timeoutMs?: number }
+) {
   const url = `${TORII_SQL_ENDPOINT}?query=${encodeURIComponent(query)}`;
-  console.log(`🌐 Making request to: ${url}`);
 
   try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: { Accept: "application/json" },
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error(`❌ SQL API error: ${response.status} ${response.statusText}`, text);
-      throw new Error(`SQL API error: ${response.status} ${text}`);
-    }
+    const response = await fetchWithRetry(
+      url,
+      {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      },
+      { retries: 2, baseDelayMs: 1000, timeoutMs: 90_000, ...(options || {}) }
+    );
 
     const data = (await response.json()) as T;
-
-    if (Array.isArray(data) && data.length > 0) {
-      console.log(`📦 Sample row (${debugLabel}):`, data[0]);
-    } else {
-      console.log(`⚠️ No rows returned for ${debugLabel}`);
-    }
-
     return data;
   } catch (error) {
-    console.error(`❌ Failed to fetch SQL data for ${debugLabel}:`, error);
-    if (error instanceof TypeError && error.message === "Failed to fetch") {
-      console.error(`🔗 Network error - check if proxy is working for: ${url}`);
-      console.error(`🌐 TORII_SQL_ENDPOINT: ${TORII_SQL_ENDPOINT}`);
-      console.error(`🔧 Dev mode: ${import.meta.env.DEV}`);
-    }
+    console.error(`[SQL] Failed to fetch data for ${debugLabel}:`, error);
     throw error;
   }
 }
