@@ -108,7 +108,7 @@ export default function PurchaseConfirmDialog({
           <Button
             onClick={onConfirm}
             disabled={isProcessing}
-            className="flex-1 bg-lsGold text-black hover:bg-lsGold/90"
+            className="flex-1 !bg-lsGold !text-black hover:!bg-lsGold/90 font-bold"
           >
             {isProcessing ? "Processing..." : "Confirm Purchase"}
           </Button>

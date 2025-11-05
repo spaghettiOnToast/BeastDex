@@ -170,9 +170,10 @@ export default function ListingCard({
                 className={[
                   "flex-1 font-bold text-xs px-2 py-2 h-9",
                   buyDisabled
-                    ? "bg-gray-800 text-gray-400 cursor-not-allowed"
-                    : "bg-lsGold text-white border-white hover:bg-lsGold/90 shadow-lg shadow-lsGold/20 transition-all hover:shadow-lsGold/30 hover:scale-105",
+                    ? "bg-gray-800 text-gray-400 cursor-not-allowed border-gray-600"
+                    : "border-lsGold text-lsGold hover:bg-lsGold/10 hover:border-lsGold",
                 ].join(" ")}
+                variant="outline"
                 onClick={onBuy}
                 disabled={buyDisabled}
               >

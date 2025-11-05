@@ -55,6 +55,7 @@ import { toast } from "sonner";
 import {
   checkSufficientBalance,
   ensureErc20Allowance,
+  executePurchaseWithApproval,
 } from "../services/marketplace/approvals";
 
 const HIDDEN_FILTER_TRAITS = new Set([
@@ -530,14 +531,6 @@ export default function MarketplacePage() {
   // Debug: Log marketplace provider configuration
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    console.log("=== MARKETPLACE PROVIDER CONFIG ===");
-    console.log("Provider:", marketplace.provider);
-    console.log("Chain ID:", marketplace.chainId);
-    console.log("Manifest:", marketplace.provider?.manifest);
-    console.log(
-      "Torii URL from config:",
-      (marketplace.provider as any)?.url || "N/A"
-    );
   }, [marketplace]);
 
   const [activeTab, setActiveTab] = useState<MarketplaceView>("explore");
@@ -624,8 +617,6 @@ export default function MarketplacePage() {
 
   // Debug: Log price rates when they change
   useEffect(() => {
-    console.log("[MarketplacePage] Price Rates:", priceRates);
-    console.log("[MarketplacePage] Display Currency:", displayCurrency);
   }, [priceRates, displayCurrency]);
 
   // Load saved activity on mount
@@ -700,10 +691,6 @@ export default function MarketplacePage() {
   // Debug: Check for errors fetching orders
   useEffect(() => {
     if (ordersError) {
-      console.error(
-        "❌ ERROR fetching orders from Cartridge SDK:",
-        ordersError
-      );
     }
   }, [ordersError]);
 
@@ -718,11 +705,6 @@ export default function MarketplacePage() {
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     if (listedCheck) {
-      console.log(
-        "🔎 isTokenListed check for 1278:",
-        listedCheck.isListed,
-        listedCheck.listing
-      );
     }
   }, [listedCheck]);
 
@@ -755,18 +737,11 @@ export default function MarketplacePage() {
           return { ok: res.ok, status: res.status, bodyText: text, body: json };
         };
 
-        console.log("🔎 Torii SQL endpoint:", sqlUrl);
 
         // First, discover tables so we stop guessing names
         const tables = await run("SHOW TABLES");
         if (!tables.ok) {
-          console.log(
-            "❌ SHOW TABLES failed:",
-            tables.status,
-            tables.body || tables.bodyText
-          );
         } else {
-          console.log("📋 SHOW TABLES:", tables.body || tables.bodyText);
         }
 
         // Try Arcade and Marketplace model names (DuckDB-style quoting for '-')
@@ -779,22 +754,12 @@ export default function MarketplacePage() {
         ];
 
         for (const query of queries) {
-          console.log("🔍 Trying SQL query:", query);
           const res = await run(query);
           if (res.ok && res.body && !res.body.error) {
-            console.log("✅ SQL query succeeded:", query);
-            console.log("Result:", res.body);
             break;
           }
-          console.log(
-            "❌ SQL query failed:",
-            query,
-            res.status,
-            res.body || res.bodyText
-          );
         }
       } catch (error) {
-        console.error("❌ Direct SQL check failed:", error);
       }
     };
 
@@ -808,46 +773,12 @@ export default function MarketplacePage() {
     if (!import.meta.env.DEV) return;
     if (ordersLoading || ordersFetching) return;
 
-    console.log("=== RAW MARKETPLACE ORDERS ===");
-    console.log("Collection:", BEASTS_COLLECTION_ADDRESS);
-    console.log("Orders count:", listedOrders.length);
-    console.log("Loading:", ordersLoading, "Fetching:", ordersFetching);
-    console.log(
-      "All orders:",
-      listedOrders.map((o) => ({
-        id: o.id,
-        identifier: o.identifier,
-        tokenId: o.tokenId?.toString(),
-        quantity: o.quantity,
-        price: o.price,
-        category: o.category?.value,
-        status: o.status?.value,
-        owner: o.owner,
-        expiration: o.expiration,
-      }))
-    );
 
     const order1278 = listedOrders.find(
       (o) => o.tokenId?.toString() === "1278"
     );
     if (order1278) {
-      console.log("✅ Found order for beast 1278:", {
-        id: order1278.id,
-        identifier: order1278.identifier,
-        tokenId: order1278.tokenId?.toString(),
-        quantity: order1278.quantity,
-        price: order1278.price,
-        category: order1278.category?.value,
-        status: order1278.status?.value,
-        owner: order1278.owner,
-        currency: order1278.currency,
-        expiration: order1278.expiration,
-        expirationDate: order1278.expiration
-          ? new Date(order1278.expiration * 1000).toLocaleString()
-          : "N/A",
-      });
     } else if (listedOrders.length > 0) {
-      console.log("❌ No order found for beast 1278 in raw data");
     }
   }, [listedOrders, ordersLoading, ordersFetching]);
 
@@ -878,7 +809,6 @@ export default function MarketplacePage() {
           return Object.fromEntries(nextEntries) as BeastAttributeFilters;
         });
       } catch (error) {
-        console.error("Failed to load marketplace filters", error);
         if (!cancelled) {
           setFiltersError("Unable to load filters");
         }
@@ -944,22 +874,12 @@ export default function MarketplacePage() {
 
         // Enhanced debugging for marketplace listings
         if (import.meta.env.DEV) {
-          console.log("=== MARKETPLACE LISTINGS DEBUG ===");
-          console.log("Total orders from indexer:", listingsData.length);
-          console.log("Status breakdown:", {
-            active: listingsData.filter((l) => l.status === "active").length,
-            expired: listingsData.filter((l) => l.status === "expired").length,
-            canceled: listingsData.filter((l) => l.status === "canceled")
-              .length,
-            sold: listingsData.filter((l) => l.status === "sold").length,
-          });
         }
 
         // Store ALL listings (not just active ones)
         setListings(listingsData);
         setListingsError(null);
       } catch (error) {
-        console.error("Failed to hydrate marketplace listings", error);
         if (!cancelled) {
           setListings([]);
           const errorMsg =
@@ -1020,11 +940,9 @@ export default function MarketplacePage() {
       }
 
       if (import.meta.env.DEV) {
-        console.log("reloadUserBeasts: Loaded", results.length, "beasts");
       }
       setUserBeasts(results);
     } catch (error) {
-      console.error("Failed to load user beasts", error);
       const errorMsg =
         error instanceof Error ? error.message : "Failed to load beasts";
       if (
@@ -1047,7 +965,6 @@ export default function MarketplacePage() {
     const load = async () => {
       if (!address) {
         if (import.meta.env.DEV) {
-          console.log("User Beasts: No address, clearing beasts");
         }
         setUserBeasts([]);
         setUserBeastsError(null);
@@ -1055,7 +972,6 @@ export default function MarketplacePage() {
         return;
       }
       if (import.meta.env.DEV) {
-        console.log("User Beasts: Loading for address:", address);
       }
       setUserBeastsLoading(true);
       setUserBeastsError(null);
@@ -1082,13 +998,11 @@ export default function MarketplacePage() {
 
         if (!cancelled) {
           if (import.meta.env.DEV) {
-            console.log("User Beasts: Loaded", results.length, "beasts");
           }
           setUserBeasts(results);
           setUserBeastsError(null);
         }
       } catch (error) {
-        console.error("Failed to fetch user beasts", error);
         if (!cancelled) {
           const errorMsg =
             error instanceof Error ? error.message : "Failed to load beasts";
@@ -1148,7 +1062,6 @@ export default function MarketplacePage() {
           setRecentListings(recent);
         }
       } catch (error) {
-        console.error("Failed to load recent listings", error);
       } finally {
         if (!cancelled) {
           setLoadingRecentListings(false);
@@ -1194,7 +1107,6 @@ export default function MarketplacePage() {
               });
               return { sale, beast: beasts[0] || null };
             } catch (error) {
-              console.error(`Failed to fetch beast for sale ${sale.id}`, error);
               return { sale, beast: null };
             }
           })
@@ -1204,7 +1116,6 @@ export default function MarketplacePage() {
           setRecentSales(hydratedSales);
         }
       } catch (error) {
-        console.error("Failed to load recent sales", error);
       } finally {
         if (!cancelled) {
           setLoadingSales(false);
@@ -1567,7 +1478,6 @@ export default function MarketplacePage() {
 
             successCount++;
           } catch (error) {
-            console.error(`Failed to purchase listing ${listing.listingId}:`, error);
           }
         }
 
@@ -1587,7 +1497,6 @@ export default function MarketplacePage() {
       await reloadUserBeasts();
 
     } catch (error) {
-      console.error("Error executing unified cart:", error);
       toast.error("Failed to execute cart operations", { id: toastId });
     } finally {
       setListingBatch(false);
@@ -1613,12 +1522,6 @@ export default function MarketplacePage() {
           priceRates as any
         );
         if (import.meta.env.DEV) {
-          console.log(
-            `[formatPriceLabel] Converting ${listing.price} from ${fromSymbol} to ${displayCurrency}:`,
-            result,
-            "rates:",
-            priceRates
-          );
         }
         return result;
       }
@@ -1637,21 +1540,16 @@ export default function MarketplacePage() {
       // Always show USDC equivalent as subtitle
       if (!priceRates) {
         if (import.meta.env.DEV)
-          console.log("[formatSubtitlePrice] No priceRates");
         return undefined;
       }
 
       // Don't show subtitle if already displaying in USDC
       if (displayCurrency?.toUpperCase() === "USDC") {
         if (import.meta.env.DEV)
-          console.log("[formatSubtitlePrice] Already displaying in USDC");
         return undefined;
       }
       if (!displayCurrency && fromSymbol.toUpperCase() === "USDC") {
         if (import.meta.env.DEV)
-          console.log(
-            "[formatSubtitlePrice] Listing is in USDC and no displayCurrency selected"
-          );
         return undefined;
       }
 
@@ -1663,12 +1561,6 @@ export default function MarketplacePage() {
         priceRates as any
       );
       if (import.meta.env.DEV) {
-        console.log(
-          `[formatSubtitlePrice] Converting ${listing.price} from ${fromSymbol} to USDC:`,
-          result,
-          "rates:",
-          priceRates
-        );
       }
       return result;
     },
@@ -1734,14 +1626,12 @@ export default function MarketplacePage() {
           return;
         }
 
-        // Close confirmation dialog and ensure approval
+        // Close confirmation dialog and execute purchase with approval in one transaction
         setPurchaseConfirmOpen(false);
-        toast.loading("Checking approval...", { id: toastId });
-        await ensureErc20Allowance(account, currency, priceBigInt.toString());
-
         toast.loading("Processing purchase...", { id: toastId });
-        const result = await executeListing(
-          account as any,
+
+        const result = await executePurchaseWithApproval(
+          account,
           orderId,
           BEASTS_COLLECTION_ADDRESS,
           tokenIdBigInt,
@@ -1844,10 +1734,6 @@ export default function MarketplacePage() {
           successCount++;
           handleRemoveFromPurchaseCart(listing.listingId);
         } catch (error) {
-          console.error(
-            `Failed to purchase listing ${listing.listingId}:`,
-            error
-          );
           failCount++;
         }
       }

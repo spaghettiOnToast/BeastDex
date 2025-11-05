@@ -1,4 +1,4 @@
-import type { AccountInterface, ProviderInterface } from "starknet";
+import type { AccountInterface, ProviderInterface, Call, BigNumberish } from "starknet";
 import { BEASTS_COLLECTION_ADDRESS, MARKETPLACE_ADDRESS } from "./constants";
 
 type Uint256 = [string, string];
@@ -17,10 +17,22 @@ function toUint256(value: bigint): Uint256 {
 }
 
 function getProvider(account: AccountInterface): ProviderInterface {
-  const provider = (account as any)?.provider ?? (account as any)?.providerOrSigner;
+  // Try multiple ways to get the provider for different account types
+  const provider =
+    (account as any)?.provider ??
+    (account as any)?.providerOrSigner ??
+    (account as any)?.account?.provider ??
+    account; // For Cartridge Controller, the account itself might be the provider
+
   if (!provider) {
     throw new Error("Provider not available on account");
   }
+
+  // If the account itself acts as a provider (has callContract method), use it
+  if (typeof (account as any).callContract === 'function') {
+    return account as unknown as ProviderInterface;
+  }
+
   return provider as ProviderInterface;
 }
 
@@ -30,11 +42,14 @@ async function callAllowance(
   owner: string,
   spender: string,
 ): Promise<bigint> {
-  const response = await provider.callContract({
-    contractAddress: tokenAddress,
-    entrypoint: "allowance",
-    calldata: [owner, spender],
-  });
+  const response = await provider.callContract(
+    {
+      contractAddress: tokenAddress,
+      entrypoint: "allowance",
+      calldata: [owner, spender],
+    },
+    "latest"
+  );
   const rawResult = Array.isArray(response) ? response : (response as any).result;
   if (!Array.isArray(rawResult) || rawResult.length < 2) {
     return 0n;
@@ -50,11 +65,14 @@ async function callIsApprovedForAll(
   owner: string,
   operator: string,
 ): Promise<boolean> {
-  const response = await provider.callContract({
-    contractAddress: BEASTS_COLLECTION_ADDRESS,
-    entrypoint: "is_approved_for_all",
-    calldata: [owner, operator],
-  });
+  const response = await provider.callContract(
+    {
+      contractAddress: BEASTS_COLLECTION_ADDRESS,
+      entrypoint: "is_approved_for_all",
+      calldata: [owner, operator],
+    },
+    "latest"
+  );
   const rawResult = Array.isArray(response) ? response : (response as any).result;
   const value = Array.isArray(rawResult) ? rawResult[0] : undefined;
   return value === "0x1" || value === "1" || value === "0x01";
@@ -73,13 +91,22 @@ export async function ensureCollectionApproval(account: AccountInterface) {
   if (alreadyApproved) {
     return;
   }
-  await account.execute([
+
+  // Execute approval transaction
+  const result = await account.execute([
     {
       contractAddress: BEASTS_COLLECTION_ADDRESS,
       entrypoint: "set_approval_for_all",
       calldata: [MARKETPLACE_ADDRESS, "0x1"],
     },
   ]);
+
+  // Wait for transaction to be accepted on L2
+  if (result?.transaction_hash) {
+    await provider.waitForTransaction(result.transaction_hash, {
+      retryInterval: 2000, // Check every 2 seconds
+    });
+  }
 }
 
 export async function ensureErc20Allowance(
@@ -105,13 +132,53 @@ export async function ensureErc20Allowance(
     return;
   }
   const calldata = toUint256(needed);
-  await account.execute([
+
+  // Execute approval transaction
+  const result = await account.execute([
     {
       contractAddress: tokenAddress,
       entrypoint: "approve",
       calldata: [MARKETPLACE_ADDRESS, ...calldata],
     },
   ]);
+
+  // Wait for transaction to be accepted on L2
+  if (result?.transaction_hash) {
+    await provider.waitForTransaction(result.transaction_hash, {
+      retryInterval: 2000, // Check every 2 seconds
+    });
+  }
+}
+
+export async function getErc20ApprovalCallIfNeeded(
+  account: AccountInterface,
+  tokenAddress: string | undefined,
+  requiredAmount: string,
+): Promise<{ contractAddress: string; entrypoint: string; calldata: string[] } | null> {
+  if (!tokenAddress || tokenAddress === "0x0") {
+    return null;
+  }
+  if (!account.address) {
+    throw new Error("Wallet address not available");
+  }
+  const provider = getProvider(account);
+  const allowance = await callAllowance(
+    provider,
+    tokenAddress,
+    account.address,
+    MARKETPLACE_ADDRESS,
+  );
+  const needed = BigInt(requiredAmount);
+  if (allowance >= needed) {
+    return null;
+  }
+  const calldata = toUint256(needed);
+
+  return {
+    contractAddress: tokenAddress,
+    entrypoint: "approve",
+    calldata: [MARKETPLACE_ADDRESS, ...calldata],
+  };
 }
 
 export async function getErc20Balance(
@@ -119,11 +186,14 @@ export async function getErc20Balance(
   tokenAddress: string,
   owner: string,
 ): Promise<bigint> {
-  const response = await provider.callContract({
-    contractAddress: tokenAddress,
-    entrypoint: "balanceOf",
-    calldata: [owner],
-  });
+  const response = await provider.callContract(
+    {
+      contractAddress: tokenAddress,
+      entrypoint: "balanceOf",
+      calldata: [owner],
+    },
+    "latest"
+  );
   const rawResult = Array.isArray(response) ? response : (response as any).result;
   if (!Array.isArray(rawResult) || rawResult.length < 2) {
     return 0n;
@@ -151,5 +221,98 @@ export async function checkSufficientBalance(
   return {
     sufficient: balance >= requiredAmount,
     balance,
+  };
+}
+
+/**
+ * Build marketplace execute call for purchasing a listing
+ */
+export function buildMarketplaceExecuteCall(
+  orderId: BigNumberish,
+  collection: string,
+  tokenId: BigNumberish,
+  quantity: BigNumberish,
+  royalties: boolean,
+  currency: string,
+  price: BigNumberish,
+  clientFee: BigNumberish,
+  clientReceiver: string,
+): Call {
+  // Convert tokenId to Uint256 format
+  const tokenIdBigInt = typeof tokenId === 'bigint' ? tokenId : BigInt(tokenId.toString());
+  const tokenIdU256 = toUint256(tokenIdBigInt);
+
+  return {
+    contractAddress: MARKETPLACE_ADDRESS,
+    entrypoint: "execute",
+    calldata: [
+      orderId.toString(),
+      collection,
+      ...tokenIdU256, // token_id as Uint256
+      ...tokenIdU256, // asset_id (same as token_id for ERC721)
+      quantity.toString(),
+      royalties ? "1" : "0",
+      clientFee.toString(),
+      clientReceiver,
+    ],
+  };
+}
+
+/**
+ * Execute marketplace purchase with approval in a single multicall transaction
+ * This provides a better UX by combining approval + purchase into one signature
+ */
+export async function executePurchaseWithApproval(
+  account: AccountInterface,
+  orderId: BigNumberish,
+  collection: string,
+  tokenId: BigNumberish,
+  quantity: BigNumberish,
+  royalties: boolean,
+  currency: string,
+  price: BigNumberish,
+  clientFee: BigNumberish,
+  clientReceiver: string,
+): Promise<{ transaction_hash: string }> {
+  const calls: Call[] = [];
+
+  // Check if we need to add approval call
+  const approvalCall = await getErc20ApprovalCallIfNeeded(
+    account,
+    currency,
+    price.toString()
+  );
+
+  if (approvalCall) {
+    calls.push(approvalCall);
+  }
+
+  // Add the purchase call
+  const purchaseCall = buildMarketplaceExecuteCall(
+    orderId,
+    collection,
+    tokenId,
+    quantity,
+    royalties,
+    currency,
+    price,
+    clientFee,
+    clientReceiver
+  );
+  calls.push(purchaseCall);
+
+  // Execute all calls in one transaction
+  const result = await account.execute(calls);
+
+  // Wait for transaction confirmation
+  if (result?.transaction_hash) {
+    const provider = getProvider(account);
+    await provider.waitForTransaction(result.transaction_hash, {
+      retryInterval: 2000,
+    });
+  }
+
+  return {
+    transaction_hash: result.transaction_hash || '',
   };
 }
