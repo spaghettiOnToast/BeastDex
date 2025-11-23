@@ -3,13 +3,16 @@ import { Button } from "../ui/button";
 import type { Beast } from "../../services/beast";
 import { LazyImage } from "../ui/LazyImage";
 import type { ListingStatus } from "../../services/marketplace/types";
+import TokenIcon from "../ui/TokenIcon";
 
 type Props = {
   beast?: Beast | null;
   tokenId?: string;
   priceLabel?: string;
   subtitlePriceLabel?: string;
-  onBuy?: () => void;
+  onBuy?: () => void; // Kept for backwards compatibility - maps to Buy Now
+  onBuyNow?: () => void; // Immediate purchase
+  onAddToCart?: () => void; // Add to cart
   onMakeOffer?: () => void;
   onViewOffers?: () => void;
   onEdit?: () => void;
@@ -32,6 +35,8 @@ export default function ListingCard({
   priceLabel,
   subtitlePriceLabel,
   onBuy,
+  onBuyNow,
+  onAddToCart,
   onMakeOffer,
   onViewOffers,
   onEdit,
@@ -47,6 +52,9 @@ export default function ListingCard({
   status,
   isAlreadyListed = false,
 }: Props) {
+  // For backwards compatibility, if onBuy is provided but not onBuyNow/onAddToCart, use onBuy as Buy Now
+  const handleBuyNow = onBuyNow || onBuy;
+  const handleAddToCart = onAddToCart;
   const displayName = beast?.name ?? (tokenId ? `Beast #${tokenId}` : "Unknown Beast");
   const imageSrc = beast?.image;
 
@@ -103,49 +111,46 @@ export default function ListingCard({
           )}
         </div>
       </CardContent>
-      <CardFooter className="flex flex-col gap-2 p-3 bg-gradient-to-br from-black/30 to-gray-900/20 min-h-[120px]">
-        {/* Beast Name */}
-        <div className="flex items-center justify-center w-full">
-          <div className="text-base font-semibold truncate text-center text-white group-hover:text-lsGold transition-colors">
-            {displayName}
-          </div>
-        </div>
+      <CardFooter className="flex flex-col gap-2 p-3 bg-gradient-to-br from-black/30 to-gray-900/20">
+        {/* Status Badge */}
+        {getStatusBadge()}
 
-        {/* Price Section - Single Line */}
+        {/* Price Section */}
         {(priceLabel || subtitlePriceLabel) && (
-          <div className="flex items-center justify-center gap-2 w-full">
+          <div className="flex items-center justify-center gap-1.5 w-full">
             {priceLabel && (
-              <p className="text-sm font-bold text-lsGold">{priceLabel}</p>
+              <div className="flex items-center gap-1">
+                <span className="text-sm font-bold text-lsGold">
+                  {priceLabel.split(' ')[0]}
+                </span>
+                <TokenIcon
+                  symbol={priceLabel.split(' ').slice(1).join(' ')}
+                  size="sm"
+                />
+              </div>
             )}
             {subtitlePriceLabel && (
-              <>
-                <span className="text-xs text-gray-500">=</span>
-                <p className="text-xs text-gray-400">{subtitlePriceLabel}</p>
-              </>
+              <span className="text-[9px] text-gray-500">
+                ${subtitlePriceLabel.split(' ')[0]}
+              </span>
             )}
           </div>
         )}
 
-        {/* Status Badge */}
-        {getStatusBadge()}
-
-        {/* Spacer to push buttons to bottom */}
-        <div className="flex-1" />
-
         {/* Action Buttons */}
-        <div className="flex items-center justify-center gap-2 w-full">
+        <div className="flex flex-col items-center justify-center gap-2 w-full">
           {ownedByUser ? (
-            <>
+            <div className="flex items-center justify-center gap-1.5 w-full">
               {isAlreadyListed ? (
-                <div className="flex-1 text-xs px-3 py-2 h-9 bg-orange-500/20 text-orange-300 border border-orange-400/50 rounded-md flex items-center justify-center font-semibold">
+                <div className="flex-1 text-[10px] px-2 py-1 h-7 bg-orange-500/20 text-orange-300 border border-orange-400/50 rounded-md flex items-center justify-center font-semibold">
                   Already Listed
                 </div>
               ) : (
                 <Button
                   className={
                     inCart
-                      ? "flex-1 text-xs px-3 py-2 h-9 bg-[#39ff14] text-black hover:bg-[#39ff14]/90 border-[#39ff14] font-semibold"
-                      : "flex-1 text-xs px-3 py-2 h-9 font-semibold hover:bg-gray-800/50 border-white text-white"
+                      ? "flex-1 text-[10px] px-2 py-1 h-7 bg-[#39ff14] text-black hover:bg-[#39ff14]/90 border-[#39ff14] font-semibold"
+                      : "flex-1 text-[10px] px-2 py-1 h-7 font-semibold hover:bg-gray-800/50 border-white text-white"
                   }
                   variant={inCart ? "default" : "outline"}
                   onClick={onEdit}
@@ -156,44 +161,68 @@ export default function ListingCard({
               )}
               {onCancel && !pendingCancel ? (
                 <Button
-                  className="flex-1 text-xs px-3 py-2 h-9 font-semibold"
+                  className="flex-1 text-[10px] px-2 py-1 h-7 font-semibold"
                   variant="destructive"
                   onClick={onCancel}
                 >
                   {secondaryActionLabel ?? "Cancel"}
                 </Button>
               ) : null}
-            </>
+            </div>
           ) : (
-            <>
-              <Button
-                className={[
-                  "flex-1 font-bold text-xs px-2 py-2 h-9",
-                  buyDisabled
-                    ? "bg-gray-800 text-gray-400 cursor-not-allowed border-gray-600"
-                    : "border-lsGold text-lsGold hover:bg-lsGold/10 hover:border-lsGold",
-                ].join(" ")}
-                variant="outline"
-                onClick={onBuy}
-                disabled={buyDisabled}
-              >
-                {primaryActionLabel ?? (buyDisabled ? "Unavailable" : "Buy")}
-              </Button>
+            <div className="flex items-center justify-center gap-1 w-full">
+              {/* Buy Now button */}
+              {handleBuyNow && (
+                <Button
+                  className={[
+                    "flex-1 font-semibold text-[9px] px-1.5 py-1 h-6 transition-all",
+                    buyDisabled
+                      ? "bg-gray-800 text-gray-400 cursor-not-allowed border-gray-600"
+                      : "bg-lsGold/20 text-lsGold border-lsGold hover:bg-lsGold/30 hover:border-lsGold/80",
+                  ].join(" ")}
+                  variant="outline"
+                  onClick={handleBuyNow}
+                  disabled={buyDisabled}
+                >
+                  {buyDisabled ? "Unavailable" : "Buy"}
+                </Button>
+              )}
+
+              {/* Add to Cart */}
+              {handleAddToCart && (
+                <Button
+                  className={[
+                    "flex-1 text-[9px] px-1.5 py-1 h-6",
+                    buyDisabled
+                      ? "bg-gray-800 text-gray-400 cursor-not-allowed border-gray-600"
+                      : inCart
+                      ? "bg-[#39ff14]/20 text-[#39ff14] border-[#39ff14] font-semibold"
+                      : "border-lsGold text-lsGold hover:bg-lsGold/10 hover:border-lsGold font-semibold",
+                  ].join(" ")}
+                  variant="outline"
+                  onClick={handleAddToCart}
+                  disabled={buyDisabled}
+                >
+                  {inCart ? "In Cart" : "Cart"}
+                </Button>
+              )}
+
+              {/* Make Offer */}
               {onMakeOffer && (
                 <Button
-                  className="flex-1 border-white text-white hover:bg-gray-800/50 hover:border-white font-semibold transition-all text-xs px-2 py-2 h-9"
+                  className="flex-1 border-white text-white hover:bg-gray-800/50 hover:border-white font-semibold transition-all text-[9px] px-1.5 py-1 h-6"
                   variant="outline"
                   onClick={onMakeOffer}
                 >
                   Offer
                 </Button>
               )}
-            </>
+            </div>
           )}
         </div>
         {ownedByUser && onViewOffers && offersCount > 0 && (
           <Button
-            className="w-full text-xs px-3 py-2 h-9 border-lsGold/50 text-lsGold hover:bg-lsGold/10 hover:border-lsGold font-semibold transition-all"
+            className="w-full text-[10px] px-2 py-1 h-7 border-lsGold/50 text-lsGold hover:bg-lsGold/10 hover:border-lsGold font-semibold transition-all"
             variant="outline"
             onClick={onViewOffers}
           >

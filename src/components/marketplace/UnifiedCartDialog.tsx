@@ -14,14 +14,6 @@ import { formatPrice, formatPriceInSymbol, type RatesInSTRK } from "../../utils/
 import { getPaymentTokenByAddress } from "../../services/marketplace/constants";
 import { Input } from "../ui/input";
 
-type CartItem = {
-  id: string;
-  type: "buy" | "list";
-  listing?: Listing;
-  beast?: Beast;
-  price?: string;
-};
-
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;

@@ -10,6 +10,7 @@ import { Button } from "../ui/button";
 import type { Listing } from "../../services/marketplace/types";
 import { formatPrice } from "../../utils/price";
 import { getPaymentTokenByAddress } from "../../services/marketplace/constants";
+import TokenIcon from "../ui/TokenIcon";
 
 type Props = {
   open: boolean;
@@ -30,12 +31,15 @@ export default function PurchaseConfirmDialog({
 }: Props) {
   if (!listing) return null;
 
-  // No buyer fee - seller pays on listing
   const priceBigInt = BigInt(listing.price);
-  const totalBigInt = priceBigInt;
+  // Buyer pays 2% platform fee (200 basis points out of 10000)
+  const BUYER_FEE_BP = 200; // 2%
+  const buyerFeeBigInt = (priceBigInt * BigInt(BUYER_FEE_BP)) / 10000n;
+  const totalBigInt = priceBigInt + buyerFeeBigInt;
 
   const token = getPaymentTokenByAddress(listing.paymentToken);
   const tokenSymbol = token?.symbol || 'STRK';
+  const buyerFeeLabel = formatPrice(buyerFeeBigInt, tokenSymbol);
   const totalLabel = formatPrice(totalBigInt, tokenSymbol);
 
   return (
@@ -68,18 +72,27 @@ export default function PurchaseConfirmDialog({
             </div>
 
             <div className="flex justify-between">
-              <span className="text-sm text-gray-400">Price:</span>
-              <span className="text-sm font-medium text-lsGold">{priceLabel}</span>
+              <span className="text-sm text-gray-400">Listing Price:</span>
+              <span className="text-sm font-medium">{priceLabel}</span>
             </div>
 
-            <div className="flex justify-between border-t border-gray-700 pt-2">
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-400">Platform Fee (2%):</span>
+              <span className="text-sm font-medium text-gray-400">{buyerFeeLabel}</span>
+            </div>
+
+            <div className="flex justify-between border-t border-gray-700 pt-2 mt-2">
               <span className="text-sm font-semibold text-white">Total to Pay:</span>
               <span className="text-sm font-semibold text-lsGold">{totalLabel}</span>
             </div>
 
-            <p className="text-[10px] text-gray-500 italic">
-              No buyer fee - platform fee was paid by seller on listing
-            </p>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-400">Payment Currency:</span>
+              <div className="flex items-center gap-2">
+                <TokenIcon symbol={tokenSymbol} size="sm" />
+                <span className="text-sm font-medium text-lsGold">{tokenSymbol}</span>
+              </div>
+            </div>
 
             <div className="flex justify-between">
               <span className="text-sm text-gray-400">Seller:</span>

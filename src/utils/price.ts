@@ -34,20 +34,20 @@ export function fromWei(weiAmount: BigNumberish, decimals: number = 18): string 
     const wholePart = amount / divisor;
     const fractionalPart = amount % divisor;
 
-    if (fractionalPart === 0n) {
-      return wholePart.toString();
+    // If whole part is 0, show up to 2 decimal places
+    if (wholePart === 0n && fractionalPart > 0n) {
+      const fractionalStr = fractionalPart.toString().padStart(decimals, '0');
+      const trimmed = fractionalStr.replace(/0+$/, '');
+      const displayFractional = trimmed.slice(0, 2);
+      return `0.${displayFractional}`;
     }
 
-    // Format fractional part with appropriate precision
-    const fractionalStr = fractionalPart.toString().padStart(decimals, '0');
+    // For amounts >= 1, round to nearest whole number
+    // If fractional part is >= 0.5, round up
+    const halfDivisor = divisor / 2n;
+    const roundedWhole = fractionalPart >= halfDivisor ? wholePart + 1n : wholePart;
 
-    // Remove trailing zeros
-    const trimmed = fractionalStr.replace(/0+$/, '');
-
-    // Limit to 4 decimal places for display
-    const displayFractional = trimmed.slice(0, 4);
-
-    return `${wholePart}.${displayFractional}`;
+    return roundedWhole.toString();
   } catch (error) {
     console.error('Error converting from wei:', error);
     return '0';

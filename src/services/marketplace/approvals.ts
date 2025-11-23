@@ -233,8 +233,8 @@ export function buildMarketplaceExecuteCall(
   tokenId: BigNumberish,
   quantity: BigNumberish,
   royalties: boolean,
-  currency: string,
-  price: BigNumberish,
+  _currency: string,
+  _price: BigNumberish,
   clientFee: BigNumberish,
   clientReceiver: string,
 ): Call {
