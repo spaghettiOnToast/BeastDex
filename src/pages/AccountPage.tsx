@@ -556,16 +556,16 @@ function AccountPage() {
                 </h1>
 
                 <div
-                  className={`flex items-center gap-2 ml-4 text-sm transition-all duration-500 ${
+                  className={`flex items-center gap-1 sm:gap-2 ml-2 sm:ml-4 text-xs sm:text-sm transition-all duration-500 ${
                     collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
                       ? "animate-pulse scale-105 drop-shadow-[0_0_15px_rgba(57,255,20,0.6)]"
                       : ""
                   }`}
                 >
                   <span
-                    className={`text-lg transition-all duration-300 ${
+                    className={`text-sm sm:text-lg transition-all duration-300 ${
                       collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                        ? "animate-bounce text-2xl"
+                        ? "animate-bounce sm:text-2xl"
                         : ""
                     }`}
                   >
@@ -573,20 +573,20 @@ function AccountPage() {
                       ? "🎉"
                       : "🏆"}
                   </span>
-                  <span className="uppercase tracking-wider text-muted-foreground font-medium">
+                  <span className="uppercase tracking-wider text-muted-foreground font-medium text-[10px] sm:text-sm">
                     Total
                   </span>
                   <span
                     className={`font-bold transition-all duration-300 ${
                       collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                        ? "text-[#39ff14] text-xl drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] animate-pulse"
+                        ? "text-[#39ff14] text-base sm:text-xl drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] animate-pulse"
                         : "text-primary"
                     }`}
                   >
                     {collectionStats.uniqueBeastTypes}
                   </span>
                   <span
-                    className={`transition-all duration-300 ${
+                    className={`transition-all duration-300 text-xs sm:text-base ${
                       collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
                         ? "text-[#39ff14] font-bold drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] animate-pulse"
                         : "text-muted-foreground"
@@ -596,7 +596,7 @@ function AccountPage() {
                   </span>
                   {collectionStats.uniqueBeastTypes ===
                     TOTAL_BEAST_VARIETIES && (
-                    <span className="text-[#39ff14] font-bold animate-pulse ml-2">
+                    <span className="text-[#39ff14] font-bold animate-pulse ml-1 sm:ml-2 text-[10px] sm:text-base">
                       COMPLETE! ✨
                     </span>
                   )}
