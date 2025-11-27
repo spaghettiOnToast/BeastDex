@@ -16,7 +16,6 @@ import { useBeasts } from "../hooks/useBeasts";
 import {
   fetchBeastAttributeFilters,
   fetchBeasts,
-  fetchBeastPowerRank,
   fetchBeastCombinedRanks,
   type BeastAttributeFilters,
   type Beast,
