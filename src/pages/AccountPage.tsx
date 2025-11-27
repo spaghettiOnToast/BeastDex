@@ -17,9 +17,11 @@ import {
   fetchBeastAttributeFilters,
   fetchBeasts,
   fetchBeastPowerRank,
+  fetchBeastCombinedRanks,
   type BeastAttributeFilters,
   type Beast,
   type BeastPowerRank,
+  type BeastHealthRank,
 } from "../services/beast";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { lookupControllerAddresses } from "../services/controller";
@@ -66,6 +68,9 @@ function AccountPage() {
   const [collectionTotal, setCollectionTotal] = useState(0);
   const [collectionPower, setCollectionPower] = useState(0);
   const [accountRanking, setAccountRanking] = useState<BeastPowerRank | null>(
+    null
+  );
+  const [healthRanking, setHealthRanking] = useState<BeastHealthRank | null>(
     null
   );
   const [summaryError, setSummaryError] = useState<string | null>(null);
@@ -284,6 +289,7 @@ function AccountPage() {
       setCollectionTotal(0);
       setCollectionPower(0);
       setAccountRanking(null);
+      setHealthRanking(null);
       setSummaryError(identifierError);
       setSummaryLoading(false);
       return;
@@ -330,9 +336,10 @@ function AccountPage() {
         return;
       }
 
-      const ranking = await fetchBeastPowerRank(resolvedAddress).catch((err) => {
-        console.error("Failed to fetch account rank", err);
-        return null;
+      // Use combined ranks query for better performance (single query instead of two)
+      const combinedRanks = await fetchBeastCombinedRanks(resolvedAddress).catch((err) => {
+        console.error("Failed to fetch combined ranks", err);
+        return { powerRank: null, healthRank: null };
       });
 
       if (summaryRequestRef.current !== requestId) {
@@ -348,7 +355,8 @@ function AccountPage() {
 
       setCollectionStats(stats);
       setCollectionPower(power);
-      setAccountRanking(ranking);
+      setAccountRanking(combinedRanks.powerRank);
+      setHealthRanking(combinedRanks.healthRank);
     } catch (err: unknown) {
       if (summaryRequestRef.current !== requestId) {
         return;
@@ -358,6 +366,7 @@ function AccountPage() {
       setCollectionTotal(0);
       setCollectionPower(0);
       setAccountRanking(null);
+      setHealthRanking(null);
       setSummaryError(getErrorMessage(err, "Failed to load account summary"));
     } finally {
       if (summaryRequestRef.current === requestId) {
@@ -391,6 +400,7 @@ function AccountPage() {
     setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
     setCollectionTotal(0);
     setCollectionPower(0);
+    setHealthRanking(null);
 
     void reload();
     void loadSummary();
@@ -498,12 +508,19 @@ function AccountPage() {
         value: rankDisplay,
         sub: rankSubheading || "Global leaderboard",
       },
+      {
+        key: "health",
+        icon: "❤️",
+        label: "Combined Health",
+        value: (healthRanking?.totalHealth ?? 0).toLocaleString(),
+      },
     ],
     [
       collectionPower,
       collectionTotal,
       rankDisplay,
       rankSubheading,
+      healthRanking,
     ]
   );
 

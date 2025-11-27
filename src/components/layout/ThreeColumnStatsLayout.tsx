@@ -23,7 +23,7 @@ export function ThreeColumnStatsLayout({
       {totalInHeader && renderHeaderTotal && renderHeaderTotal(collectionStats)}
       
       {/* Three Column Layout: Beast Collection | Overview Cards | Highlights */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 items-center">
         {/* Left Column - Beast Collection (1/3 width) */}
         <div className="lg:col-span-1 h-fit">
           <BeastCollectionTile {...collectionStats} />
