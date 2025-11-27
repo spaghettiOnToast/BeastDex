@@ -1141,7 +1141,7 @@ function CollectionPage() {
         {catalogLoading ? (
           <p className="text-xs text-gray-400">Loading collection…</p>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div className="grid gap-2 grid-cols-3 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 sm:gap-3">
             {tabEntries[activeTab].map((entry) => (
               <BeastCard
                 key={entry.id}

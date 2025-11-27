@@ -32,11 +32,11 @@ export function SortDropdown({ value, onChange }: SortDropdownProps) {
         <Button
           variant="outline"
           size="sm"
-          className="font-medium bg-card/90 backdrop-blur-sm hover:bg-card"
+          className="h-8 px-2 sm:px-3 font-medium bg-card/90 backdrop-blur-sm hover:bg-card"
         >
-          <span className="text-muted-foreground mr-1.5">Sort:</span>
-          {currentOption.label}
-          <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
+          <span className="text-muted-foreground mr-1 sm:mr-1.5 text-xs sm:text-sm">Sort:</span>
+          <span className="text-xs sm:text-sm">{currentOption.label}</span>
+          <ChevronDown className="ml-1 sm:ml-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[140px] bg-card/95 backdrop-blur-md border-border/50">
@@ -44,7 +44,7 @@ export function SortDropdown({ value, onChange }: SortDropdownProps) {
           <DropdownMenuItem
             key={option.value}
             onClick={() => onChange(option.value)}
-            className="cursor-pointer font-medium text-foreground hover:bg-accent/80 hover:text-accent-foreground"
+            className="cursor-pointer font-medium text-xs sm:text-sm text-foreground hover:bg-accent/80 hover:text-accent-foreground"
           >
             {option.label}
           </DropdownMenuItem>

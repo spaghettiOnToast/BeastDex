@@ -26,13 +26,13 @@ export function FiltersButton({
     <Button
       variant={hasActiveFilters ? "default" : "outline"}
       onClick={onClick}
-      className={buttonClassName}
+      className={`h-8 px-2 sm:px-3 ${buttonClassName || ""}`.trim()}
       size="sm"
     >
-      <Filter className="h-4 w-4 mr-2" />
-      <span className="font-medium">Filters</span>
+      <Filter className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+      <span className="font-medium text-xs sm:text-sm">Filters</span>
       {hasActiveFilters ? (
-        <Badge variant={hasActiveFilters ? "secondary" : "outline"} className="ml-2 px-1.5 py-0 text-xs font-bold bg-background/20">
+        <Badge variant={hasActiveFilters ? "secondary" : "outline"} className="ml-1 sm:ml-2 px-1 sm:px-1.5 py-0 text-[10px] sm:text-xs font-bold bg-background/20">
           {activeFiltersCount}
         </Badge>
       ) : null}

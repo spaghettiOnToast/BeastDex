@@ -25,14 +25,14 @@ export default function CompletionTracker({
 
   return (
     <div
-      className={`${isLeftAligned ? "text-left" : "text-center"} mb-6 ${className}`.trim()}
+      className={`${isLeftAligned ? "text-left" : "text-center"} mb-2 sm:mb-6 ${className}`.trim()}
     >
-      <p className="text-lg font-medium font-gothic tracking-wide">
+      <p className="text-sm sm:text-lg font-medium font-gothic tracking-wide">
         <span className="font-bold text-neon">{safeOwned.toLocaleString()}</span> /
         {` ${safeTotal.toLocaleString()} beasts collected`}
       </p>
       <div
-        className={`w-64 h-4 border border-lsGold bg-black/40 rounded-full mt-2 overflow-hidden ${
+        className={`w-48 sm:w-64 h-3 sm:h-4 border border-lsGold bg-black/40 rounded-full mt-1 sm:mt-2 overflow-hidden ${
           isLeftAligned ? "" : "mx-auto"
         }`}
       >
@@ -41,7 +41,7 @@ export default function CompletionTracker({
           style={{ width: `${progress}%` }}
         />
       </div>
-      <p className="mt-2 text-sm text-gray-400">
+      <p className="mt-1 sm:mt-2 text-xs sm:text-sm text-gray-400">
         {loading
           ? "Loading minted beasts..."
           : error
@@ -49,7 +49,7 @@ export default function CompletionTracker({
           : `${remaining.toLocaleString()} beasts remaining`}
       </p>
       {typeof uniqueOwners === "number" && (
-        <p className="text-xs text-gray-500 mt-1">
+        <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">
           {uniqueOwners.toLocaleString()} unique owners
         </p>
       )}
