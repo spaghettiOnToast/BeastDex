@@ -56,14 +56,14 @@ function LeaderboardPage() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex justify-center">
-          <div className="flex bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-xl p-1.5 shadow-lg">
+        <div className="flex justify-center overflow-x-auto">
+          <div className="flex bg-gray-900/80 backdrop-blur-sm border border-gray-700 rounded-xl p-1 sm:p-1.5 shadow-lg">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`
-                  px-6 py-3 rounded-lg text-sm font-bold uppercase tracking-wider transition-all duration-300 min-w-[140px]
+                  px-2 sm:px-4 md:px-6 py-1.5 sm:py-2 md:py-3 rounded-lg text-[10px] sm:text-xs md:text-sm font-bold uppercase tracking-wider transition-all duration-300 whitespace-nowrap
                   ${
                     activeTab === tab.id
                       ? "bg-gradient-to-r from-[#8bff72] to-[#39ff14] text-gray-900 shadow-[0_0_20px_rgba(139,255,114,0.4)] scale-105"
