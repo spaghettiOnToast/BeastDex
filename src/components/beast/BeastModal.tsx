@@ -115,7 +115,7 @@ export function BeastModal({
                       variant="outline"
                       size="default"
                       onClick={() => setShowSendDialog(true)}
-                      className="w-full sm:w-auto font-semibold tracking-wide"
+                      className="w-full sm:w-auto font-semibold tracking-wide cursor-pointer"
                     >
                       <Send className="mr-2 h-4 w-4" />
                       Send Beast
