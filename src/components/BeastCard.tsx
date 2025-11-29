@@ -111,7 +111,7 @@ const BeastCard = memo(function BeastCard({
             </div>
           )}
           {duplicateCount && duplicateCount > 1 && !missing && (
-            <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-lg border border-primary/20">
+            <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center text-[10px] sm:text-xs font-bold shadow-lg border border-primary/20">
               {duplicateCount}
             </div>
           )}
