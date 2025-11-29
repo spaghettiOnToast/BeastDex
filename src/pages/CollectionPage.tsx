@@ -903,7 +903,7 @@ function CollectionPage() {
   return (
     <AppLayout topBar={topBar}>
       <div className="flex flex-col gap-2">
-        <div className="flex flex-col items-center text-center text-xs text-gray-400">
+        <div className="flex flex-col items-center text-center text-xs text-gray-400 pt-3 sm:pt-4">
           {collectionStats.mostPowerfulTitle ? (
             <span className="bg-gradient-to-r from-[#ff7cf7] via-[#7dfbff] to-[#8bff72] bg-clip-text text-3xl font-semibold uppercase tracking-[0.35em] text-transparent">
               "{collectionStats.mostPowerfulTitle}"
