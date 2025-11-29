@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAccount, useConnect, useDisconnect } from "@starknet-react/core";
 import { useNavigate } from "react-router-dom";
-import { ChevronDown, User, LogOut, Wallet } from "lucide-react";
+import { ChevronDown, User, LogOut, Wallet, Package } from "lucide-react";
 import { controllerConnector } from "../../wallet/controller";
 import controllerIcon from "../../assets/cartridge-icon.svg";
 import { Button } from "../ui/button";
@@ -136,6 +136,17 @@ export function WalletButton() {
         >
           <User className="h-4 w-4" />
           My Profile
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => {
+            if (address) {
+              navigate(`/collection/${address}`);
+            }
+          }}
+          className="cursor-pointer focus:bg-gray-900 focus:text-gray-100"
+        >
+          <Package className="h-4 w-4" />
+          My Collection
         </DropdownMenuItem>
         <DropdownMenuSeparator className="bg-gray-800" />
         <DropdownMenuItem
