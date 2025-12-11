@@ -3,14 +3,13 @@ import { runBeastSql } from "./sqlClient";
 import {
   BEAST_STATS_CACHE_TTL_MS,
   CONTRACT_ADDRESS,
+  EXCLUDED_OWNER_ADDRESS,
   ZERO_BALANCE,
 } from "./constants";
 import type { BeastHighlights } from "./types";
 import { normaliseStarknetAddress } from "../../utils/address";
 
 const BOOLEAN_TRUE_VALUES = ["1", "true", "True", "TRUE"]; // coarse normalization
-
-const EXCLUDED_ADDRESS = "0x07bdeac5b256fa53c11b0bc0368af72916203987429032f37254465ee4ec078b";
 
 function buildBaseCte() {
   return `
@@ -36,7 +35,7 @@ function buildBaseCte() {
         AND json_valid(t.metadata) = 1
         AND json_extract(attr.value, '$.trait_type') IS NOT NULL
         AND json_extract(attr.value, '$.value') IS NOT NULL
-        AND LOWER(b.account_address) != '${EXCLUDED_ADDRESS.toLowerCase()}'
+        AND LOWER(b.account_address) != '${EXCLUDED_OWNER_ADDRESS.toLowerCase()}'
     ),
     normalized AS (
       SELECT
@@ -69,7 +68,8 @@ export async function fetchBeastHighlights(forceRefresh = false): Promise<BeastH
     SELECT
       (SELECT COUNT(*) FROM normalized WHERE is_shiny = 1 AND is_animated = 1) AS animated_shiny_count,
       (SELECT COUNT(*) FROM normalized WHERE is_shiny = 1) AS shiny_count,
-      (SELECT COUNT(*) FROM normalized WHERE is_animated = 1) AS animated_count;
+      (SELECT COUNT(*) FROM normalized WHERE is_animated = 1) AS animated_count,
+      (SELECT COUNT(*) FROM normalized WHERE is_shiny = 0 AND is_animated = 0) AS standard_count;
   `;
 
   const leaderboardQuery = `
@@ -110,7 +110,7 @@ export async function fetchBeastHighlights(forceRefresh = false): Promise<BeastH
     );
   `;
 
-  const countsRows = await runBeastSql<Array<{ animated_shiny_count: number; shiny_count: number; animated_count: number }>>(
+  const countsRows = await runBeastSql<Array<{ animated_shiny_count: number; shiny_count: number; animated_count: number; standard_count: number }>>(
     countsQuery,
     "fetchBeastHighlights-counts"
   );
@@ -124,6 +124,7 @@ export async function fetchBeastHighlights(forceRefresh = false): Promise<BeastH
     animated_shiny_count: 0,
     shiny_count: 0,
     animated_count: 0,
+    standard_count: 0,
   };
 
   const leaders = leaderboardRows ?? [];
@@ -166,6 +167,7 @@ export async function fetchBeastHighlights(forceRefresh = false): Promise<BeastH
     animatedShinyCount: counts.animated_shiny_count ?? 0,
     shinyCount: counts.shiny_count ?? 0,
     animatedCount: counts.animated_count ?? 0,
+    standardCount: counts.standard_count ?? 0,
     leaders: {
       overall: enrich("overall"),
       animatedShiny: enrich("animated_shiny"),

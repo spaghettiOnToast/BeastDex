@@ -16,10 +16,11 @@ import { useBeasts } from "../hooks/useBeasts";
 import {
   fetchBeastAttributeFilters,
   fetchBeasts,
-  fetchBeastPowerRank,
+  fetchBeastCombinedRanks,
   type BeastAttributeFilters,
   type Beast,
   type BeastPowerRank,
+  type BeastHealthRank,
 } from "../services/beast";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { lookupControllerAddresses } from "../services/controller";
@@ -66,6 +67,9 @@ function AccountPage() {
   const [collectionTotal, setCollectionTotal] = useState(0);
   const [collectionPower, setCollectionPower] = useState(0);
   const [accountRanking, setAccountRanking] = useState<BeastPowerRank | null>(
+    null
+  );
+  const [healthRanking, setHealthRanking] = useState<BeastHealthRank | null>(
     null
   );
   const [summaryError, setSummaryError] = useState<string | null>(null);
@@ -284,6 +288,7 @@ function AccountPage() {
       setCollectionTotal(0);
       setCollectionPower(0);
       setAccountRanking(null);
+      setHealthRanking(null);
       setSummaryError(identifierError);
       setSummaryLoading(false);
       return;
@@ -330,9 +335,10 @@ function AccountPage() {
         return;
       }
 
-      const ranking = await fetchBeastPowerRank(resolvedAddress).catch((err) => {
-        console.error("Failed to fetch account rank", err);
-        return null;
+      // Use combined ranks query for better performance (single query instead of two)
+      const combinedRanks = await fetchBeastCombinedRanks(resolvedAddress).catch((err) => {
+        console.error("Failed to fetch combined ranks", err);
+        return { powerRank: null, healthRank: null };
       });
 
       if (summaryRequestRef.current !== requestId) {
@@ -348,7 +354,8 @@ function AccountPage() {
 
       setCollectionStats(stats);
       setCollectionPower(power);
-      setAccountRanking(ranking);
+      setAccountRanking(combinedRanks.powerRank);
+      setHealthRanking(combinedRanks.healthRank);
     } catch (err: unknown) {
       if (summaryRequestRef.current !== requestId) {
         return;
@@ -358,6 +365,7 @@ function AccountPage() {
       setCollectionTotal(0);
       setCollectionPower(0);
       setAccountRanking(null);
+      setHealthRanking(null);
       setSummaryError(getErrorMessage(err, "Failed to load account summary"));
     } finally {
       if (summaryRequestRef.current === requestId) {
@@ -391,6 +399,7 @@ function AccountPage() {
     setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
     setCollectionTotal(0);
     setCollectionPower(0);
+    setHealthRanking(null);
 
     void reload();
     void loadSummary();
@@ -498,12 +507,19 @@ function AccountPage() {
         value: rankDisplay,
         sub: rankSubheading || "Global leaderboard",
       },
+      {
+        key: "health",
+        icon: "❤️",
+        label: "Combined Health",
+        value: (healthRanking?.totalHealth ?? 0).toLocaleString(),
+      },
     ],
     [
       collectionPower,
       collectionTotal,
       rankDisplay,
       rankSubheading,
+      healthRanking,
     ]
   );
 
@@ -540,16 +556,16 @@ function AccountPage() {
                 </h1>
 
                 <div
-                  className={`flex items-center gap-2 ml-4 text-sm transition-all duration-500 ${
+                  className={`flex items-center gap-1 sm:gap-2 ml-2 sm:ml-4 text-xs sm:text-sm transition-all duration-500 ${
                     collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
                       ? "animate-pulse scale-105 drop-shadow-[0_0_15px_rgba(57,255,20,0.6)]"
                       : ""
                   }`}
                 >
                   <span
-                    className={`text-lg transition-all duration-300 ${
+                    className={`text-sm sm:text-lg transition-all duration-300 ${
                       collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                        ? "animate-bounce text-2xl"
+                        ? "animate-bounce sm:text-2xl"
                         : ""
                     }`}
                   >
@@ -557,20 +573,20 @@ function AccountPage() {
                       ? "🎉"
                       : "🏆"}
                   </span>
-                  <span className="uppercase tracking-wider text-muted-foreground font-medium">
+                  <span className="uppercase tracking-wider text-muted-foreground font-medium text-[10px] sm:text-sm">
                     Total
                   </span>
                   <span
                     className={`font-bold transition-all duration-300 ${
                       collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                        ? "text-[#39ff14] text-xl drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] animate-pulse"
+                        ? "text-[#39ff14] text-base sm:text-xl drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] animate-pulse"
                         : "text-primary"
                     }`}
                   >
                     {collectionStats.uniqueBeastTypes}
                   </span>
                   <span
-                    className={`transition-all duration-300 ${
+                    className={`transition-all duration-300 text-xs sm:text-base ${
                       collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
                         ? "text-[#39ff14] font-bold drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] animate-pulse"
                         : "text-muted-foreground"
@@ -580,7 +596,7 @@ function AccountPage() {
                   </span>
                   {collectionStats.uniqueBeastTypes ===
                     TOTAL_BEAST_VARIETIES && (
-                    <span className="text-[#39ff14] font-bold animate-pulse ml-2">
+                    <span className="text-[#39ff14] font-bold animate-pulse ml-1 sm:ml-2 text-[10px] sm:text-base">
                       COMPLETE! ✨
                     </span>
                   )}

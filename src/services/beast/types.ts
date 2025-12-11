@@ -53,12 +53,34 @@ export type BeastHighlights = {
   animatedShinyCount: number;
   shinyCount: number;
   animatedCount: number;
+  standardCount: number;
   leaders: {
     overall: BeastHighlightsLeader;
     animatedShiny: BeastHighlightsLeader;
     shiny: BeastHighlightsLeader;
     animated: BeastHighlightsLeader;
   };
+};
+
+export type BeastRarityLeaderboardCategory =
+  | "all"
+  | "animatedShiny"
+  | "shiny"
+  | "animated"
+  | "standard";
+
+export type BeastSlayerEntry = {
+  rank: number;
+  beastId: string;
+  beastName: string;
+  owner: string | null;
+  kills: number;
+};
+
+export type BeastNameLeaderboardEntry = {
+  rank: number;
+  beast_name: string;
+  value: number;
 };
 
 export type BeastPowerRank = {

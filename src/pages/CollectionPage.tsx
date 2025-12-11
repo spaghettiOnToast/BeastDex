@@ -906,7 +906,7 @@ function CollectionPage() {
   return (
     <AppLayout topBar={topBar}>
       <div className="flex flex-col gap-2">
-        <div className="flex flex-col items-center text-center text-xs text-gray-400">
+        <div className="flex flex-col items-center text-center text-xs text-gray-400 pt-3 sm:pt-4">
           {collectionStats.mostPowerfulTitle ? (
             <span className="bg-gradient-to-r from-[#ff7cf7] via-[#7dfbff] to-[#8bff72] bg-clip-text text-3xl font-semibold uppercase tracking-[0.35em] text-transparent">
               "{collectionStats.mostPowerfulTitle}"
@@ -1144,7 +1144,7 @@ function CollectionPage() {
         {catalogLoading ? (
           <p className="text-xs text-gray-400">Loading collection…</p>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div className="grid gap-2 grid-cols-3 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 sm:gap-3">
             {tabEntries[activeTab].map((entry) => (
               <BeastCard
                 key={entry.id}

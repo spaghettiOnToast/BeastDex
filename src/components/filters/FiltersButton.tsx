@@ -32,15 +32,15 @@ export function FiltersButton({
     <Button
       variant="outline"
       onClick={onClick}
-      className={cn(buttonClasses, buttonClassName)}
+      className={cn(buttonClasses, "h-8 px-2 sm:px-3", buttonClassName)}
       size="sm"
     >
-      <Filter className="h-4 w-4 mr-2" />
-      <span className="font-medium">Filters</span>
+      <Filter className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+      <span className="font-medium text-xs sm:text-sm">Filters</span>
       {hasActiveFilters ? (
         <Badge
           variant="outline"
-          className="ml-2 px-1.5 py-0 text-[10px] font-bold border-lsGreen text-lsGreen bg-black/60"
+          className="ml-1 sm:ml-2 px-1 sm:px-1.5 py-0 text-[10px] sm:text-xs font-bold border-lsGreen text-lsGreen bg-black/60"
         >
           {activeFiltersCount}
         </Badge>

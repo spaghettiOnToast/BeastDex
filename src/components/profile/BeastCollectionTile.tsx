@@ -130,27 +130,27 @@ export function BeastCollectionTile({
         <div className="flex-1 opacity-50 h-px bg-border" />
       </div>
 
-      <div className="grid gap-3 grid-cols-2">
+      <div className="grid gap-2 sm:gap-3 grid-cols-2">
         {otherCards.map((card) => (
           <Card
             key={card.key}
-            className={`${card.bgGradient} ${card.borderColor} ${card.glisten} backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-md min-h-[120px] flex flex-col relative overflow-hidden`}
+            className={`${card.bgGradient} ${card.borderColor} ${card.glisten} backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-md min-h-[80px] sm:min-h-[120px] flex flex-col relative overflow-hidden`}
           >
-            <CardContent className="p-4 flex-1 flex flex-col relative z-10">
-              <div className="flex flex-col items-center text-center gap-1.5 mb-2 min-h-[20px]">
-                <span className="text-sm flex-shrink-0">{card.icon}</span>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium truncate">
+            <CardContent className="p-2 sm:p-4 flex-1 flex flex-col relative z-10">
+              <div className="flex flex-col items-center text-center gap-0.5 sm:gap-1.5 mb-1 sm:mb-2 min-h-[14px] sm:min-h-[20px]">
+                <span className="text-xs sm:text-sm flex-shrink-0">{card.icon}</span>
+                <p className="text-[10px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium truncate">
                   {card.label}
                 </p>
               </div>
-              <div className="flex-1 flex flex-col justify-center text-center space-y-1">
+              <div className="flex-1 flex flex-col justify-center text-center space-y-0.5 sm:space-y-1">
                 <p
-                  className="text-lg font-bold leading-none"
+                  className="text-sm sm:text-lg font-bold leading-none"
                   style={{ color: card.color }}
                 >
                   {card.mainValue}
                 </p>
-                <p className="text-xs text-muted-foreground leading-none">
+                <p className="text-[10px] sm:text-xs text-muted-foreground leading-none">
                   {card.subValue}
                 </p>
               </div>

@@ -38,11 +38,51 @@ export function StatsPanel({
   filtersControl,
 }: StatsPanelProps) {
   return (
-    <Card className="backdrop-blur-md bg-card/60 border-0 shadow-lg overflow-hidden mb-6">
+    <Card className="backdrop-blur-md bg-card/60 border-0 shadow-lg overflow-hidden mb-4 sm:mb-6">
       <CardContent className="p-0">
         <div className="flex flex-col">
-          {/* Top row: Carousel | Centered Completion | Controls */}
-          <div className="relative flex items-center px-2 py-2 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent min-h-[90px]">
+          {/* Mobile Layout: Stack vertically */}
+          <div className="flex flex-col lg:hidden px-2 py-2 gap-2 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
+            {/* Completion Tracker */}
+            <div className="flex justify-center py-1">
+              <CompletionTracker
+                owned={mintedCount}
+                total={TOTAL_BEAST_SUPPLY}
+                loading={mintedLoading}
+                error={mintedError}
+                align="center"
+                uniqueOwners={uniqueOwners}
+              />
+            </div>
+
+            {/* Carousel */}
+            <div className="w-full px-1">
+              <StatsCarousel
+                items={highlightItems}
+                loading={highlightsLoading}
+              />
+            </div>
+
+            {/* Controls */}
+            <div className="flex items-center justify-center gap-2 py-1 flex-wrap">
+              <Button
+                onClick={onRefresh}
+                disabled={refreshing}
+                variant="ghost"
+                size="sm"
+                className="hover:bg-primary/10 font-semibold text-xs h-8 px-2"
+              >
+                <RefreshCw
+                  className={`h-3 w-3 mr-1 ${refreshing ? "animate-spin" : ""}`}
+                />
+                Refresh
+              </Button>
+              {filtersControl ? <div>{filtersControl}</div> : null}
+            </div>
+          </div>
+
+          {/* Desktop Layout: Horizontal with centered completion */}
+          <div className="hidden lg:flex relative items-center px-2 py-2 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent min-h-[90px]">
             {/* Left: Carousel (narrower) */}
             <div className="order-1 max-w-sm flex-shrink w-full">
               <StatsCarousel
@@ -86,7 +126,7 @@ export function StatsPanel({
           {!mintedLoading && mintedError ? (
             <Alert
               variant="destructive"
-              className="mx-4 mt-2 bg-destructive/10 border-destructive/30"
+              className="mx-3 sm:mx-4 mt-2 bg-destructive/10 border-destructive/30"
             >
               <AlertDescription className="text-xs font-medium">
                 {mintedError}
@@ -98,9 +138,9 @@ export function StatsPanel({
           {highlightsError ? (
             <Alert
               variant="destructive"
-              className="mx-4 mb-3 bg-destructive/10 border-destructive/30"
+              className="mx-3 sm:mx-4 mb-3 bg-destructive/10 border-destructive/30"
             >
-              <AlertDescription className="font-medium">
+              <AlertDescription className="font-medium text-xs sm:text-sm">
                 {highlightsError}
               </AlertDescription>
             </Alert>

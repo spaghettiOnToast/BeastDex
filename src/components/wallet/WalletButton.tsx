@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAccount, useConnect, useDisconnect } from "@starknet-react/core";
 import { useNavigate } from "react-router-dom";
-import { ChevronDown, User, LogOut, Wallet } from "lucide-react";
+import { ChevronDown, User, LogOut, Wallet, Package } from "lucide-react";
 import { controllerConnector } from "../../wallet/controller";
 import controllerIcon from "../../assets/cartridge-icon.svg";
 import { Button } from "../ui/button";
@@ -90,10 +90,10 @@ export function WalletButton() {
             console.error("Failed to connect Starknet wallet", error);
           }
         }}
-        className="ml-auto text-xs font-semibold uppercase tracking-wide border-lsGold text-lsGold hover:bg-gray-900 hover:text-lsGold min-w-[140px] h-10"
+        className="text-xs font-semibold uppercase tracking-wide border-lsGold text-lsGold hover:bg-gray-900 hover:text-lsGold h-8 sm:h-9 px-2 sm:px-3 md:min-w-[120px]"
       >
         <Wallet className="h-4 w-4" />
-        Connect Wallet
+        <span className="hidden sm:inline">Connect</span>
       </Button>
     );
   }
@@ -101,12 +101,12 @@ export function WalletButton() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button className="ml-auto bg-[#fbcb4a] text-black text-xs font-semibold uppercase tracking-wide hover:bg-[#f0b833] hover:text-black min-w-[140px] h-10">
+        <Button className="bg-[#fbcb4a] text-black text-xs font-semibold uppercase tracking-wide hover:bg-[#f0b833] hover:text-black h-8 sm:h-9 px-2 sm:px-3 md:min-w-[120px]">
           <span className="inline-flex h-4 w-4 items-center justify-center">
             <img src={controllerIcon} alt="Controller" className="h-4 w-4" />
           </span>
-          <span className="truncate max-w-[80px]">{username}</span>
-          <ChevronDown className="h-3 w-3 text-gray-700" />
+          <span className="truncate max-w-[60px] sm:max-w-[80px]">{username}</span>
+          <ChevronDown className="h-3 w-3 text-gray-700 hidden sm:block" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -136,6 +136,17 @@ export function WalletButton() {
         >
           <User className="h-4 w-4" />
           My Profile
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => {
+            if (address) {
+              navigate(`/collection/${address}`);
+            }
+          }}
+          className="cursor-pointer focus:bg-gray-900 focus:text-gray-100"
+        >
+          <Package className="h-4 w-4" />
+          My Collection
         </DropdownMenuItem>
         <DropdownMenuSeparator className="bg-gray-800" />
         <DropdownMenuItem

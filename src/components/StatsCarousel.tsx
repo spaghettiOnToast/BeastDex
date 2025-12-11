@@ -53,29 +53,29 @@ export default function StatsCarousel({
 
   return (
     <div
-      className={`flex items-center gap-2 text-xs md:text-sm text-gray-300 w-full px-2 py-2 rounded-xl border border-gray-800/60 bg-gradient-to-r from-pink-400/40 via-cyan-400/40 to-lime-400/40
+      className={`flex items-center gap-1.5 sm:gap-2 text-xs md:text-sm text-gray-300 w-full px-1.5 py-1.5 sm:px-2 sm:py-2 rounded-xl border border-gray-800/60 bg-gradient-to-r from-pink-400/40 via-cyan-400/40 to-lime-400/40
  backdrop-blur-sm ${className}`.trim()}
     >
-      <span className="h-2.5 w-2.5 rounded-full bg-[#39ff14] shadow-[0_0_6px_#39ff14] animate-pulse" />
-      <div className="relative flex-1 overflow-hidden">
+      <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full bg-[#39ff14] shadow-[0_0_6px_#39ff14] animate-pulse flex-shrink-0" />
+      <div className="relative flex-1 overflow-hidden min-w-0">
         <div
           key={`${current.title}-${current.subtitle ?? ""}`}
           className={`transition-opacity duration-300 ${
             visible ? "opacity-100" : "opacity-0"
           }`}
         >
-          <p className="font-semibold text-lsGold truncate text-sm md:text-base">
+          <p className="font-semibold text-lsGold truncate text-xs sm:text-sm md:text-base">
             {current.title}
           </p>
           {current.subtitle ? (
-            <p className="text-[11px] text-gray-400 truncate">
+            <p className="text-[10px] sm:text-[11px] text-gray-400 truncate">
               {current.subtitle}
             </p>
           ) : null}
         </div>
       </div>
       {data.length > 1 ? (
-        <span className="text-[9px] uppercase tracking-[0.3em] text-gray-500">
+        <span className="text-[8px] sm:text-[9px] uppercase tracking-[0.2em] sm:tracking-[0.3em] text-gray-500 flex-shrink-0">
           {index + 1}/{data.length}
         </span>
       ) : null}

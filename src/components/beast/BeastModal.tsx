@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAccount } from "@starknet-react/core";
 import type { Beast } from "../../services/beast";
 import BeastDetailContent from "./BeastDetailContent";
 import {
@@ -9,8 +11,9 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Send } from "lucide-react";
 import { normaliseStarknetAddress } from "../../utils/address";
+import { SendBeastDialog } from "./SendBeastDialog";
 
 type BeastModalProps = {
   beast: Beast | null;
@@ -32,6 +35,8 @@ export function BeastModal({
   onPreviousDuplicate
 }: BeastModalProps) {
   const navigate = useNavigate();
+  const { address: connectedAddress } = useAccount();
+  const [showSendDialog, setShowSendDialog] = useState(false);
 
   if (!beast) {
     return null;
@@ -47,6 +52,10 @@ export function BeastModal({
     : `/beasts/${encodeURIComponent(beast.id)}`;
 
   const hasDuplicates = duplicates.length > 1;
+
+  // Check if the connected user owns this beast
+  const isOwner = connectedAddress && normalizedOwner &&
+    normaliseStarknetAddress(connectedAddress)?.toLowerCase() === normalizedOwner.toLowerCase();
 
   return (
     <Dialog open={!!beast} onOpenChange={(open) => !open && onClose()}>
@@ -89,22 +98,42 @@ export function BeastModal({
               beast={beast}
               ownerUsername={ownerUsername}
               actionSlot={
-                <Button
-                  variant="default"
-                  size="default"
-                  onClick={() => {
-                    onClose();
-                    navigate(detailPath);
-                  }}
-                  className="w-full sm:w-auto font-semibold tracking-wide"
-                >
-                  View Full Details
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button
+                    variant="default"
+                    size="default"
+                    onClick={() => {
+                      onClose();
+                      navigate(detailPath);
+                    }}
+                    className="w-full sm:w-auto font-semibold tracking-wide"
+                  >
+                    View Full Details
+                  </Button>
+                  {isOwner && (
+                    <Button
+                      variant="outline"
+                      size="default"
+                      onClick={() => setShowSendDialog(true)}
+                      className="w-full sm:w-auto font-semibold tracking-wide cursor-pointer"
+                    >
+                      <Send className="mr-2 h-4 w-4" />
+                      Send Beast
+                    </Button>
+                  )}
+                </div>
               }
             />
           </div>
         </ScrollArea>
       </DialogContent>
+
+      <SendBeastDialog
+        open={showSendDialog}
+        onClose={() => setShowSendDialog(false)}
+        beastId={beast.numericId || beast.id}
+        beastName={beast.name}
+      />
     </Dialog>
   );
 }

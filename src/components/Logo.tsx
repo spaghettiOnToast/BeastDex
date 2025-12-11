@@ -6,8 +6,8 @@ type LogoProps = {
 };
 
 export default function Logo({ scale = "md", onClick }: LogoProps) {
-  const sizeClasses = scale === "sm" ? "h-16 w-28" : "h-36 w-56";
-  const spacing = scale === "sm" ? "gap-3" : "gap-5";
+  const sizeClasses = scale === "sm" ? "h-10 sm:h-16 w-20 sm:w-28" : "h-36 w-56";
+  const spacing = scale === "sm" ? "gap-2 sm:gap-3" : "gap-5";
 
   return (
     <Link
@@ -123,7 +123,7 @@ export default function Logo({ scale = "md", onClick }: LogoProps) {
           />
         </svg>
       </div>
-      <span className="text-sm uppercase tracking-[0.6em] text-[#39ff14] font-semibold whitespace-nowrap">
+      <span className="text-[10px] sm:text-sm uppercase tracking-[0.6em] text-[#39ff14] font-semibold whitespace-nowrap">
         BeastDex
       </span>
     </Link>

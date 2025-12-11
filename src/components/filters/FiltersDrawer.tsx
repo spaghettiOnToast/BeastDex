@@ -55,7 +55,7 @@ export function FiltersDrawer({
       <div
         role="dialog"
         aria-modal="true"
-        className="relative ml-auto flex h-full w-full max-w-md flex-col overflow-hidden border-l border-gray-800 bg-[#0b0b0f] shadow-[0_0_30px_rgba(57,255,20,0.15)]"
+        className="relative ml-auto flex h-full w-full max-w-[100vw] sm:max-w-md flex-col overflow-hidden border-l border-gray-800 bg-[#0b0b0f] shadow-[0_0_30px_rgba(57,255,20,0.15)]"
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
           <div>

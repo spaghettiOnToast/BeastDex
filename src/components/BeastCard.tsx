@@ -84,7 +84,7 @@ const BeastCard = memo(function BeastCard({
   return (
     <Card
       className={cn(
-        "w-full max-w-[280px] overflow-hidden cursor-pointer transition-all duration-300 group border-0 ring-0 hover:ring-0",
+        "w-full max-w-[180px] sm:max-w-[220px] md:max-w-[280px] overflow-hidden cursor-pointer transition-all duration-300 group border-0 ring-0 hover:ring-0",
         "hover:shadow-2xl hover:-translate-y-1",
         "bg-card/50 backdrop-blur-sm",
         missing && "opacity-50 cursor-not-allowed",
@@ -111,7 +111,7 @@ const BeastCard = memo(function BeastCard({
             </div>
           )}
           {duplicateCount && duplicateCount > 1 && !missing && (
-            <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-lg border border-primary/20">
+            <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center text-[10px] sm:text-xs font-bold shadow-lg border border-primary/20">
               {duplicateCount}
             </div>
           )}
@@ -127,14 +127,14 @@ const BeastCard = memo(function BeastCard({
           )}
         </div>
       </CardContent>
-      <CardFooter className="flex flex-col items-center gap-1.5 px-0 py-3 bg-gradient-to-b from-background/50 to-background">
+      <CardFooter className="flex flex-col items-center gap-1 sm:gap-1.5 px-1 sm:px-0 py-2 sm:py-3 bg-gradient-to-b from-background/50 to-background">
         <p className={cn(
-          "font-medium text-sm truncate w-full text-center transition-all duration-300",
+          "font-medium text-xs sm:text-sm truncate w-full text-center transition-all duration-300",
           hasAllVariants && !missing && "text-[#39ff14] drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] animate-pulse"
         )}>
           {name}
         </p>
-        <div className="w-full text-center">{renderOwner()}</div>
+        <div className="w-full text-center text-[10px] sm:text-xs">{renderOwner()}</div>
       </CardFooter>
     </Card>
   );

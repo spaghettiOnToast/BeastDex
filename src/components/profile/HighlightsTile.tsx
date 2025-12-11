@@ -62,22 +62,22 @@ export function HighlightsTile({
         <Separator className="flex-1 opacity-50" />
       </div>
 
-      <div className="grid gap-3 grid-cols-2">
+      <div className="grid gap-2 sm:gap-3 grid-cols-2">
         {cards.map((card) => (
           <Card
             key={card.key}
-            className={`${card.bgGradient} ${card.borderColor} backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-md min-h-[120px] flex flex-col`}
+            className={`${card.bgGradient} ${card.borderColor} backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-md min-h-[80px] sm:min-h-[120px] flex flex-col`}
           >
-            <CardContent className="p-4 flex-1 flex flex-col">
-              <div className="flex flex-col items-center text-center gap-1.5 mb-2 min-h-[20px]">
-                <span className="text-sm flex-shrink-0">{card.icon}</span>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium truncate">
+            <CardContent className="p-2 sm:p-4 flex-1 flex flex-col">
+              <div className="flex flex-col items-center text-center gap-0.5 sm:gap-1.5 mb-1 sm:mb-2 min-h-[14px] sm:min-h-[20px]">
+                <span className="text-xs sm:text-sm flex-shrink-0">{card.icon}</span>
+                <p className="text-[9px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium truncate leading-tight">
                   {card.label}
                 </p>
               </div>
               <div className="flex-1 flex items-center justify-center">
                 <p
-                  className={`text-sm font-bold ${card.textColor} text-center leading-tight break-words px-1`}
+                  className={`text-[11px] sm:text-sm font-bold ${card.textColor} text-center leading-tight break-words px-1`}
                   title={card.value}
                 >
                   {card.value}
