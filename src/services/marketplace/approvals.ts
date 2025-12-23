@@ -1,4 +1,9 @@
-import type { AccountInterface, ProviderInterface, Call, BigNumberish } from "starknet";
+import type {
+  AccountInterface,
+  ProviderInterface,
+  Call,
+  BigNumberish,
+} from "starknet";
 import { BEASTS_COLLECTION_ADDRESS, MARKETPLACE_ADDRESS } from "./constants";
 
 type Uint256 = [string, string];
@@ -29,7 +34,7 @@ function getProvider(account: AccountInterface): ProviderInterface {
   }
 
   // If the account itself acts as a provider (has callContract method), use it
-  if (typeof (account as any).callContract === 'function') {
+  if (typeof (account as any).callContract === "function") {
     return account as unknown as ProviderInterface;
   }
 
@@ -40,7 +45,7 @@ async function callAllowance(
   provider: ProviderInterface,
   tokenAddress: string,
   owner: string,
-  spender: string,
+  spender: string
 ): Promise<bigint> {
   const response = await provider.callContract(
     {
@@ -50,7 +55,9 @@ async function callAllowance(
     },
     "latest"
   );
-  const rawResult = Array.isArray(response) ? response : (response as any).result;
+  const rawResult = Array.isArray(response)
+    ? response
+    : (response as any).result;
   if (!Array.isArray(rawResult) || rawResult.length < 2) {
     return 0n;
   }
@@ -63,7 +70,7 @@ async function callAllowance(
 async function callIsApprovedForAll(
   provider: ProviderInterface,
   owner: string,
-  operator: string,
+  operator: string
 ): Promise<boolean> {
   const response = await provider.callContract(
     {
@@ -73,7 +80,9 @@ async function callIsApprovedForAll(
     },
     "latest"
   );
-  const rawResult = Array.isArray(response) ? response : (response as any).result;
+  const rawResult = Array.isArray(response)
+    ? response
+    : (response as any).result;
   const value = Array.isArray(rawResult) ? rawResult[0] : undefined;
   return value === "0x1" || value === "1" || value === "0x01";
 }
@@ -86,7 +95,7 @@ export async function ensureCollectionApproval(account: AccountInterface) {
   const alreadyApproved = await callIsApprovedForAll(
     provider,
     account.address,
-    MARKETPLACE_ADDRESS,
+    MARKETPLACE_ADDRESS
   );
   if (alreadyApproved) {
     return;
@@ -112,7 +121,7 @@ export async function ensureCollectionApproval(account: AccountInterface) {
 export async function ensureErc20Allowance(
   account: AccountInterface,
   tokenAddress: string | undefined,
-  requiredAmount: string,
+  requiredAmount: string
 ) {
   if (!tokenAddress || tokenAddress === "0x0") {
     return;
@@ -125,7 +134,7 @@ export async function ensureErc20Allowance(
     provider,
     tokenAddress,
     account.address,
-    MARKETPLACE_ADDRESS,
+    MARKETPLACE_ADDRESS
   );
   const needed = BigInt(requiredAmount);
   if (allowance >= needed) {
@@ -153,8 +162,12 @@ export async function ensureErc20Allowance(
 export async function getErc20ApprovalCallIfNeeded(
   account: AccountInterface,
   tokenAddress: string | undefined,
-  requiredAmount: string,
-): Promise<{ contractAddress: string; entrypoint: string; calldata: string[] } | null> {
+  requiredAmount: string
+): Promise<{
+  contractAddress: string;
+  entrypoint: string;
+  calldata: string[];
+} | null> {
   if (!tokenAddress || tokenAddress === "0x0") {
     return null;
   }
@@ -166,7 +179,7 @@ export async function getErc20ApprovalCallIfNeeded(
     provider,
     tokenAddress,
     account.address,
-    MARKETPLACE_ADDRESS,
+    MARKETPLACE_ADDRESS
   );
   const needed = BigInt(requiredAmount);
   if (allowance >= needed) {
@@ -184,7 +197,7 @@ export async function getErc20ApprovalCallIfNeeded(
 export async function getErc20Balance(
   provider: ProviderInterface,
   tokenAddress: string,
-  owner: string,
+  owner: string
 ): Promise<bigint> {
   const response = await provider.callContract(
     {
@@ -194,7 +207,9 @@ export async function getErc20Balance(
     },
     "latest"
   );
-  const rawResult = Array.isArray(response) ? response : (response as any).result;
+  const rawResult = Array.isArray(response)
+    ? response
+    : (response as any).result;
   if (!Array.isArray(rawResult) || rawResult.length < 2) {
     return 0n;
   }
@@ -207,7 +222,7 @@ export async function getErc20Balance(
 export async function checkSufficientBalance(
   account: AccountInterface,
   tokenAddress: string | undefined,
-  requiredAmount: bigint,
+  requiredAmount: bigint
 ): Promise<{ sufficient: boolean; balance: bigint }> {
   if (!tokenAddress || tokenAddress === "0x0") {
     // Native token - we can't easily check without additional setup
@@ -217,7 +232,11 @@ export async function checkSufficientBalance(
     throw new Error("Wallet address not available");
   }
   const provider = getProvider(account);
-  const balance = await getErc20Balance(provider, tokenAddress, account.address);
+  const balance = await getErc20Balance(
+    provider,
+    tokenAddress,
+    account.address
+  );
   return {
     sufficient: balance >= requiredAmount,
     balance,
@@ -236,10 +255,11 @@ export function buildMarketplaceExecuteCall(
   _currency: string,
   _price: BigNumberish,
   clientFee: BigNumberish,
-  clientReceiver: string,
+  clientReceiver: string
 ): Call {
   // Convert tokenId to Uint256 format
-  const tokenIdBigInt = typeof tokenId === 'bigint' ? tokenId : BigInt(tokenId.toString());
+  const tokenIdBigInt =
+    typeof tokenId === "bigint" ? tokenId : BigInt(tokenId.toString());
   const tokenIdU256 = toUint256(tokenIdBigInt);
 
   return {
@@ -272,15 +292,21 @@ export async function executePurchaseWithApproval(
   currency: string,
   price: BigNumberish,
   clientFee: BigNumberish,
-  clientReceiver: string,
+  clientReceiver: string
 ): Promise<{ transaction_hash: string }> {
   const calls: Call[] = [];
 
-  // Check if we need to add approval call
+  // Calculate total amount including platform fee
+  const priceBigInt = typeof price === 'bigint' ? price : BigInt(price.toString());
+  const clientFeeBigInt = typeof clientFee === 'bigint' ? clientFee : BigInt(clientFee.toString());
+  const feeAmount = (priceBigInt * clientFeeBigInt) / 10000n;
+  const totalAmount = priceBigInt + feeAmount;
+
+  // Check if we need to add approval call (approve marketplace for price + fee)
   const approvalCall = await getErc20ApprovalCallIfNeeded(
     account,
     currency,
-    price.toString()
+    totalAmount.toString()
   );
 
   if (approvalCall) {
@@ -299,6 +325,8 @@ export async function executePurchaseWithApproval(
     clientFee,
     clientReceiver
   );
+  console.log(approvalCall);
+  console.log(purchaseCall);
   calls.push(purchaseCall);
 
   // Execute all calls in one transaction
@@ -313,6 +341,6 @@ export async function executePurchaseWithApproval(
   }
 
   return {
-    transaction_hash: result.transaction_hash || '',
+    transaction_hash: result.transaction_hash || "",
   };
 }

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { PAYMENT_TOKENS } from './constants';
 
 export type RatesInSTRK = {
   STRK: number;
@@ -8,65 +9,146 @@ export type RatesInSTRK = {
   SURVIVOR?: number;
 };
 
-const EKUBO_API_BASE = 'https://starknet-mainnet-api.ekubo.org';
+// Cache key for localStorage
+const RATES_CACHE_KEY = 'ekubo-rates-cache';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-interface EkuboPriceData {
-  start: string;
-  vwap: number;
-  min: number;
-  max: number;
-  k_volume: string;
+interface CachedRates {
+  rates: RatesInSTRK;
+  timestamp: number;
 }
 
-interface EkuboPriceResponse {
-  timestamp: number;
-  start: number;
-  end: number;
-  interval: number;
-  data: EkuboPriceData[];
+function getCachedRates(): RatesInSTRK | null {
+  try {
+    const cached = localStorage.getItem(RATES_CACHE_KEY);
+    if (!cached) return null;
+
+    const { rates, timestamp }: CachedRates = JSON.parse(cached);
+    const age = Date.now() - timestamp;
+
+    // Return cached rates if less than 5 minutes old
+    if (age < CACHE_DURATION) {
+      return rates;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedRates(rates: RatesInSTRK): void {
+  try {
+    const cached: CachedRates = {
+      rates,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(RATES_CACHE_KEY, JSON.stringify(cached));
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
+// Ekubo Quoter API base URL
+const EKUBO_QUOTER_API_BASE = 'https://prod-api-quoter.ekubo.org';
+
+// Mainnet chain ID in decimal format
+const CHAIN_ID_DECIMAL = '23448594291968334';
+
+// Standard amount: 1 token with 18 decimals
+const STANDARD_AMOUNT = '1000000000000000000';
+
+// USDC token address (quote token)
+const USDC_ADDRESS = '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8';
+
+// Request timeout in milliseconds
+const REQUEST_TIMEOUT = 5000;
+
+interface QuoterResponse {
+  total_calculated: string;
+  specifiedAmount: string;
+  route: any[];
 }
 
 /**
- * Fetch the latest price for a token pair from Ekubo
- * @param baseToken - Token symbol (e.g., 'ETH', 'STRK', 'LORDS')
- * @param quoteToken - Quote token symbol (e.g., 'USDC')
- * @returns The latest VWAP price, or null if unavailable
+ * Fetch the latest price for a token using Ekubo's quoter API
+ * @param tokenAddress - Token contract address
+ * @returns The price in USDC, or null if unavailable
  */
-async function fetchTokenPrice(baseToken: string, quoteToken: string): Promise<number | null> {
+async function fetchTokenPriceInUSDC(tokenAddress: string): Promise<number | null> {
   try {
-    const response = await fetch(
-      `${EKUBO_API_BASE}/price/${baseToken}/${quoteToken}/history`
-    );
-
-    if (!response.ok) {
-      console.warn(`Failed to fetch ${baseToken}/${quoteToken} price:`, response.status);
-      return null;
+    // Manual override for USDC - always return price of 1
+    if (
+      tokenAddress === '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8' ||
+      tokenAddress === '0x33068f6539f8e6e6b131e6b2b814e6c34a5224bc66947c47dab9dfee93b35fb'
+    ) {
+      return 1;
     }
 
-    const data: EkuboPriceResponse = await response.json();
+    // Create a timeout promise
+    const timeoutPromise = new Promise<null>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Request timeout'));
+      }, REQUEST_TIMEOUT);
+    });
 
-    // Get the latest price data (last element in the array)
-    if (data.data && data.data.length > 0) {
-      const latestPrice = data.data[data.data.length - 1];
-      return latestPrice.vwap;
-    }
+    // Quoter API format: /{chainId}/{amount}/{tokenAddress}/{quoteToken}
+    const apiUrl = `${EKUBO_QUOTER_API_BASE}/${CHAIN_ID_DECIMAL}/${STANDARD_AMOUNT}/${tokenAddress}/${USDC_ADDRESS}`;
 
-    return null;
+    console.log(`Fetching price from quoter API: ${apiUrl}`);
+
+    const fetchPromise = (async () => {
+      const response = await fetch(apiUrl);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('API did not return JSON');
+      }
+
+      const quoteResponse: QuoterResponse = await response.json();
+
+      console.log(`Fetched quote for ${tokenAddress}:`, quoteResponse);
+
+      // The quoter returns the amount of USDC we'd get for the input amount
+      // USDC has 6 decimals, so divide by 10^6 to get the dollar price
+      if (!quoteResponse.total_calculated) {
+        throw new Error('No quote data available');
+      }
+
+      // Convert the quote amount (in USDC smallest unit) to dollar price
+      const price = Number(quoteResponse.total_calculated) / 1e6;
+      return price;
+    })();
+
+    // Race between the timeout and the fetch
+    return await Promise.race([fetchPromise, timeoutPromise]);
   } catch (error) {
-    console.error(`Error fetching ${baseToken}/${quoteToken} price:`, error);
+    console.error(`Error fetching price for ${tokenAddress}:`, error);
     return null;
   }
 }
 
 async function fetchEkuboRates(): Promise<RatesInSTRK> {
   try {
+    // Get token addresses from payment tokens
+    const strkToken = PAYMENT_TOKENS.find((t) => t.symbol === 'STRK');
+    const lordsToken = PAYMENT_TOKENS.find((t) => t.symbol === 'LORDS');
+    const ethToken = PAYMENT_TOKENS.find((t) => t.symbol === 'ETH');
+    const survivorToken = PAYMENT_TOKENS.find((t) => t.symbol === 'SURVIVOR');
+
     // Fetch all prices in parallel, denominated in USDC
-    const [strkUsdcPrice, lordsUsdcPrice, ethUsdcPrice, survivorUsdcPrice] = await Promise.all([
-      fetchTokenPrice('STRK', 'USDC'),
-      fetchTokenPrice('LORDS', 'USDC'),
-      fetchTokenPrice('ETH', 'USDC'),
-      fetchTokenPrice('SURVIVOR', 'USDC'),
-    ]);
+    const [strkUsdcPrice, lordsUsdcPrice, ethUsdcPrice, survivorUsdcPrice] =
+      await Promise.all([
+        strkToken ? fetchTokenPriceInUSDC(strkToken.address) : null,
+        lordsToken ? fetchTokenPriceInUSDC(lordsToken.address) : null,
+        ethToken ? fetchTokenPriceInUSDC(ethToken.address) : null,
+        survivorToken && survivorToken.address !== '0x0'
+          ? fetchTokenPriceInUSDC(survivorToken.address)
+          : null,
+      ]);
 
     const rates: RatesInSTRK = { STRK: 1 };
 
@@ -97,6 +179,9 @@ async function fetchEkuboRates(): Promise<RatesInSTRK> {
       rates,
     });
 
+    // Cache the rates
+    setCachedRates(rates);
+
     return rates;
   } catch (error) {
     console.error('Error fetching Ekubo rates:', error);
@@ -117,12 +202,18 @@ async function fetchEkuboRates(): Promise<RatesInSTRK> {
 }
 
 export function usePriceRates() {
+  // Get cached rates for instant display
+  const cachedRates = getCachedRates();
+
   return useQuery({
     queryKey: ['ekubo-rates'],
     queryFn: fetchEkuboRates,
     staleTime: 60_000,
     refetchInterval: 60_000,
-    initialData: { STRK: 1 } as RatesInSTRK,
+    placeholderData: cachedRates || ({ STRK: 1 } as RatesInSTRK),
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+    // Ensure immediate execution
+    networkMode: 'always',
   });
 }
-

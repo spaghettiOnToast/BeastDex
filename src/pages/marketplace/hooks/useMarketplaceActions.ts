@@ -38,7 +38,8 @@ export function useMarketplaceActions({
   refetchOrders,
   reloadUserBeasts,
 }: UseMarketplaceActionsProps) {
-  const { executeListing, cancel, list, executeOffer } = useCartridgeMarketplaceActions();
+  const { executeListing, cancel, list, executeOffer } =
+    useCartridgeMarketplaceActions();
 
   // Action state
   const [buyingListingId, setBuyingListingId] = useState<string | null>(null);
@@ -203,7 +204,10 @@ export function useMarketplaceActions({
    * Handle batch purchase of multiple listings
    */
   const handlePurchaseAll = useCallback(
-    async (purchaseCart: Listing[], handleRemoveFromPurchaseCart: (id: string) => void) => {
+    async (
+      purchaseCart: Listing[],
+      handleRemoveFromPurchaseCart: (id: string) => void
+    ) => {
       if (!account || purchaseCart.length === 0 || purchasingBatch) return;
 
       setPurchasingBatch(true);
@@ -227,19 +231,27 @@ export function useMarketplaceActions({
               listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
             const orderId = toBigInt(listing.orderId ?? 0);
 
-            // Check balance
+            // Calculate total amount including platform fee
+            const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
+            const totalAmount = priceBigInt + feeAmount;
+
+            // Check balance (including fee)
             const { sufficient } = await checkSufficientBalance(
               account,
               currency,
-              priceBigInt
+              totalAmount
             );
             if (!sufficient) {
               failCount++;
               continue;
             }
 
-            // Ensure approval
-            await ensureErc20Allowance(account, currency, priceBigInt.toString());
+            // Ensure approval for total amount (price + fee)
+            await ensureErc20Allowance(
+              account,
+              currency,
+              totalAmount.toString()
+            );
 
             // Execute purchase
             await executeListing(
@@ -285,7 +297,8 @@ export function useMarketplaceActions({
         // Return success status for cart dialog to close
         return successCount > 0 && failCount === 0;
       } catch (error) {
-        const errorMessage = (error as Error).message || "Batch purchase failed";
+        const errorMessage =
+          (error as Error).message || "Batch purchase failed";
         toast.error(errorMessage, { id: toastId });
         return false;
       } finally {
@@ -322,7 +335,7 @@ export function useMarketplaceActions({
           orderId,
           BEASTS_COLLECTION_ADDRESS,
           tokenIdBigInt,
-          BigInt(order.quantity ?? 1),
+          BigInt(order.quantity ?? 0),
           true, // taker fulfills taker
           currency,
           priceBigInt,
@@ -417,21 +430,25 @@ export function useMarketplaceActions({
                 listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
               const orderId = toBigInt(listing.orderId ?? 0);
 
-              // Check balance
+              // Calculate total amount including platform fee
+              const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
+              const totalAmount = priceBigInt + feeAmount;
+
+              // Check balance (including fee)
               const { sufficient } = await checkSufficientBalance(
                 account,
                 currency,
-                priceBigInt
+                totalAmount
               );
               if (!sufficient) {
                 continue;
               }
 
-              // Ensure approval
+              // Ensure approval for total amount (price + fee)
               await ensureErc20Allowance(
                 account,
                 currency,
-                priceBigInt.toString()
+                totalAmount.toString()
               );
 
               // Execute purchase

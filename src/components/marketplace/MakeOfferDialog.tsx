@@ -10,7 +10,13 @@ import {
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import type { Beast } from "../../services/beast";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import {
   DEFAULT_PAYMENT_TOKEN,
   PAYMENT_TOKENS,
@@ -40,7 +46,12 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   beast: Beast | null;
   tokenId?: string;
-  onOfferMade?: (result?: { tokenId: string; beastName: string; offerPrice: string; currency: string }) => void;
+  onOfferMade?: (result?: {
+    tokenId: string;
+    beastName: string;
+    offerPrice: string;
+    currency: string;
+  }) => void;
 };
 
 export default function MakeOfferDialog({
@@ -52,7 +63,9 @@ export default function MakeOfferDialog({
 }: Props) {
   const { account } = useAccount();
   const [price, setPrice] = useState("");
-  const [tokenSym, setTokenSym] = useState<string>(DEFAULT_PAYMENT_TOKEN.symbol);
+  const [tokenSym, setTokenSym] = useState<string>(
+    DEFAULT_PAYMENT_TOKEN.symbol
+  );
   const [duration, setDuration] = useState<string>(DEFAULT_DURATION_VALUE);
   const [customExpiration, setCustomExpiration] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -75,10 +88,13 @@ export default function MakeOfferDialog({
   }, [duration]);
 
   const selectedToken = useMemo(
-    () => PAYMENT_TOKENS.find((t) => t.symbol === tokenSym) ?? DEFAULT_PAYMENT_TOKEN,
+    () =>
+      PAYMENT_TOKENS.find((t) => t.symbol === tokenSym) ??
+      DEFAULT_PAYMENT_TOKEN,
     [tokenSym]
   );
-  const currencyAddress = selectedToken.address ?? DEFAULT_PAYMENT_TOKEN.address;
+  const currencyAddress =
+    selectedToken.address ?? DEFAULT_PAYMENT_TOKEN.address;
 
   const toBigInt = (value: string) => {
     const trimmed = value.trim();
@@ -170,7 +186,14 @@ export default function MakeOfferDialog({
       !expirationDetails.error &&
       expirationDetails.expirationSeconds != null
     );
-  }, [account, beast, tokenId, priceBigInt, expirationDetails.error, expirationDetails.expirationSeconds]);
+  }, [
+    account,
+    beast,
+    tokenId,
+    priceBigInt,
+    expirationDetails.error,
+    expirationDetails.expirationSeconds,
+  ]);
 
   const onSubmit = async () => {
     if (!account || (!beast && !tokenId)) return;
@@ -184,7 +207,9 @@ export default function MakeOfferDialog({
     const toastId = toast.loading("Making offer...");
 
     try {
-      const rawTokenId = beast?.id ? (beast.id.split(":").pop() || beast.id).trim() : tokenId!;
+      const rawTokenId = beast?.id
+        ? (beast.id.split(":").pop() || beast.id).trim()
+        : tokenId!;
       const tokenIdBigInt = toBigInt(rawTokenId);
       const expirationSeconds = expirationDetails.expirationSeconds;
       if (!expirationSeconds) {
@@ -196,7 +221,7 @@ export default function MakeOfferDialog({
         account as any,
         BEASTS_COLLECTION_ADDRESS,
         tokenIdBigInt,
-        1n,
+        0n,
         priceBigInt,
         currencyAddress,
         expirationBigInt
@@ -206,7 +231,8 @@ export default function MakeOfferDialog({
       onOpenChange(false);
       setPrice("");
 
-      const actualTokenId = (tokenId || beast?.id.split(":").pop() || beast?.id || "");
+      const actualTokenId =
+        tokenId || beast?.id.split(":").pop() || beast?.id || "";
       onOfferMade?.({
         tokenId: actualTokenId,
         beastName: beast?.name || `Beast #${actualTokenId}`,
@@ -217,10 +243,12 @@ export default function MakeOfferDialog({
       const errorMessage = (e as Error).message || "Failed to make offer";
 
       // Check if user cancelled the transaction
-      if (errorMessage.toLowerCase().includes("user") &&
-          (errorMessage.toLowerCase().includes("reject") ||
-           errorMessage.toLowerCase().includes("cancel") ||
-           errorMessage.toLowerCase().includes("abort"))) {
+      if (
+        errorMessage.toLowerCase().includes("user") &&
+        (errorMessage.toLowerCase().includes("reject") ||
+          errorMessage.toLowerCase().includes("cancel") ||
+          errorMessage.toLowerCase().includes("abort"))
+      ) {
         toast.info("Offer cancelled", { id: toastId });
       } else {
         setError(errorMessage);
@@ -231,7 +259,8 @@ export default function MakeOfferDialog({
     }
   };
 
-  const displayName = beast?.name ?? (tokenId ? `Beast #${tokenId}` : "Unknown Beast");
+  const displayName =
+    beast?.name ?? (tokenId ? `Beast #${tokenId}` : "Unknown Beast");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -258,11 +287,20 @@ export default function MakeOfferDialog({
               placeholder={`e.g., 1.5 ${selectedToken.symbol}`}
               className="mt-1"
             />
-            {priceBigInt && priceBigInt > 0n && priceRates && selectedToken.symbol.toUpperCase() !== 'USDC' && (
-              <div className="mt-2 text-xs text-gray-400">
-                ≈ {formatPriceInSymbol(priceBigInt, selectedToken.symbol, 'USDC', priceRates)}
-              </div>
-            )}
+            {priceBigInt &&
+              priceBigInt > 0n &&
+              priceRates &&
+              selectedToken.symbol.toUpperCase() !== "USDC" && (
+                <div className="mt-2 text-xs text-gray-400">
+                  ≈{" "}
+                  {formatPriceInSymbol(
+                    priceBigInt,
+                    selectedToken.symbol,
+                    "USDC",
+                    priceRates
+                  )}
+                </div>
+              )}
           </div>
           <div>
             <label className="text-sm text-gray-400">Currency</label>
@@ -272,10 +310,18 @@ export default function MakeOfferDialog({
               </SelectTrigger>
               <SelectContent className="bg-[#0b0b0f] border-gray-800">
                 {PAYMENT_TOKENS.map((t) => (
-                  <SelectItem key={t.symbol} value={t.symbol} className="focus:bg-gray-800/50">
+                  <SelectItem
+                    key={t.symbol}
+                    value={t.symbol}
+                    className="focus:bg-gray-800/50"
+                  >
                     <div className="flex items-center gap-2">
                       {t.logo && (
-                        <img src={t.logo} alt={t.symbol} className="w-5 h-5 rounded-full" />
+                        <img
+                          src={t.logo}
+                          alt={t.symbol}
+                          className="w-5 h-5 rounded-full"
+                        />
                       )}
                       <span>{t.symbol}</span>
                     </div>
@@ -292,7 +338,11 @@ export default function MakeOfferDialog({
               </SelectTrigger>
               <SelectContent className="bg-[#0b0b0f] border-gray-800">
                 {DURATION_SELECT_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value} className="focus:bg-gray-800/50">
+                  <SelectItem
+                    key={option.value}
+                    value={option.value}
+                    className="focus:bg-gray-800/50"
+                  >
                     {option.label}
                   </SelectItem>
                 ))}
@@ -318,12 +368,18 @@ export default function MakeOfferDialog({
               </p>
             ) : null}
             {expirationDetails.error ? (
-              <p className="mt-2 text-xs text-red-400">{expirationDetails.error}</p>
+              <p className="mt-2 text-xs text-red-400">
+                {expirationDetails.error}
+              </p>
             ) : null}
           </div>
           {error && <p className="text-sm text-red-400">{error}</p>}
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={submitting}
+            >
               Cancel
             </Button>
             <Button onClick={onSubmit} disabled={!canSubmit || submitting}>

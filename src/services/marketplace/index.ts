@@ -10,28 +10,28 @@ function getListingStatus(order: OrderModel): ListingStatus {
 
   // Check order status first
   if (order.status.value === StatusType.Executed) {
-    return 'sold';
+    return "sold";
   }
   if (order.status.value === StatusType.Canceled) {
-    return 'canceled';
+    return "canceled";
   }
 
   // For Placed orders, check expiration
   if (order.status.value === StatusType.Placed) {
     if (isExpired) {
-      return 'expired';
+      return "expired";
     }
-    return 'active';
+    return "active";
   }
 
   // Default to expired for unknown states
-  return 'expired';
+  return "expired";
 }
 
 function isActiveOrder(order: OrderModel) {
   return (
     order.category.value === CategoryType.Sell &&
-    getListingStatus(order) === 'active'
+    getListingStatus(order) === "active"
   );
 }
 
@@ -108,14 +108,52 @@ export async function hydrateOrders(orders: OrderModel[]): Promise<Listing[]> {
   const endTime = performance.now();
   if (import.meta.env.DEV) {
     console.log(
-      `[Hydration] Complete in ${(endTime - startTime).toFixed(0)}ms (${cacheHits} cached, ${cacheMisses} fetched)`
+      `[Hydration] Complete in ${(endTime - startTime).toFixed(
+        0
+      )}ms (${cacheHits} cached, ${cacheMisses} fetched)`
     );
   }
 
-  return skeletons.map((listing) => ({
+  // Map listings with beast data and filter out stale listings
+  const hydratedListings = skeletons.map((listing) => ({
     ...listing,
     beast: beastMap.get(listing.tokenId) ?? null,
   }));
+
+  // Filter out listings where the seller no longer owns the token
+  const validListings = hydratedListings.filter((listing) => {
+    // If we don't have beast data, keep the listing (benefit of the doubt)
+    if (!listing.beast || !listing.beast.owner) {
+      return true;
+    }
+
+    // Normalize addresses for comparison (case-insensitive)
+    const sellerAddress = listing.seller?.toLowerCase();
+    const currentOwner = listing.beast.owner.toLowerCase();
+
+    // Keep only listings where the seller still owns the token
+    const isValid = sellerAddress === currentOwner;
+
+    if (!isValid && import.meta.env.DEV) {
+      console.log(
+        `[Hydration] Filtered out stale listing for token ${listing.tokenId}: seller=${sellerAddress}, current owner=${currentOwner}`
+      );
+    }
+
+    return isValid;
+  });
+
+  if (import.meta.env.DEV && validListings.length < hydratedListings.length) {
+    console.log(
+      `[Hydration] Filtered out ${
+        hydratedListings.length - validListings.length
+      } stale listings`
+    );
+  }
+
+  console.log(validListings);
+
+  return validListings;
 }
 
 // Clear cache periodically or when needed
@@ -139,7 +177,10 @@ function buildBeastLookup(beasts: Beast[]) {
       byHex.set(derivedHex.toLowerCase(), beast);
     }
 
-    if (typeof beast.numericId === "number" && Number.isFinite(beast.numericId)) {
+    if (
+      typeof beast.numericId === "number" &&
+      Number.isFinite(beast.numericId)
+    ) {
       byNumeric.set(String(beast.numericId), beast);
     }
   }

@@ -38,7 +38,7 @@ export default function PurchaseConfirmDialog({
   const totalBigInt = priceBigInt + buyerFeeBigInt;
 
   const token = getPaymentTokenByAddress(listing.paymentToken);
-  const tokenSymbol = token?.symbol || 'STRK';
+  const tokenSymbol = token?.symbol || "STRK";
   const buyerFeeLabel = formatPrice(buyerFeeBigInt, tokenSymbol);
   const totalLabel = formatPrice(totalBigInt, tokenSymbol);
 
@@ -78,19 +78,27 @@ export default function PurchaseConfirmDialog({
 
             <div className="flex justify-between">
               <span className="text-sm text-gray-400">Platform Fee (2%):</span>
-              <span className="text-sm font-medium text-gray-400">{buyerFeeLabel}</span>
+              <span className="text-sm font-medium text-gray-400">
+                {buyerFeeLabel}
+              </span>
             </div>
 
             <div className="flex justify-between border-t border-gray-700 pt-2 mt-2">
-              <span className="text-sm font-semibold text-white">Total to Pay:</span>
-              <span className="text-sm font-semibold text-lsGold">{totalLabel}</span>
+              <span className="text-sm font-semibold text-white">
+                Total to Pay:
+              </span>
+              <span className="text-sm font-semibold text-lsGold">
+                {totalLabel}
+              </span>
             </div>
 
             <div className="flex justify-between">
               <span className="text-sm text-gray-400">Payment Currency:</span>
               <div className="flex items-center gap-2">
                 <TokenIcon symbol={tokenSymbol} size="sm" />
-                <span className="text-sm font-medium text-lsGold">{tokenSymbol}</span>
+                <span className="text-sm font-medium text-lsGold">
+                  {tokenSymbol}
+                </span>
               </div>
             </div>
 
@@ -104,7 +112,8 @@ export default function PurchaseConfirmDialog({
 
           <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-3">
             <p className="text-xs text-yellow-200">
-              ⚠️ This transaction cannot be reversed. Please verify all details before confirming.
+              ⚠️ This transaction cannot be reversed. Please verify all details
+              before confirming.
             </p>
           </div>
         </div>
@@ -121,7 +130,7 @@ export default function PurchaseConfirmDialog({
           <Button
             onClick={onConfirm}
             disabled={isProcessing}
-            className="flex-1 !bg-lsGold !text-black hover:!bg-lsGold/90 font-bold"
+            className="flex-1 font-bold"
           >
             {isProcessing ? "Processing..." : "Confirm Purchase"}
           </Button>
