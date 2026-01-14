@@ -17,12 +17,12 @@ import {
   DEFAULT_LISTING_DURATION_SECONDS,
   LISTING_DURATION_OPTIONS,
   CLIENT_FEE_BP,
+  CLIENT_FEE_RECEIVER,
 } from "../../services/marketplace/constants";
 import { NAMESPACE, useMarketplace, useMarketplaceActions } from "@cartridge/marketplace";
 import { getContractByName, parseDojoCall } from "@dojoengine/core";
-import { toWei, fromWei, TOKEN_DECIMALS, formatPriceInSymbol } from "../../utils/price";
+import { toWei, fromWei, TOKEN_DECIMALS } from "../../utils/price";
 import { toast } from "sonner";
-import { usePriceRates } from "../../services/marketplace/rates";
 
 const CUSTOM_DURATION_VALUE = "custom";
 
@@ -55,7 +55,6 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
   const [estimatedFee, setEstimatedFee] = useState<bigint | null>(null);
   const [estimatingFee, setEstimatingFee] = useState(false);
   const [feeError, setFeeError] = useState<string | null>(null);
-  const { data: priceRates } = usePriceRates();
 
   useEffect(() => {
     if (open) {
@@ -342,7 +341,27 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
 
       console.log('List calldata (quantity=0):', parsedListCall.calldata);
 
-      await (account as any).execute([approvalCall, parsedListCall]);
+      // Calculate platform fee (2% of listing price)
+      const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
+
+      // Convert fee amount to Uint256 format (low, high)
+      const UINT128_MASK = (1n << 128n) - 1n;
+      const feeLow = feeAmount & UINT128_MASK;
+      const feeHigh = feeAmount >> 128n;
+
+      // Build ERC20 transfer call for platform fee
+      const feeTransferCall = {
+        contractAddress: currencyAddress,
+        entrypoint: "transfer",
+        calldata: [
+          CLIENT_FEE_RECEIVER,
+          feeLow.toString(),
+          feeHigh.toString(),
+        ],
+      };
+
+      // Execute: approve NFT, transfer fee, list
+      await (account as any).execute([approvalCall, feeTransferCall, parsedListCall]);
 
       toast.success("Beast listed successfully!", { id: toastId });
       toast.info("Your listing will appear in the marketplace shortly...", { duration: 5000 });
@@ -399,12 +418,6 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
               />
               {priceBigInt && priceBigInt > 0n && (
                 <div className="mt-2 space-y-1">
-                  {/* USDC Conversion */}
-                  {priceRates && selectedToken.symbol.toUpperCase() !== 'USDC' && (
-                    <div className="text-xs text-gray-400">
-                      ≈ {formatPriceInSymbol(priceBigInt, selectedToken.symbol, 'USDC', priceRates)}
-                    </div>
-                  )}
                   {/* Listing Fee (Seller Pays) */}
                   <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2 space-y-1">
                     <p className="text-xs text-amber-200 font-medium">Listing fee (paid by you):</p>

@@ -10,7 +10,7 @@ import { Button } from "../ui/button";
 import type { Listing } from "../../services/marketplace/types";
 import type { Beast } from "../../services/beast";
 import { X, ShoppingBag, Tag } from "lucide-react";
-import { formatPrice, formatPriceInSymbol, type RatesInSTRK } from "../../utils/price";
+import { formatPrice } from "../../utils/price";
 import { getPaymentTokenByAddress } from "../../services/marketplace/constants";
 import { Input } from "../ui/input";
 
@@ -26,8 +26,6 @@ type Props = {
   onClearAll: () => void;
   onExecuteAll: () => void;
   isProcessing: boolean;
-  displayCurrency?: 'STRK' | 'LORDS' | 'USDC' | 'ETH' | 'SURVIVOR';
-  priceRates?: RatesInSTRK | null;
   selectedToken: { symbol: string; address: string };
 };
 
@@ -43,26 +41,39 @@ export default function UnifiedCartDialog({
   onClearAll,
   onExecuteAll,
   isProcessing,
-  displayCurrency,
-  priceRates,
   selectedToken,
 }: Props) {
-  const totalBuyPrice = buyItems.reduce((sum, listing) => {
-    try {
-      return sum + BigInt(listing.price);
-    } catch {
-      return sum;
+  // Group buy items by payment token
+  const buyItemsByToken = buyItems.reduce((acc, listing) => {
+    const tokenAddress = listing.paymentToken ?? 'default';
+    if (!acc[tokenAddress]) {
+      acc[tokenAddress] = [];
     }
-  }, 0n);
+    acc[tokenAddress].push(listing);
+    return acc;
+  }, {} as Record<string, Listing[]>);
+
+  // Calculate totals per token for buy items
+  const tokenTotals = Object.entries(buyItemsByToken).map(([tokenAddress, tokenListings]) => {
+    const total = tokenListings.reduce((sum, listing) => {
+      try {
+        return sum + BigInt(listing.price);
+      } catch {
+        return sum;
+      }
+    }, 0n);
+    const token = getPaymentTokenByAddress(tokenAddress !== 'default' ? tokenAddress : undefined);
+    return {
+      tokenAddress,
+      tokenSymbol: token?.symbol ?? 'STRK',
+      total,
+      count: tokenListings.length,
+    };
+  });
 
   const formatListingPrice = (listing: Listing) => {
     const token = getPaymentTokenByAddress(listing.paymentToken ?? undefined);
     const fromSymbol = token?.symbol ?? "STRK";
-
-    if (displayCurrency && priceRates && fromSymbol.toUpperCase() !== displayCurrency.toUpperCase()) {
-      return formatPriceInSymbol(listing.price, fromSymbol, displayCurrency, priceRates as any);
-    }
-
     return formatPrice(listing.price, fromSymbol);
   };
 
@@ -187,11 +198,19 @@ export default function UnifiedCartDialog({
                 <span className="font-medium">{listBeasts.length} items</span>
               </div>
               {buyItems.length > 0 && (
-                <div className="flex justify-between text-sm border-t border-gray-700 pt-2">
-                  <span className="text-gray-400">Total to Pay:</span>
-                  <span className="text-green-400 font-semibold">
-                    {formatPrice(totalBuyPrice, displayCurrency || 'LORDS')}
-                  </span>
+                <div className="border-t border-gray-700 pt-2 space-y-1">
+                  <p className="text-sm text-white font-semibold">Total to Pay:</p>
+                  {tokenTotals.map((tokenTotal) => (
+                    <div key={tokenTotal.tokenAddress} className="flex justify-between text-sm">
+                      <span className="text-gray-400">{tokenTotal.tokenSymbol}:</span>
+                      <span className="text-green-400 font-semibold">
+                        {formatPrice(tokenTotal.total, tokenTotal.tokenSymbol)}
+                      </span>
+                    </div>
+                  ))}
+                  <p className="text-[10px] text-gray-500 italic">
+                    Each purchase uses the token specified in the listing
+                  </p>
                 </div>
               )}
               <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-2.5">

@@ -18,14 +18,14 @@ import {
   DEFAULT_LISTING_DURATION_SECONDS,
   LISTING_DURATION_OPTIONS,
   CLIENT_FEE_BP,
+  CLIENT_FEE_RECEIVER,
 } from "../../services/marketplace/constants";
 import { NAMESPACE, useMarketplace, useMarketplaceActions } from "@cartridge/marketplace";
 import { parseDojoCall } from "@dojoengine/core";
-import { toWei, TOKEN_DECIMALS, fromWei, formatPriceInSymbol } from "../../utils/price";
+import { toWei, TOKEN_DECIMALS, fromWei } from "../../utils/price";
 import { X, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import type { Listing } from "../../services/marketplace/types";
-import { usePriceRates } from "../../services/marketplace/rates";
 
 const CUSTOM_DURATION_VALUE = "custom";
 
@@ -75,7 +75,6 @@ export default function CartListDialog({
   const [error, setError] = useState<string | null>(null);
   const marketplace = useMarketplace();
   const { buildListCalls } = useMarketplaceActions();
-  const { data: priceRates } = usePriceRates();
 
   // Check which beasts are already listed
   const alreadyListedTokenIds = useMemo(() => {
@@ -300,14 +299,32 @@ export default function CartListDialog({
           // Parse the list call through Dojo
           const parsedListCall = (parseDojoCall as any)(marketplace.provider.manifest, NAMESPACE, listCall);
 
-          console.log(`Adding calls for ${beast.name} (${i}):`, { approvalCall, parsedListCall });
+          // Calculate platform fee (2% of listing price)
+          const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
+          const UINT128_MASK = (1n << 128n) - 1n;
+          const feeLow = feeAmount & UINT128_MASK;
+          const feeHigh = feeAmount >> 128n;
 
-          // Add to batch - track the index for this beast's calls
+          // Build ERC20 transfer call for platform fee
+          const feeTransferCall = {
+            contractAddress: currencyAddress,
+            entrypoint: "transfer",
+            calldata: [
+              CLIENT_FEE_RECEIVER,
+              feeLow.toString(),
+              feeHigh.toString(),
+            ],
+          };
+
+          console.log(`Adding calls for ${beast.name} (${i}):`, { approvalCall, feeTransferCall, parsedListCall });
+
+          // Add to batch - track the index for this beast's calls (3 calls per beast: approve, fee, list)
           const callIndex = allCalls.length;
           beastCallMap.set(callIndex, beast);
           beastCallMap.set(callIndex + 1, beast);
+          beastCallMap.set(callIndex + 2, beast);
 
-          allCalls.push(approvalCall, parsedListCall);
+          allCalls.push(approvalCall, feeTransferCall, parsedListCall);
 
           // Pre-populate success for validation
           successfulBeasts.push(beast);
@@ -459,11 +476,6 @@ export default function CartListDialog({
                           const platformFeeBigInt = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
                           return (
                             <div className="text-[10px] space-y-0.5">
-                              {priceRates && selectedToken.symbol.toUpperCase() !== 'USDC' && (
-                                <div className="text-gray-400">
-                                  ≈ {formatPriceInSymbol(priceBigInt, selectedToken.symbol, 'USDC', priceRates)}
-                                </div>
-                              )}
                               <div className="text-amber-300">
                                 You pay 2% fee: {fromWei(platformFeeBigInt, TOKEN_DECIMALS[selectedToken.symbol] ?? 18)} {selectedToken.symbol}
                               </div>

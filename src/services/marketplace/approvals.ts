@@ -21,7 +21,7 @@ function toUint256(value: bigint): Uint256 {
   return [toHex(low), toHex(high)];
 }
 
-function getProvider(account: AccountInterface): ProviderInterface {
+export function getProvider(account: AccountInterface): ProviderInterface {
   // Try multiple ways to get the provider for different account types
   const provider =
     (account as any)?.provider ??
@@ -244,6 +244,95 @@ export async function checkSufficientBalance(
 }
 
 /**
+ * Get the owner of an NFT token by calling ownerOf on the contract
+ */
+async function getTokenOwner(
+  provider: ProviderInterface,
+  collectionAddress: string,
+  tokenId: BigNumberish,
+): Promise<string | null> {
+  try {
+    // Convert tokenId to Uint256 format
+    const tokenIdBigInt = typeof tokenId === 'bigint' ? tokenId : BigInt(tokenId.toString());
+    const tokenIdU256 = toUint256(tokenIdBigInt);
+
+    const response = await provider.callContract(
+      {
+        contractAddress: collectionAddress,
+        entrypoint: "ownerOf",
+        calldata: tokenIdU256,
+      },
+      "latest"
+    );
+
+    const rawResult = Array.isArray(response) ? response : (response as any).result;
+    if (!Array.isArray(rawResult) || rawResult.length === 0) {
+      return null;
+    }
+
+    // ownerOf returns a single felt252 (address)
+    return rawResult[0];
+  } catch (error) {
+    console.error("[validateListingOwnership] Error fetching token owner:", error);
+    return null;
+  }
+}
+
+/**
+ * Validate that a listing is still valid by checking if the seller still owns the token
+ * @returns true if the listing is valid (seller still owns the token), false otherwise
+ */
+export async function validateListingOwnership(
+  provider: ProviderInterface,
+  collectionAddress: string,
+  tokenId: BigNumberish,
+  expectedOwner: string,
+): Promise<boolean> {
+  const actualOwner = await getTokenOwner(provider, collectionAddress, tokenId);
+
+  if (!actualOwner) {
+    return false; // Unable to verify ownership
+  }
+
+  // Normalize addresses for comparison (case-insensitive)
+  const normalizedActual = actualOwner.toLowerCase().trim();
+  const normalizedExpected = expectedOwner.toLowerCase().trim();
+
+  return normalizedActual === normalizedExpected;
+}
+
+/**
+ * Batch validate multiple listings
+ * @returns Map of tokenId -> isValid
+ */
+export async function batchValidateListings(
+  provider: ProviderInterface,
+  collectionAddress: string,
+  listings: Array<{ tokenId: BigNumberish; seller: string }>,
+): Promise<Map<string, boolean>> {
+  const results = new Map<string, boolean>();
+
+  // Process in parallel for better performance
+  const validationPromises = listings.map(async (listing) => {
+    const isValid = await validateListingOwnership(
+      provider,
+      collectionAddress,
+      listing.tokenId,
+      listing.seller
+    );
+    return { tokenId: listing.tokenId.toString(), isValid };
+  });
+
+  const validationResults = await Promise.all(validationPromises);
+
+  for (const result of validationResults) {
+    results.set(result.tokenId, result.isValid);
+  }
+
+  return results;
+}
+
+/**
  * Build marketplace execute call for purchasing a listing
  */
 export function buildMarketplaceExecuteCall(
@@ -296,13 +385,14 @@ export async function executePurchaseWithApproval(
 ): Promise<{ transaction_hash: string }> {
   const calls: Call[] = [];
 
-  // Calculate total amount including platform fee
+  // Calculate total amount including client fee
+  // Client fee is in basis points (10000 = 100%), so: totalAmount = price + (price * clientFee / 10000)
   const priceBigInt = typeof price === 'bigint' ? price : BigInt(price.toString());
   const clientFeeBigInt = typeof clientFee === 'bigint' ? clientFee : BigInt(clientFee.toString());
   const feeAmount = (priceBigInt * clientFeeBigInt) / 10000n;
   const totalAmount = priceBigInt + feeAmount;
 
-  // Check if we need to add approval call (approve marketplace for price + fee)
+  // Check if we need to add approval call with total amount (price + fee)
   const approvalCall = await getErc20ApprovalCallIfNeeded(
     account,
     currency,

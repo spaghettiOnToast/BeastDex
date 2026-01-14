@@ -9,7 +9,7 @@ import {
 import { Button } from "../ui/button";
 import type { Listing } from "../../services/marketplace/types";
 import { X } from "lucide-react";
-import { formatPrice, formatPriceInSymbol, type RatesInSTRK } from "../../utils/price";
+import { formatPrice } from "../../utils/price";
 import { getPaymentTokenByAddress } from "../../services/marketplace/constants";
 
 type Props = {
@@ -20,8 +20,6 @@ type Props = {
   onClearAll: () => void;
   onPurchaseAll: () => void;
   isProcessing: boolean;
-  displayCurrency?: 'STRK' | 'LORDS' | 'USDC' | 'ETH' | 'SURVIVOR';
-  priceRates?: RatesInSTRK | null;
 };
 
 export default function PurchaseCartDialog({
@@ -32,32 +30,38 @@ export default function PurchaseCartDialog({
   onClearAll,
   onPurchaseAll,
   isProcessing,
-  displayCurrency,
-  priceRates,
 }: Props) {
-  const subtotal = listings.reduce((sum, listing) => {
-    try {
-      return sum + BigInt(listing.price);
-    } catch {
-      return sum;
+  // Group listings by payment token
+  const listingsByToken = listings.reduce((acc, listing) => {
+    const tokenAddress = listing.paymentToken ?? 'default';
+    if (!acc[tokenAddress]) {
+      acc[tokenAddress] = [];
     }
-  }, 0n);
+    acc[tokenAddress].push(listing);
+    return acc;
+  }, {} as Record<string, Listing[]>);
 
-  // No buyer fee - seller pays on listing
-  const totalPrice = subtotal;
-
-  // Get the most common payment token for fee display (or first listing's token)
-  const firstToken = listings[0] ? getPaymentTokenByAddress(listings[0].paymentToken) : null;
-  const tokenSymbol = firstToken?.symbol ?? 'STRK';
+  // Calculate totals per token
+  const tokenTotals = Object.entries(listingsByToken).map(([tokenAddress, tokenListings]) => {
+    const total = tokenListings.reduce((sum, listing) => {
+      try {
+        return sum + BigInt(listing.price);
+      } catch {
+        return sum;
+      }
+    }, 0n);
+    const token = getPaymentTokenByAddress(tokenAddress !== 'default' ? tokenAddress : undefined);
+    return {
+      tokenAddress,
+      tokenSymbol: token?.symbol ?? 'STRK',
+      total,
+      count: tokenListings.length,
+    };
+  });
 
   const formatListingPrice = (listing: Listing) => {
     const token = getPaymentTokenByAddress(listing.paymentToken ?? undefined);
     const fromSymbol = token?.symbol ?? "STRK";
-
-    if (displayCurrency && priceRates && fromSymbol.toUpperCase() !== displayCurrency.toUpperCase()) {
-      return formatPriceInSymbol(listing.price, fromSymbol, displayCurrency, priceRates as any);
-    }
-
     return formatPrice(listing.price, fromSymbol);
   };
 
@@ -114,12 +118,19 @@ export default function PurchaseCartDialog({
                 <span className="text-gray-400">Items:</span>
                 <span className="font-medium">{listings.length}</span>
               </div>
-              <div className="flex justify-between text-base font-semibold border-t border-gray-700 pt-2">
-                <span className="text-white">Total to Pay:</span>
-                <span className="text-lsGold">{formatPrice(totalPrice, tokenSymbol)}</span>
+              <div className="border-t border-gray-700 pt-2 space-y-1">
+                <p className="text-sm text-white font-semibold mb-2">Total to Pay:</p>
+                {tokenTotals.map((tokenTotal) => (
+                  <div key={tokenTotal.tokenAddress} className="flex justify-between text-base">
+                    <span className="text-gray-400">{tokenTotal.tokenSymbol}:</span>
+                    <span className="text-lsGold font-semibold">
+                      {formatPrice(tokenTotal.total, tokenTotal.tokenSymbol)}
+                    </span>
+                  </div>
+                ))}
               </div>
               <p className="text-[10px] text-gray-500 italic">
-                No buyer fee - platform fees were paid by sellers on listing
+                No buyer fee - platform fees were paid by sellers on listing. Each purchase uses the token specified in the listing.
               </p>
               <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-3">
                 <p className="text-xs text-yellow-200">

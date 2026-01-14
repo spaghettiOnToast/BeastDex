@@ -11,7 +11,7 @@ export interface UseMarketplaceFiltersProps {
   userBeasts: Beast[];
   recentListings: Listing[];
   recentSales: Array<{ sale: any; beast: Beast | null }>;
-  priceRates: RatesInSTRK | null | undefined;
+  priceRates?: RatesInSTRK | null | undefined;
   address: string | undefined;
   availableFilters: BeastAttributeFilters;
 }

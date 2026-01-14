@@ -25,9 +25,8 @@ import {
   LISTING_DURATION_OPTIONS,
 } from "../../services/marketplace/constants";
 import { useMarketplaceActions } from "@cartridge/marketplace";
-import { toWei, TOKEN_DECIMALS, formatPriceInSymbol } from "../../utils/price";
+import { toWei, TOKEN_DECIMALS } from "../../utils/price";
 import { toast } from "sonner";
-import { usePriceRates } from "../../services/marketplace/rates";
 
 const CUSTOM_DURATION_VALUE = "custom";
 
@@ -71,7 +70,6 @@ export default function MakeOfferDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { offer } = useMarketplaceActions();
-  const { data: priceRates } = usePriceRates();
 
   useEffect(() => {
     if (open) {
@@ -287,20 +285,6 @@ export default function MakeOfferDialog({
               placeholder={`e.g., 1.5 ${selectedToken.symbol}`}
               className="mt-1"
             />
-            {priceBigInt &&
-              priceBigInt > 0n &&
-              priceRates &&
-              selectedToken.symbol.toUpperCase() !== "USDC" && (
-                <div className="mt-2 text-xs text-gray-400">
-                  ≈{" "}
-                  {formatPriceInSymbol(
-                    priceBigInt,
-                    selectedToken.symbol,
-                    "USDC",
-                    priceRates
-                  )}
-                </div>
-              )}
           </div>
           <div>
             <label className="text-sm text-gray-400">Currency</label>

@@ -17,11 +17,10 @@ import {
   DEFAULT_LISTING_DURATION_SECONDS,
   LISTING_DURATION_OPTIONS,
 } from "../../services/marketplace/constants";
-import { toWei, fromWei, TOKEN_DECIMALS, formatPriceInSymbol } from "../../utils/price";
+import { toWei, fromWei, TOKEN_DECIMALS } from "../../utils/price";
 import { toast } from "sonner";
 import { editListingFlow } from "../../services/marketplace/flows";
 import type { AccountInterface } from "starknet";
-import { usePriceRates } from "../../services/marketplace/rates";
 
 const CUSTOM_DURATION_VALUE = "custom";
 
@@ -60,7 +59,6 @@ export default function EditListingDialog({
   const [customExpiration, setCustomExpiration] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { data: priceRates } = usePriceRates();
 
   useEffect(() => {
     if (open && listing) {
@@ -258,11 +256,6 @@ export default function EditListingDialog({
                 placeholder={`e.g., 1.5 ${selectedToken.symbol}`}
                 className="mt-1"
               />
-              {priceBigInt && priceBigInt > 0n && priceRates && selectedToken.symbol.toUpperCase() !== 'USDC' && (
-                <div className="mt-2 text-xs text-gray-400">
-                  ≈ {formatPriceInSymbol(priceBigInt, selectedToken.symbol, 'USDC', priceRates)}
-                </div>
-              )}
             </div>
             <div>
               <label className="text-sm text-gray-400">Currency</label>

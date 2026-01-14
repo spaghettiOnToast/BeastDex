@@ -9,6 +9,8 @@ import {
   checkSufficientBalance,
   ensureErc20Allowance,
   executePurchaseWithApproval,
+  validateListingOwnership,
+  getProvider,
 } from "../../../services/marketplace/approvals";
 import {
   BEASTS_COLLECTION_ADDRESS,
@@ -64,6 +66,10 @@ export function useMarketplaceActions({
           .map((e) => ({
             type: e.type,
             tokenId: String(e.tokenId ?? ""),
+            beastName: e.beastName ? String(e.beastName) : undefined,
+            price: e.price ? String(e.price) : undefined,
+            paymentToken: e.paymentToken ? String(e.paymentToken) : undefined,
+            expiration: e.expiration ? Number(e.expiration) : undefined,
             txHash: e.txHash ? String(e.txHash) : undefined,
             timestamp: Number(e.timestamp ?? Date.now()),
             note: e.note ? String(e.note) : undefined,
@@ -127,7 +133,24 @@ export function useMarketplaceActions({
         const currency = listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
         const orderId = toBigInt(listing.orderId ?? 0);
 
+        // Validate listing ownership
+        toast.loading("Validating listing...", { id: toastId });
+        const provider = getProvider(account);
+        const isValidListing = await validateListingOwnership(
+          provider,
+          BEASTS_COLLECTION_ADDRESS,
+          tokenIdBigInt,
+          listing.seller
+        );
+
+        if (!isValidListing) {
+          toast.error("This listing is no longer valid. The seller may not own the token anymore.", { id: toastId });
+          setBuyingListingId(null);
+          return;
+        }
+
         // Check balance
+        toast.loading("Checking balance...", { id: toastId });
         const { sufficient, balance } = await checkSufficientBalance(
           account,
           currency,
@@ -175,6 +198,9 @@ export function useMarketplaceActions({
         const buyEntry: TxEntry = {
           type: "buy",
           tokenId: listing.tokenId,
+          beastName: listing.beast?.name,
+          price: listing.price,
+          paymentToken: listing.paymentToken ?? undefined,
           txHash,
           timestamp: Date.now(),
         };
@@ -218,6 +244,8 @@ export function useMarketplaceActions({
       let failCount = 0;
 
       try {
+        const provider = getProvider(account);
+
         for (const listing of purchaseCart) {
           try {
             if (!listing.active) {
@@ -230,6 +258,19 @@ export function useMarketplaceActions({
             const currency =
               listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
             const orderId = toBigInt(listing.orderId ?? 0);
+
+            // Validate listing ownership
+            const isValidListing = await validateListingOwnership(
+              provider,
+              BEASTS_COLLECTION_ADDRESS,
+              tokenIdBigInt,
+              listing.seller
+            );
+
+            if (!isValidListing) {
+              failCount++;
+              continue;
+            }
 
             // Calculate total amount including platform fee
             const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
@@ -416,6 +457,7 @@ export function useMarketplaceActions({
         // Process purchases if any
         if (hasPurchases) {
           setPurchasingBatch(true);
+          const provider = getProvider(account);
 
           let successCount = 0;
           for (const listing of purchaseCart) {
@@ -429,6 +471,18 @@ export function useMarketplaceActions({
               const currency =
                 listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
               const orderId = toBigInt(listing.orderId ?? 0);
+
+              // Validate listing ownership
+              const isValidListing = await validateListingOwnership(
+                provider,
+                BEASTS_COLLECTION_ADDRESS,
+                tokenIdBigInt,
+                listing.seller
+              );
+
+              if (!isValidListing) {
+                continue;
+              }
 
               // Calculate total amount including platform fee
               const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;

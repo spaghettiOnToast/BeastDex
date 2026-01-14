@@ -24,9 +24,7 @@ import SortDropdown from "../components/sort/SortDropdown";
 import { cn } from "../lib/utils";
 import {
   formatPrice,
-  formatPriceInSymbol,
 } from "../utils/price";
-import { usePriceRates } from "../services/marketplace/rates";
 import CartListDialog from "../components/marketplace/CartListDialog";
 import EditListingDialog from "../components/marketplace/EditListingDialog";
 import PurchaseConfirmDialog from "../components/marketplace/PurchaseConfirmDialog";
@@ -44,7 +42,7 @@ import { useMarketplaceCarts } from "./marketplace/hooks/useMarketplaceCarts";
 import { useMarketplaceActions as useMarketplaceActionsHook } from "./marketplace/hooks/useMarketplaceActions";
 import { ViewToggle } from "./marketplace/components/ViewToggle";
 import { toBigInt } from "./marketplace/utils";
-import type { DisplayCurrency, ExploreSubTab, MyActivitySubTab, TxEntry } from "./marketplace/types";
+import type { ExploreSubTab, MyActivitySubTab, TxEntry } from "./marketplace/types";
 
 const VOYAGER_BASE = "https://voyager.online";
 
@@ -61,7 +59,6 @@ export default function MarketplacePage() {
   const { address, account } = useAccount();
   const marketplace = useMarketplace();
   const marketplaceSDKActions = useMarketplaceActions();
-  const { data: priceRates } = usePriceRates();
 
   // Dialog states
   const [exploreSubTab, setExploreSubTab] = useState<ExploreSubTab>("browse");
@@ -80,7 +77,6 @@ export default function MarketplacePage() {
   const [offersForToken, setOffersForToken] = useState<OrderModel[]>([]);
   const [unifiedCartOpen, setUnifiedCartOpen] = useState(false);
   const [selectedPaymentToken] = useState(DEFAULT_PAYMENT_TOKEN);
-  const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>("LORDS");
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Data fetching hook
@@ -92,7 +88,6 @@ export default function MarketplacePage() {
     userBeasts: dataHook.userBeasts,
     recentListings: dataHook.recentListings,
     recentSales: dataHook.recentSales,
-    priceRates,
     address,
     availableFilters: dataHook.availableFilters,
   });
@@ -148,46 +143,22 @@ export default function MarketplacePage() {
       const token = getPaymentTokenByAddress(listing.paymentToken ?? undefined);
       const fromSymbol = token?.symbol ?? "STRK";
 
-      // Show price in user's chosen display currency if available
-      if (
-        displayCurrency &&
-        priceRates &&
-        fromSymbol.toUpperCase() !== displayCurrency.toUpperCase()
-      ) {
-        return formatPriceInSymbol(
-          listing.price,
-          fromSymbol,
-          displayCurrency,
-          priceRates as any
-        );
-      }
-
-      // Otherwise show native listing token
+      // Always show native listing token
       return formatPrice(listing.price, fromSymbol);
     },
-    [displayCurrency, priceRates]
+    []
   );
 
   /**
    * Format subtitle price (always USDC equivalent)
+   * Temporarily disabled due to incorrect conversion rates
    */
   const formatSubtitlePrice = useCallback(
-    (listing: Listing) => {
-      const token = getPaymentTokenByAddress(listing.paymentToken ?? undefined);
-      const fromSymbol = token?.symbol ?? "STRK";
-
-      if (!priceRates) return undefined;
-      if (displayCurrency?.toUpperCase() === "USDC") return undefined;
-      if (!displayCurrency && fromSymbol.toUpperCase() === "USDC") return undefined;
-
-      return formatPriceInSymbol(
-        listing.price,
-        fromSymbol,
-        "USDC",
-        priceRates as any
-      );
+    (_listing: Listing) => {
+      // Disabled - conversion rates need to be fixed
+      return undefined;
     },
-    [displayCurrency, priceRates]
+    []
   );
 
   /**
@@ -359,8 +330,11 @@ export default function MarketplacePage() {
         const cancelEntry: TxEntry = {
           type: "cancel",
           tokenId: listing.tokenId,
+          beastName: listing.beast?.name,
+          price: listing.price,
+          paymentToken: listing.paymentToken ?? undefined,
+          expiration: listing.expiration,
           timestamp: Date.now(),
-          note: `${listing.beast?.name || `Beast #${listing.tokenId}`}`,
         };
         actionsHook.setMyTxs((prev): TxEntry[] => [cancelEntry, ...prev].slice(0, 100));
 
@@ -451,28 +425,6 @@ export default function MarketplacePage() {
         )}
 
         {/* Filters toolbar */}
-        <div className="flex flex-wrap items-center gap-4 text-xs text-gray-300">
-          <div className="flex items-center gap-2">
-            <span>Display prices in:</span>
-            <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-1">
-              {(["LORDS", "STRK", "ETH", "USDC", "SURVIVOR"] as const).map((sym) => (
-                <button
-                  key={sym}
-                  type="button"
-                  onClick={() => setDisplayCurrency(sym)}
-                  className={cn(
-                    "rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wider transition",
-                    displayCurrency === sym
-                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white"
-                      : "text-gray-400 hover:text-lsGold"
-                  )}
-                >
-                  {sym}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
 
         {/* View toggle and controls */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -773,6 +725,7 @@ export default function MarketplacePage() {
                               beast={beast}
                               tokenId={tokenId}
                               inCart={inCart}
+                              isAlreadyListed={isListed}
                               onAddToCart={() => cartsHook.handleToggleCart(beast)}
                             />
                             {isListed && (
@@ -796,34 +749,66 @@ export default function MarketplacePage() {
                     No transaction history yet.
                   </p>
                 ) : (
-                  <div className="space-y-2">
-                    {actionsHook.myTxs.map((tx, idx) => (
-                      <div
-                        key={`${tx.timestamp}-${idx}`}
-                        className="rounded-lg border border-gray-800 bg-black/30 p-4 flex items-center gap-4"
-                      >
-                        <div className="flex-1">
-                          <p className="text-xs font-semibold uppercase text-lsGold">{tx.type}</p>
-                          <p className="text-xs text-gray-400">Beast #{tx.tokenId}</p>
-                          {tx.note && <p className="text-xs text-gray-500">{tx.note}</p>}
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-gray-500">
-                            {new Date(tx.timestamp).toLocaleDateString()}
-                          </p>
-                          {tx.txHash && (
-                            <a
-                              href={`${VOYAGER_BASE}/tx/${tx.txHash}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-blue-400 hover:underline"
+                  <div className="rounded-lg border border-gray-800 bg-black/30 overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-900/50 border-b border-gray-800">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Type</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Beast</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Price</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Expiration</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Date</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-300">TX</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {actionsHook.myTxs.map((tx, idx) => {
+                          const token = tx.paymentToken ? getPaymentTokenByAddress(tx.paymentToken) : null;
+                          const symbol = token?.symbol ?? 'LORDS';
+
+                          return (
+                            <tr
+                              key={`${tx.timestamp}-${idx}`}
+                              className="border-b border-gray-800 hover:bg-gray-900/30 transition-colors"
                             >
-                              View TX
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                              <td className="px-4 py-3">
+                                <span className="inline-block px-2 py-1 rounded text-[10px] font-semibold uppercase bg-lsGold/10 text-lsGold">
+                                  {tx.type}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-gray-300">
+                                {tx.beastName || `Beast #${tx.tokenId}`}
+                              </td>
+                              <td className="px-4 py-3 text-gray-400">
+                                {tx.price ? formatPrice(tx.price, symbol) : '-'}
+                              </td>
+                              <td className="px-4 py-3 text-gray-400">
+                                {tx.expiration
+                                  ? new Date(tx.expiration * 1000).toLocaleDateString()
+                                  : '-'}
+                              </td>
+                              <td className="px-4 py-3 text-gray-500">
+                                {new Date(tx.timestamp).toLocaleDateString()}
+                              </td>
+                              <td className="px-4 py-3">
+                                {tx.txHash ? (
+                                  <a
+                                    href={`${VOYAGER_BASE}/tx/${tx.txHash}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-400 hover:underline"
+                                  >
+                                    View
+                                  </a>
+                                ) : (
+                                  <span className="text-gray-600">-</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </>
@@ -888,8 +873,6 @@ export default function MarketplacePage() {
             })
           }
           isProcessing={actionsHook.purchasingBatch}
-          displayCurrency={displayCurrency}
-          priceRates={priceRates}
         />
 
         <MakeOfferDialog
@@ -949,8 +932,6 @@ export default function MarketplacePage() {
             })
           }
           isProcessing={actionsHook.purchasingBatch || actionsHook.listingBatch}
-          displayCurrency={displayCurrency}
-          priceRates={priceRates}
           selectedToken={selectedPaymentToken}
         />
 

@@ -20,8 +20,12 @@ export type MyActivitySubTab = "listings" | "beasts" | "transactions";
  * Transaction entry for user activity tracking
  */
 export type TxEntry = {
-  type: "list" | "cancel" | "buy" | "edit" | "offer";
+  type: "list" | "cancel" | "buy" | "edit" | "offer" | "sell";
   tokenId: string;
+  beastName?: string;
+  price?: string; // in token base units
+  paymentToken?: string; // token address
+  expiration?: number; // Unix timestamp in seconds
   txHash?: string;
   timestamp: number;
   note?: string;
