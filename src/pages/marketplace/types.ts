@@ -48,7 +48,6 @@ export type DisplayCurrency = "STRK" | "LORDS" | "USDC" | "ETH" | "SURVIVOR";
  * Storage keys for localStorage
  */
 export const STORAGE_KEYS = {
-  ACTIVITY: "beastdex:my-activity",
   HIDDEN_LISTINGS: "beastdex:hidden-listings",
 } as const;
 

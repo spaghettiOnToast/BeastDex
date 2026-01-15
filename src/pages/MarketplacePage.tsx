@@ -40,11 +40,11 @@ import { useMarketplaceData } from "./marketplace/hooks/useMarketplaceData";
 import { useMarketplaceFilters } from "./marketplace/hooks/useMarketplaceFilters";
 import { useMarketplaceCarts } from "./marketplace/hooks/useMarketplaceCarts";
 import { useMarketplaceActions as useMarketplaceActionsHook } from "./marketplace/hooks/useMarketplaceActions";
+import { useUserTransactions } from "./marketplace/hooks/useUserTransactions";
+import { useRecentSales } from "./marketplace/hooks/useRecentSales";
 import { ViewToggle } from "./marketplace/components/ViewToggle";
 import { toBigInt } from "./marketplace/utils";
-import type { ExploreSubTab, MyActivitySubTab, TxEntry } from "./marketplace/types";
-
-const VOYAGER_BASE = "https://voyager.online";
+import type { ExploreSubTab, MyActivitySubTab } from "./marketplace/types";
 
 /**
  * Main Marketplace Page Component - Refactored for maintainability
@@ -87,7 +87,6 @@ export default function MarketplacePage() {
     listings: dataHook.listings,
     userBeasts: dataHook.userBeasts,
     recentListings: dataHook.recentListings,
-    recentSales: dataHook.recentSales,
     address,
     availableFilters: dataHook.availableFilters,
   });
@@ -102,6 +101,18 @@ export default function MarketplacePage() {
     account,
     refetchOrders: dataHook.refetchOrders,
     reloadUserBeasts: dataHook.reloadUserBeasts,
+  });
+
+  // User transactions hook (from indexer instead of localStorage)
+  const { transactions: userTransactions } = useUserTransactions({
+    address,
+    listings: dataHook.listings,
+  });
+
+  // Recent sales hook (from indexer)
+  const { namedRecentSales } = useRecentSales({
+    listings: dataHook.listings,
+    limit: 20,
   });
 
   // Load username resolution for all sellers
@@ -121,12 +132,7 @@ export default function MarketplacePage() {
     }
   }, [filtersHook.activeTab, exploreSubTab]);
 
-  // Load recent sales when tab is active
-  useEffect(() => {
-    if (filtersHook.activeTab === "explore" && exploreSubTab === "recent-sold") {
-      dataHook.loadRecentSales();
-    }
-  }, [filtersHook.activeTab, exploreSubTab]);
+  // Recent sales are now loaded automatically from useRecentSales hook
 
   // Reload user beasts when My Activity tab is opened
   useEffect(() => {
@@ -327,17 +333,7 @@ export default function MarketplacePage() {
 
         toast.success("Listing canceled successfully!", { id: toastId });
 
-        const cancelEntry: TxEntry = {
-          type: "cancel",
-          tokenId: listing.tokenId,
-          beastName: listing.beast?.name,
-          price: listing.price,
-          paymentToken: listing.paymentToken ?? undefined,
-          expiration: listing.expiration,
-          timestamp: Date.now(),
-        };
-        actionsHook.setMyTxs((prev): TxEntry[] => [cancelEntry, ...prev].slice(0, 100));
-
+        // Transaction is tracked automatically by the indexer
         await dataHook.refetchOrders();
         await dataHook.reloadUserBeasts();
       } catch (error) {
@@ -574,30 +570,35 @@ export default function MarketplacePage() {
               </>
             ) : (
               <>
-                {dataHook.loadingSales ? (
-                  <p className="text-xs text-gray-400">Loading recent sales…</p>
-                ) : filtersHook.namedRecentSales.length === 0 ? (
+                {namedRecentSales.length === 0 ? (
                   <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
                     No recent sales available.
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {filtersHook.namedRecentSales.map(({ sale, beast }, idx) => (
-                      <div
-                        key={`sale-${idx}`}
-                        className="rounded-lg border border-gray-800 bg-black/30 p-4 flex items-center gap-4"
-                      >
-                        <div className="flex-1">
-                          <p className="font-semibold">{beast?.name || `Beast #${sale.order.tokenId}`}</p>
-                          <p className="text-xs text-gray-400">
-                            Sold for {formatPrice(sale.order.price.toString(), "STRK")}
+                    {namedRecentSales.map(({ sale, beast, tokenId, price, from, to, time }, idx) => {
+                      const token = sale.order?.currency ? getPaymentTokenByAddress(sale.order.currency) : null;
+                      const symbol = token?.symbol ?? 'STRK';
+                      return (
+                        <div
+                          key={`sale-${idx}`}
+                          className="rounded-lg border border-gray-800 bg-black/30 p-4 flex items-center gap-4"
+                        >
+                          <div className="flex-1">
+                            <p className="font-semibold">{beast?.name || `Beast #${tokenId}`}</p>
+                            <p className="text-xs text-gray-400">
+                              Sold for {formatPrice(price, symbol)}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {from.slice(0, 6)}...{from.slice(-4)} → {to.slice(0, 6)}...{to.slice(-4)}
+                            </p>
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            {new Date(time * 1000).toLocaleDateString()}
                           </p>
                         </div>
-                        <p className="text-xs text-gray-500">
-                          {new Date(sale.time * 1000).toLocaleDateString()}
-                        </p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </>
@@ -744,7 +745,7 @@ export default function MarketplacePage() {
 
             {myActivitySubTab === "transactions" && (
               <>
-                {actionsHook.myTxs.length === 0 ? (
+                {userTransactions.length === 0 ? (
                   <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
                     No transaction history yet.
                   </p>
@@ -758,11 +759,12 @@ export default function MarketplacePage() {
                           <th className="px-4 py-3 text-left font-semibold text-gray-300">Price</th>
                           <th className="px-4 py-3 text-left font-semibold text-gray-300">Expiration</th>
                           <th className="px-4 py-3 text-left font-semibold text-gray-300">Date</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Note</th>
                           <th className="px-4 py-3 text-left font-semibold text-gray-300">TX</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {actionsHook.myTxs.map((tx, idx) => {
+                        {userTransactions.map((tx, idx) => {
                           const token = tx.paymentToken ? getPaymentTokenByAddress(tx.paymentToken) : null;
                           const symbol = token?.symbol ?? 'LORDS';
 
@@ -790,13 +792,16 @@ export default function MarketplacePage() {
                               <td className="px-4 py-3 text-gray-500">
                                 {new Date(tx.timestamp).toLocaleDateString()}
                               </td>
+                              <td className="px-4 py-3 text-gray-400">
+                                {tx.note || '-'}
+                              </td>
                               <td className="px-4 py-3">
                                 {tx.txHash ? (
                                   <a
-                                    href={`${VOYAGER_BASE}/tx/${tx.txHash}`}
+                                    href={`https://voyager.online/tx/${tx.txHash}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-blue-400 hover:underline"
+                                    className="text-blue-400 hover:text-blue-300 hover:underline"
                                   >
                                     View
                                   </a>

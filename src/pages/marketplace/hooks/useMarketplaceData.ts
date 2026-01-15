@@ -4,7 +4,6 @@ import type { Listing } from "../../../services/marketplace/types";
 import type { OrderModel } from "@cartridge/marketplace";
 import { fetchBeasts, fetchBeastAttributeFilters } from "../../../services/beast";
 import { hydrateOrders } from "../../../services/marketplace";
-import type { RecentSale } from "../types";
 import { BEASTS_COLLECTION_ADDRESS } from "../../../services/marketplace/constants";
 import { useArcadeListedTokensForCollection } from "../../../hooks/useArcadeOrders";
 import { HIDDEN_FILTER_TRAITS } from "../utils";
@@ -12,15 +11,13 @@ import { HIDDEN_FILTER_TRAITS } from "../utils";
 /**
  * Hook for managing all marketplace data fetching and state
  */
-export function useMarketplaceData(address: string | undefined, marketplace: any) {
+export function useMarketplaceData(address: string | undefined, _marketplace: any) {
   // Listings state
   const [listings, setListings] = useState<Listing[]>([]);
   const [hydratingListings, setHydratingListings] = useState(false);
   const [listingsError, setListingsError] = useState<string | null>(null);
 
   // Recent data state
-  const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
-  const [loadingSales, setLoadingSales] = useState(false);
   const [recentListings, setRecentListings] = useState<Listing[]>([]);
   const [loadingRecentListings, setLoadingRecentListings] = useState(false);
 
@@ -330,45 +327,6 @@ export function useMarketplaceData(address: string | undefined, marketplace: any
     }
   }, [listings]);
 
-  /**
-   * Load recent sales
-   */
-  const loadRecentSales = useCallback(async () => {
-    if (!marketplace.sales) return;
-
-    setLoadingSales(true);
-    try {
-      // Get last 10 sales sorted by time (most recent first)
-      const sortedSales = [...marketplace.sales]
-        .sort((a, b) => b.time - a.time)
-        .slice(0, 10);
-
-      // Hydrate sales with beast data
-      const hydratedSales = await Promise.all(
-        sortedSales.map(async (sale) => {
-          try {
-            const tokenId = sale.order.tokenId.toString();
-            const { beasts } = await fetchBeasts({
-              limit: 1,
-              search: tokenId,
-              page: 1,
-              sort: "default",
-            });
-            return { sale, beast: beasts[0] || null };
-          } catch (error) {
-            return { sale, beast: null };
-          }
-        })
-      );
-
-      setRecentSales(hydratedSales);
-    } catch (error) {
-      // Error handling
-    } finally {
-      setLoadingSales(false);
-    }
-  }, [marketplace.sales]);
-
   return {
     // Listings
     listings,
@@ -383,12 +341,9 @@ export function useMarketplaceData(address: string | undefined, marketplace: any
     ordersError,
 
     // Recent data
-    recentSales,
-    loadingSales,
     recentListings,
     loadingRecentListings,
     loadRecentListings,
-    loadRecentSales,
 
     // User beasts
     userBeasts,

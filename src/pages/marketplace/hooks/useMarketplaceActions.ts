@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { toast } from "sonner";
 import type { AccountInterface } from "starknet";
 import type { Beast } from "../../../services/beast";
@@ -21,10 +21,8 @@ import {
 } from "../../../services/marketplace/constants";
 import { fromWei, TOKEN_DECIMALS } from "../../../utils/price";
 import { toBigIntSafe } from "../../../utils/bigint";
-import type { TxEntry } from "../types";
 
 const toBigInt = toBigIntSafe;
-const ACTIVITY_STORAGE_KEY = "beastdex:my-activity";
 
 export interface UseMarketplaceActionsProps {
   account: AccountInterface | undefined;
@@ -48,46 +46,6 @@ export function useMarketplaceActions({
   const [acceptingOfferId, setAcceptingOfferId] = useState<string | null>(null);
   const [purchasingBatch, setPurchasingBatch] = useState(false);
   const [listingBatch, setListingBatch] = useState(false);
-
-  // Activity tracking
-  const [myTxs, setMyTxs] = useState<TxEntry[]>([]);
-
-  /**
-   * Load saved activity on mount
-   */
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(ACTIVITY_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        const cleaned: TxEntry[] = parsed
-          .filter((e) => e && typeof e === "object")
-          .map((e) => ({
-            type: e.type,
-            tokenId: String(e.tokenId ?? ""),
-            beastName: e.beastName ? String(e.beastName) : undefined,
-            price: e.price ? String(e.price) : undefined,
-            paymentToken: e.paymentToken ? String(e.paymentToken) : undefined,
-            expiration: e.expiration ? Number(e.expiration) : undefined,
-            txHash: e.txHash ? String(e.txHash) : undefined,
-            timestamp: Number(e.timestamp ?? Date.now()),
-            note: e.note ? String(e.note) : undefined,
-          }))
-          .slice(0, 100);
-        setMyTxs(cleaned);
-      }
-    } catch {}
-  }, []);
-
-  /**
-   * Persist activity when it changes
-   */
-  useEffect(() => {
-    try {
-      localStorage.setItem(ACTIVITY_STORAGE_KEY, JSON.stringify(myTxs));
-    } catch {}
-  }, [myTxs]);
 
   /**
    * Handle successful listing
@@ -193,18 +151,6 @@ export function useMarketplaceActions({
           res?.txHash ||
           res?.transactionHash;
         const txHash = extractTxHash(result);
-
-        // Record tx in local activity
-        const buyEntry: TxEntry = {
-          type: "buy",
-          tokenId: listing.tokenId,
-          beastName: listing.beast?.name,
-          price: listing.price,
-          paymentToken: listing.paymentToken ?? undefined,
-          txHash,
-          timestamp: Date.now(),
-        };
-        setMyTxs((prev): TxEntry[] => [buyEntry, ...prev].slice(0, 50));
 
         toast.success(
           txHash
@@ -553,10 +499,6 @@ export function useMarketplaceActions({
     acceptingOfferId,
     purchasingBatch,
     listingBatch,
-    myTxs,
-
-    // Setters
-    setMyTxs,
 
     // Actions
     handleListed,

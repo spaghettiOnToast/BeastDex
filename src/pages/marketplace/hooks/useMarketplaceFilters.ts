@@ -10,7 +10,6 @@ export interface UseMarketplaceFiltersProps {
   listings: Listing[];
   userBeasts: Beast[];
   recentListings: Listing[];
-  recentSales: Array<{ sale: any; beast: Beast | null }>;
   priceRates?: RatesInSTRK | null | undefined;
   address: string | undefined;
   availableFilters: BeastAttributeFilters;
@@ -23,7 +22,6 @@ export function useMarketplaceFilters({
   listings,
   userBeasts,
   recentListings,
-  recentSales,
   address,
   availableFilters,
 }: UseMarketplaceFiltersProps) {
@@ -76,26 +74,55 @@ export function useMarketplaceFilters({
   }, [availableFilters]);
 
   /**
-   * Filter listings based on current filters
+   * Filter listings based on current filters and deduplicate by tokenId
+   * Only show one listing per beast - prefer active listings over expired ones
    */
-  const filteredListings = useMemo(
-    () =>
-      listings
-        .filter((listing) => !hiddenListingIds.has(listing.listingId))
-        .filter(
-          (listing): listing is Listing & { beast: Beast } =>
-            listing.beast != null
-        )
-        .filter((listing) => {
-          // Apply "Hide Expired" toggle
-          if (hideExpired && listing.status === "expired") return false;
-          return true;
-        })
-        .filter((listing) =>
-          matchesAttributeFilters(listing, attributeFilters)
-        ),
-    [listings, attributeFilters, hiddenListingIds, hideExpired]
-  );
+  const filteredListings = useMemo(() => {
+    // First, filter out hidden listings and those without beast data
+    const baseListings = listings
+      .filter((listing) => !hiddenListingIds.has(listing.listingId))
+      .filter(
+        (listing): listing is Listing & { beast: Beast } =>
+          listing.beast != null
+      );
+
+    // Group listings by tokenId to deduplicate
+    const listingsByTokenId = new Map<string, Array<Listing & { beast: Beast }>>();
+    for (const listing of baseListings) {
+      const tokenId = listing.tokenId;
+      if (!listingsByTokenId.has(tokenId)) {
+        listingsByTokenId.set(tokenId, []);
+      }
+      listingsByTokenId.get(tokenId)!.push(listing);
+    }
+
+    // For each tokenId, pick the best listing (active preferred, then by expiration)
+    const deduplicatedListings: Array<Listing & { beast: Beast }> = [];
+    for (const [, tokenListings] of listingsByTokenId) {
+      // Separate active and non-active listings
+      const activeListings = tokenListings.filter((l) => l.status === "active");
+
+      if (activeListings.length > 0) {
+        // Pick the active listing with the latest expiration (most time left)
+        const bestActive = activeListings.reduce((best, current) => {
+          const bestExp = best.expiration ?? 0;
+          const currentExp = current.expiration ?? 0;
+          return currentExp > bestExp ? current : best;
+        });
+        deduplicatedListings.push(bestActive);
+      }
+      // If no active listings exist for this tokenId, don't show any listing
+      // (expired listings for the same beast are hidden)
+    }
+
+    // Apply "Hide Expired" toggle and attribute filters
+    return deduplicatedListings
+      .filter((listing) => {
+        if (hideExpired && listing.status === "expired") return false;
+        return true;
+      })
+      .filter((listing) => matchesAttributeFilters(listing, attributeFilters));
+  }, [listings, attributeFilters, hiddenListingIds, hideExpired]);
 
   /**
    * Sort filtered listings
@@ -114,17 +141,6 @@ export function useMarketplaceFilters({
         (listing) => listing.beast?.name && listing.beast.name.trim().length > 0
       ),
     [recentListings]
-  );
-
-  /**
-   * Filter recent sales (only those with names)
-   */
-  const namedRecentSales = useMemo(
-    () =>
-      recentSales.filter(
-        ({ beast }) => beast?.name && beast.name.trim().length > 0
-      ),
-    [recentSales]
   );
 
   /**
@@ -326,7 +342,6 @@ export function useMarketplaceFilters({
     filteredListings,
     sortedListings,
     namedRecentListings,
-    namedRecentSales,
     filteredUserBeasts,
     sortedUserBeasts,
     listingsToRender,

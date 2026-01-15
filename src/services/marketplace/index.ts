@@ -4,6 +4,18 @@ import { deriveTokenHex, fetchBeastsByIds } from "../beast";
 import type { Beast } from "../beast";
 import type { Listing, ListingStatus } from "./types";
 
+/**
+ * Normalize a Starknet address to a consistent format for comparison
+ * Converts to lowercase, removes 0x prefix, strips leading zeros, then re-adds 0x
+ */
+function normalizeStarknetAddress(address: string): string {
+  if (!address) return '';
+  // Remove 0x prefix, convert to lowercase, strip leading zeros
+  const cleaned = address.toLowerCase().replace(/^0x/i, '').replace(/^0+/, '');
+  // If the result is empty (address was all zeros), return "0"
+  return '0x' + (cleaned || '0');
+}
+
 function getListingStatus(order: OrderModel): ListingStatus {
   const now = Math.floor(Date.now() / 1000);
   const isExpired = order.expiration && order.expiration <= now;
@@ -127,9 +139,9 @@ export async function hydrateOrders(orders: OrderModel[]): Promise<Listing[]> {
       return true;
     }
 
-    // Normalize addresses for comparison (case-insensitive)
-    const sellerAddress = listing.seller?.toLowerCase();
-    const currentOwner = listing.beast.owner.toLowerCase();
+    // Normalize addresses for comparison - Starknet addresses can have different formats
+    const sellerAddress = normalizeStarknetAddress(listing.seller ?? '');
+    const currentOwner = normalizeStarknetAddress(listing.beast.owner);
 
     // Keep only listings where the seller still owns the token
     const isValid = sellerAddress === currentOwner;

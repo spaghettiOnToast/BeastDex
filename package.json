@@ -12,8 +12,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@cartridge/connector": "^0.11.3",
-    "@cartridge/controller": "^0.11.3",
+    "@cartridge/connector": "^0.10.5",
+    "@cartridge/controller": "^0.10.5",
     "@cartridge/marketplace": "^0.0.16",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-dialog": "^1.1.15",
