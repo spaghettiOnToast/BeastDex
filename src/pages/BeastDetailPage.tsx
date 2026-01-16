@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import BeastDetailContent from "../components/beast/BeastDetailContent";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { fetchBeastById, type Beast } from "../services/beast";
+import { fetchSummitBeastData, type SummitBeastData } from "../services/summit";
 import { getErrorMessage } from "../utils/error";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
@@ -16,6 +17,8 @@ function BeastDetailPage() {
   const [beast, setBeast] = useState<Beast | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [summitData, setSummitData] = useState<SummitBeastData | null>(null);
+  const [summitLoading, setSummitLoading] = useState(true);
 
   const topBar = <TopBar />;
 
@@ -55,6 +58,38 @@ function BeastDetailPage() {
       cancelled = true;
     };
   }, [tokenId]);
+
+  // Fetch Summit data when beast is loaded
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSummitData() {
+      if (!beast) {
+        setSummitData(null);
+        setSummitLoading(false);
+        return;
+      }
+
+      try {
+        setSummitLoading(true);
+        const data = await fetchSummitBeastData(beast.numericId);
+        if (cancelled) return;
+        setSummitData(data);
+      } catch (err) {
+        console.error("Failed to load Summit data:", err);
+        if (cancelled) return;
+        setSummitData(null);
+      } finally {
+        if (!cancelled) setSummitLoading(false);
+      }
+    }
+
+    loadSummitData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [beast]);
 
   const ownerLookupAddresses = useMemo(() => {
     if (!beast?.owner) return [] as Array<string | null>;
@@ -98,17 +133,10 @@ function BeastDetailPage() {
     );
   }
 
-  const moreDetailsSlot = (
-    <section className="rounded-xl border border-gray-800 bg-[#0b0b0f]/60 p-4 text-sm text-gray-300">
-      <h2 className="mb-2 text-base font-semibold text-lsGold">
-        More Details Coming Soon
-      </h2>
-      <p>
-        We&apos;re preparing a deeper dive into each beast, including trait
-        rarities and historical stats. Stay tuned!
-      </p>
-    </section>
-  );
+  // Extract beast name parts (prefix/suffix and beast type)
+  const beastNameParts = beast.name.match(/^"([^"]+)"\s+(.+)$/);
+  const beastPrefix = beastNameParts ? beastNameParts[1] : null;
+  const beastType = beastNameParts ? beastNameParts[2] : beast.name;
 
   return (
     <AppLayout topBar={topBar}>
@@ -129,11 +157,27 @@ function BeastDetailPage() {
           ) : null}
         </div>
 
+        {/* Beast Name Header */}
+        <div className="text-center">
+          {beastPrefix && (
+            <p className="text-lg text-lsGold font-medium">"{beastPrefix}"</p>
+          )}
+          <h1 className="text-3xl font-bold text-white uppercase tracking-wide">
+            {beastType}
+          </h1>
+          {summitData?.liveStats && (
+            <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-green-900/30 border border-green-500/30 px-3 py-1">
+              <span className="text-xs font-semibold text-green-400 uppercase">Summit Active</span>
+            </div>
+          )}
+        </div>
+
         <BeastDetailContent
           beast={beast}
           ownerUsername={ownerUsername}
           imageSize="detail"
-          actionSlot={moreDetailsSlot}
+          summitData={summitData}
+          summitLoading={summitLoading}
         />
       </div>
     </AppLayout>

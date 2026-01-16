@@ -49,6 +49,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/torii/, ""),
       },
+      "/summit-torii": {
+        target: "https://api.cartridge.gg/x/pg-mainnet-10/torii",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/summit-torii/, ""),
+      },
     },
   },
 });
