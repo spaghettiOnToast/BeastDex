@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAccount } from "@starknet-react/core";
 import type { Beast } from "../../services/beast";
+import { fetchSummitBeastData, type SummitBeastData } from "../../services/summit";
 import BeastDetailContent from "./BeastDetailContent";
 import {
   Dialog,
@@ -37,6 +38,40 @@ export function BeastModal({
   const navigate = useNavigate();
   const { address: connectedAddress } = useAccount();
   const [showSendDialog, setShowSendDialog] = useState(false);
+  const [summitData, setSummitData] = useState<SummitBeastData | null>(null);
+  const [summitLoading, setSummitLoading] = useState(true);
+
+  // Fetch Summit data when beast changes
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSummitData() {
+      if (!beast) {
+        setSummitData(null);
+        setSummitLoading(false);
+        return;
+      }
+
+      try {
+        setSummitLoading(true);
+        const data = await fetchSummitBeastData(beast.numericId);
+        if (cancelled) return;
+        setSummitData(data);
+      } catch (err) {
+        console.error("Failed to load Summit data in modal:", err);
+        if (cancelled) return;
+        setSummitData(null);
+      } finally {
+        if (!cancelled) setSummitLoading(false);
+      }
+    }
+
+    loadSummitData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [beast]);
 
   if (!beast) {
     return null;
@@ -60,7 +95,7 @@ export function BeastModal({
   return (
     <Dialog open={!!beast} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-5xl p-0 gap-0 border-muted/50 bg-background/95 backdrop-blur-sm">
-        <DialogHeader className="px-6 py-5 border-b border-border/50 bg-muted/30">
+        <DialogHeader className="px-4 py-5 border-b border-border/50 bg-muted/30">
           <div className="flex items-center justify-between pr-8">
             <DialogTitle className="text-xl font-bold tracking-tight">{beast.name}</DialogTitle>
             {hasDuplicates && (
@@ -93,10 +128,13 @@ export function BeastModal({
           </div>
         </DialogHeader>
         <ScrollArea className="max-h-[75vh]">
-          <div className="px-6 py-6 space-y-4">
+          <div className="px-4 py-6 space-y-4">
             <BeastDetailContent
               beast={beast}
               ownerUsername={ownerUsername}
+              summitData={summitData}
+              summitLoading={summitLoading}
+              imageSize="modal"
               actionSlot={
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Button
