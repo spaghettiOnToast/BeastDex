@@ -1,39 +1,10 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useDojoSDK } from "@dojoengine/sdk/react";
-import { ToriiQueryBuilder, KeysClause, MemberClause, AndComposeClause } from "@dojoengine/sdk";
-import { addAddressPadding, getChecksumAddress } from "starknet";
+import { getChecksumAddress } from "starknet";
 import { CategoryType, StatusType } from "@cartridge/marketplace";
 
-// Arcade model name used by Torii
-const ARCADE_ORDER_MODEL = "ARCADE-Order";
-
-function buildArcadeOrderBaseClause(collectionAddress: string, tokenId?: string | number) {
-  return AndComposeClause([
-    KeysClause(
-      [ARCADE_ORDER_MODEL],
-      [undefined, addAddressPadding(collectionAddress), tokenId ? String(tokenId) : undefined, undefined],
-      "FixedLen",
-    ),
-    MemberClause(ARCADE_ORDER_MODEL, "category", "Eq", String(2)), // Sell
-    MemberClause(ARCADE_ORDER_MODEL, "status", "Eq", String(1)), // Placed
-  ]);
-}
-
-function getArcadeListedTokensForCollection(collectionAddress: string) {
-  // Note: Avoid ordering until confirmed column names to prevent cursor errors
-  return new ToriiQueryBuilder()
-    .withClause(buildArcadeOrderBaseClause(collectionAddress, undefined).build())
-    .withEntityModels([ARCADE_ORDER_MODEL])
-    .includeHashedKeys();
-}
-
-function getArcadeIsTokenListed(collectionAddress: string, tokenId: string) {
-  return new ToriiQueryBuilder()
-    .withClause(buildArcadeOrderBaseClause(collectionAddress, tokenId).build())
-    .withEntityModels([ARCADE_ORDER_MODEL])
-    .includeHashedKeys();
-}
+// GraphQL endpoint for arcade-main
+const ARCADE_GRAPHQL_ENDPOINT = "https://api.cartridge.gg/x/arcade-main/torii/graphql";
 
 // Minimal order shape compatible with existing hydrateOrders flow
 export type ArcadeOrderModelCompat = {
@@ -50,24 +21,26 @@ export type ArcadeOrderModelCompat = {
   owner: string;
 };
 
-function parseArcadeOrder(entity: any): ArcadeOrderModelCompat | null {
-  const model = entity?.models?.ARCADE?.Order;
-  if (!model) return null;
-  const id = Number(model.id ?? 0);
-  const expiration = Number(model.expiration ?? 0);
-  const tokenId = Number(model.token_id ?? 0);
-  const quantity = Number(model.quantity ?? 0);
-  const price = Number(model.price ?? 0);
-  const collection = getChecksumAddress(model.collection ?? "0x0");
-  const currency = getChecksumAddress(model.currency ?? "0x0");
-  const owner = getChecksumAddress(model.owner ?? "0x0");
-  // Torii stores category/status as numeric indices; map to string enums used in our UI
-  const catIndex = Number(model.category ?? 0);
-  const statIndex = Number(model.status ?? 0);
+function parseGraphQLOrder(node: any): ArcadeOrderModelCompat | null {
+  if (!node) return null;
+
+  const id = Number(node.id ?? 0);
+  const expiration = parseInt(node.expiration ?? "0", 16);
+  const tokenId = parseInt(node.token_id ?? "0", 16);
+  const quantity = parseInt(node.quantity ?? "1", 16);
+  const price = parseInt(node.price ?? "0", 16);
+  const collection = getChecksumAddress(node.collection ?? "0x0");
+  const currency = getChecksumAddress(node.currency ?? "0x0");
+  const owner = getChecksumAddress(node.owner ?? "0x0");
+
+  // Map numeric indices to enums
+  const catIndex = Number(node.category ?? 0);
+  const statIndex = Number(node.status ?? 0);
   const categoryValue = [CategoryType.None, CategoryType.Buy, CategoryType.Sell][catIndex] ?? CategoryType.None;
   const statusValue = [StatusType.None, StatusType.Placed, StatusType.Canceled, StatusType.Executed][statIndex] ?? StatusType.None;
+
   return {
-    identifier: entity?.entityId ?? String(id),
+    identifier: String(id),
     id,
     category: { value: categoryValue, into: () => catIndex },
     status: { value: statusValue, into: () => statIndex },
@@ -81,81 +54,168 @@ function parseArcadeOrder(entity: any): ArcadeOrderModelCompat | null {
   };
 }
 
+async function fetchArcadeOrdersGraphQL(
+  collectionAddress: string,
+  limit: number = 1000
+): Promise<ArcadeOrderModelCompat[]> {
+  const query = `
+    query GetArcadeOrders($collection: String!, $limit: Int!) {
+      arcadeOrderModels(
+        where: {
+          collection: $collection,
+          status: 1,
+          category: 2
+        },
+        limit: $limit
+      ) {
+        edges {
+          node {
+            id
+            status
+            category
+            collection
+            token_id
+            price
+            currency
+            owner
+            expiration
+            quantity
+          }
+        }
+      }
+    }
+  `;
+
+  const response = await fetch(ARCADE_GRAPHQL_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query,
+      variables: {
+        collection: collectionAddress,
+        limit,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
+  }
+
+  const result = await response.json();
+
+  if (result.errors) {
+    console.error("[Arcade Orders] GraphQL errors:", result.errors);
+    throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
+  }
+
+  const edges = result.data?.arcadeOrderModels?.edges ?? [];
+  return edges
+    .map((edge: any) => parseGraphQLOrder(edge.node))
+    .filter(Boolean) as ArcadeOrderModelCompat[];
+}
+
+async function fetchArcadeOrderByTokenGraphQL(
+  collectionAddress: string,
+  tokenId: string
+): Promise<ArcadeOrderModelCompat | null> {
+  const tokenIdHex = `0x${parseInt(tokenId, 10).toString(16)}`;
+
+  const query = `
+    query GetArcadeOrderByToken($collection: String!, $tokenId: String!) {
+      arcadeOrderModels(
+        where: {
+          collection: $collection,
+          token_id: $tokenId,
+          status: 1,
+          category: 2
+        },
+        limit: 1
+      ) {
+        edges {
+          node {
+            id
+            status
+            category
+            collection
+            token_id
+            price
+            currency
+            owner
+            expiration
+            quantity
+          }
+        }
+      }
+    }
+  `;
+
+  const response = await fetch(ARCADE_GRAPHQL_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query,
+      variables: {
+        collection: collectionAddress,
+        tokenId: tokenIdHex,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
+  }
+
+  const result = await response.json();
+
+  if (result.errors) {
+    console.error("[Arcade Orders] GraphQL errors:", result.errors);
+    throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
+  }
+
+  const edges = result.data?.arcadeOrderModels?.edges ?? [];
+  if (edges.length === 0) return null;
+
+  return parseGraphQLOrder(edges[0].node);
+}
+
 export function useArcadeListedTokensForCollection(collectionAddress: string) {
-  const { sdk } = useDojoSDK();
-  const q = useMemo(() => getArcadeListedTokensForCollection(collectionAddress), [collectionAddress]);
   const queryKey = useMemo(() => ["arcadeListedTokens", collectionAddress], [collectionAddress]);
 
   return useQuery({
     queryKey,
     enabled: !!collectionAddress,
-    // Increase staleTime to avoid refetching too often
     staleTime: 30_000, // Consider data fresh for 30 seconds
     queryFn: async () => {
-      const combined: ArcadeOrderModelCompat[] = [];
-      let cursor: string | undefined = undefined;
-      let page = 0;
-
-      // Limit initial fetch to 5 pages (~500 listings max) for faster initial load
-      const MAX_PAGES = 5;
-
-      console.log(`[Arcade Orders] Starting fetch (max ${MAX_PAGES} pages)`);
+      console.log(`[Arcade Orders] Starting GraphQL fetch for collection ${collectionAddress}`);
       const startTime = performance.now();
 
       try {
-        // Fetch up to MAX_PAGES for reasonable initial load time
-        while (page < MAX_PAGES) {
-          const res: any = await (sdk as any).getEntities({ query: q, cursor });
-
-          if (!res || !res.getItems) {
-            console.error('[Arcade Orders] Invalid response from SDK');
-            break;
-          }
-
-          const items = res.getItems().map((e: any) => parseArcadeOrder(e)).filter(Boolean) as ArcadeOrderModelCompat[];
-          combined.push(...items);
-
-          const next = (res.next as string | undefined) || (res.next_cursor as string | undefined) || undefined;
-
-          console.log(`[Arcade Orders] Page ${page + 1}: fetched ${items.length} items (total: ${combined.length}, hasNext: ${!!next})`);
-
-          // Stop if no more pages or if we got 0 items (safety check)
-          if (!next || items.length === 0) {
-            console.log(`[Arcade Orders] Fetch complete. Total: ${combined.length} orders`);
-            break;
-          }
-
-          cursor = next;
-          page++;
-        }
-
-        if (page >= MAX_PAGES) {
-          console.log(`[Arcade Orders] Stopped at page ${MAX_PAGES} (showing first ${combined.length} listings). Use filters to narrow down results.`);
-        }
+        const orders = await fetchArcadeOrdersGraphQL(collectionAddress, 1000);
+        const endTime = performance.now();
+        console.log(`[Arcade Orders] Fetched ${orders.length} orders in ${(endTime - startTime).toFixed(0)}ms`);
+        return orders;
       } catch (error) {
         console.error('[Arcade Orders] Error during fetch:', error);
-        // Return what we have so far instead of failing completely
+        throw error;
       }
-
-      const endTime = performance.now();
-      console.log(`[Arcade Orders] Fetched ${combined.length} orders in ${(endTime - startTime).toFixed(0)}ms`);
-      return combined;
     },
   });
 }
 
 export function useArcadeIsTokenListed(collectionAddress: string, tokenId: string) {
-  const { sdk } = useDojoSDK();
-  const q = useMemo(() => getArcadeIsTokenListed(collectionAddress, tokenId), [collectionAddress, tokenId]);
   const queryKey = useMemo(() => ["arcadeIsTokenListed", collectionAddress, tokenId], [collectionAddress, tokenId]);
 
   return useQuery({
     queryKey,
     enabled: !!collectionAddress && !!tokenId,
     queryFn: async () => {
-      const res = await sdk.getEntities({ query: q });
-      const items = res.getItems().map((e: any) => parseArcadeOrder(e)).filter(Boolean) as ArcadeOrderModelCompat[];
-      return { isListed: items.length > 0, listing: items[0] || null };
+      const listing = await fetchArcadeOrderByTokenGraphQL(collectionAddress, tokenId);
+      return { isListed: listing !== null, listing };
     },
     initialData: { isListed: false, listing: null } as { isListed: boolean; listing: ArcadeOrderModelCompat | null },
   });

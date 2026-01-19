@@ -148,7 +148,7 @@ function MarketplaceProviders({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <DojoSdkProvider
         dojoConfig={dojoConfig}
-        sdk={sdk}
+        sdk={sdk as any}
         clientFn={() => {
           console.log('Creating ToriiClient with URL:', dojoConfig.toriiUrl);
           return new ToriiClient({
