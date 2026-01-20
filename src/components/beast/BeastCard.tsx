@@ -1,9 +1,9 @@
 import { memo } from "react";
 import { Link } from "react-router-dom";
-import type { Beast } from "../services/beast";
-import { LazyImage } from "./ui/LazyImage";
-import { Card, CardContent, CardFooter } from "./ui/card";
-import { Badge } from "./ui/badge";
+import type { Beast } from "../../services/beast";
+import { LazyImage } from "../ui/LazyImage";
+import { Card, CardContent, CardFooter } from "../ui/card";
+import { Badge } from "../ui/badge";
 import { cn } from "@/lib/utils";
 
 type Props = {

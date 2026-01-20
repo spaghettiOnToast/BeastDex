@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getChecksumAddress } from "starknet";
 import { CategoryType, StatusType } from "@cartridge/marketplace";
+import { compareStarknetAddresses } from "../utils/address";
 
 // GraphQL endpoint for arcade-main
 const ARCADE_GRAPHQL_ENDPOINT = "https://api.cartridge.gg/x/arcade-main/torii/graphql";
@@ -189,7 +190,9 @@ export function useArcadeListedTokensForCollection(collectionAddress: string) {
   return useQuery({
     queryKey,
     enabled: !!collectionAddress,
-    staleTime: 30_000, // Consider data fresh for 30 seconds
+    staleTime: 60_000, // Consider data fresh for 60 seconds
+    refetchOnWindowFocus: false, // Prevent refetch on tab switch
+    refetchOnMount: false, // Don't refetch if data exists
     queryFn: async () => {
       console.log(`[Arcade Orders] Starting GraphQL fetch for collection ${collectionAddress}`);
       const startTime = performance.now();
@@ -213,10 +216,528 @@ export function useArcadeIsTokenListed(collectionAddress: string, tokenId: strin
   return useQuery({
     queryKey,
     enabled: !!collectionAddress && !!tokenId,
+    staleTime: 30_000, // Consider data fresh for 30 seconds
+    refetchOnWindowFocus: false, // Prevent refetch on tab switch
     queryFn: async () => {
       const listing = await fetchArcadeOrderByTokenGraphQL(collectionAddress, tokenId);
       return { isListed: listing !== null, listing };
     },
     initialData: { isListed: false, listing: null } as { isListed: boolean; listing: ArcadeOrderModelCompat | null },
   });
+}
+
+export type ArcadeSaleCompat = {
+  orderId: number;
+  order: ArcadeOrderModelCompat;
+  from: string;
+  to: string;
+  time: number;
+};
+
+function parseGraphQLSale(node: any): ArcadeSaleCompat | null {
+  if (!node || !node.order) return null;
+
+  const order = parseGraphQLOrder(node.order);
+  if (!order) return null;
+
+  const orderId = parseInt(node.order_id ?? "0", 10);
+  const from = getChecksumAddress(node.from ?? "0x0");
+  const to = getChecksumAddress(node.to ?? "0x0");
+  const time = parseInt(node.time ?? "0", 16);
+
+  return {
+    orderId,
+    order,
+    from,
+    to,
+    time,
+  };
+}
+
+async function fetchArcadeSalesGraphQL(
+  collectionAddress: string,
+  limit: number = 100
+): Promise<ArcadeSaleCompat[]> {
+  const query = `
+    query GetArcadeSales($limit: Int!) {
+      arcadeSaleModels(
+        limit: $limit,
+        order: { direction: DESC, field: TIME }
+      ) {
+        edges {
+          node {
+            order_id
+            from
+            to
+            time
+            order {
+              id
+              status
+              category
+              collection
+              token_id
+              price
+              currency
+              owner
+              expiration
+              quantity
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const response = await fetch(ARCADE_GRAPHQL_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query,
+      variables: {
+        limit,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
+  }
+
+  const result = await response.json();
+
+  if (result.errors) {
+    console.error("[Arcade Sales] GraphQL errors:", result.errors);
+    throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
+  }
+
+  const edges = result.data?.arcadeSaleModels?.edges ?? [];
+  const sales = edges
+    .map((edge: any) => parseGraphQLSale(edge.node))
+    .filter(Boolean) as ArcadeSaleCompat[];
+
+  // Filter to only include sales for the specified collection
+  return sales.filter(sale =>
+    compareStarknetAddresses(sale.order.collection, collectionAddress)
+  );
+}
+
+export function useArcadeSalesForCollection(collectionAddress: string, limit: number = 100) {
+  const queryKey = useMemo(() => ["arcadeSales", collectionAddress, limit], [collectionAddress, limit]);
+
+  return useQuery({
+    queryKey,
+    enabled: !!collectionAddress,
+    staleTime: 60_000, // Consider data fresh for 60 seconds
+    refetchOnWindowFocus: false, // Prevent refetch on tab switch
+    refetchOnMount: false, // Don't refetch if data exists
+    queryFn: async () => {
+      console.log(`[Arcade Sales] Starting GraphQL fetch for collection ${collectionAddress}`);
+      const startTime = performance.now();
+
+      try {
+        const sales = await fetchArcadeSalesGraphQL(collectionAddress, limit);
+        const endTime = performance.now();
+        console.log(`[Arcade Sales] Fetched ${sales.length} sales in ${(endTime - startTime).toFixed(0)}ms`);
+        return sales;
+      } catch (error) {
+        console.error('[Arcade Sales] Error during fetch:', error);
+        throw error;
+      }
+    },
+  });
+}
+
+/**
+ * Fetch user's offers (buy orders) from the Arcade GraphQL API
+ */
+async function fetchUserOffersGraphQL(
+  userAddress: string,
+  collectionAddress: string,
+  limit: number = 100
+): Promise<ArcadeOrderModelCompat[]> {
+  // Normalize address to match GraphQL format (with leading zeros)
+  const normalizedOwner = userAddress.toLowerCase();
+
+  const query = `
+    query GetUserOffers($owner: String!, $limit: Int!) {
+      arcadeOrderModels(
+        where: {
+          owner: $owner,
+          category: 1,
+          status: 1
+        },
+        limit: $limit
+      ) {
+        edges {
+          node {
+            id
+            status
+            category
+            collection
+            token_id
+            price
+            currency
+            owner
+            expiration
+            quantity
+          }
+        }
+      }
+    }
+  `;
+
+  const response = await fetch(ARCADE_GRAPHQL_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query,
+      variables: {
+        owner: normalizedOwner,
+        limit,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
+  }
+
+  const result = await response.json();
+
+  if (result.errors) {
+    console.error("[Arcade Offers] GraphQL errors:", result.errors);
+    throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
+  }
+
+  const edges = result.data?.arcadeOrderModels?.edges ?? [];
+  const offers = edges
+    .map((edge: any) => parseGraphQLOrder(edge.node))
+    .filter(Boolean) as ArcadeOrderModelCompat[];
+
+  // Filter to only include offers for the specified collection
+  return offers.filter(offer =>
+    compareStarknetAddresses(offer.collection, collectionAddress)
+  );
+}
+
+export function useUserOffers(userAddress: string | undefined, collectionAddress: string) {
+  const queryKey = useMemo(
+    () => ["arcadeUserOffers", userAddress, collectionAddress],
+    [userAddress, collectionAddress]
+  );
+
+  const query = useQuery({
+    queryKey,
+    enabled: !!userAddress && !!collectionAddress,
+    staleTime: 30_000, // Consider data fresh for 30 seconds
+    refetchOnWindowFocus: false,
+    refetchOnMount: true, // Refetch when component mounts to get latest offers
+    queryFn: async () => {
+      if (!userAddress) return [];
+
+      console.log(`[Arcade Offers] Fetching offers for user ${userAddress.slice(0, 10)}...`);
+      const startTime = performance.now();
+
+      try {
+        const offers = await fetchUserOffersGraphQL(userAddress, collectionAddress, 100);
+        const endTime = performance.now();
+        console.log(`[Arcade Offers] Fetched ${offers.length} offers in ${(endTime - startTime).toFixed(0)}ms`);
+        return offers;
+      } catch (error) {
+        console.error('[Arcade Offers] Error during fetch:', error);
+        throw error;
+      }
+    },
+  });
+
+  return {
+    ...query,
+    refetch: query.refetch,
+  };
+}
+
+/**
+ * Fetch offers (buy orders) for a specific token from the Arcade GraphQL API
+ */
+async function fetchOffersForTokenGraphQL(
+  collectionAddress: string,
+  tokenId: string,
+  limit: number = 50
+): Promise<ArcadeOrderModelCompat[]> {
+  const tokenIdHex = `0x${parseInt(tokenId, 10).toString(16)}`;
+
+  const query = `
+    query GetOffersForToken($collection: String!, $tokenId: String!, $limit: Int!) {
+      arcadeOrderModels(
+        where: {
+          collection: $collection,
+          token_id: $tokenId,
+          category: 1,
+          status: 1
+        },
+        limit: $limit
+      ) {
+        edges {
+          node {
+            id
+            status
+            category
+            collection
+            token_id
+            price
+            currency
+            owner
+            expiration
+            quantity
+          }
+        }
+      }
+    }
+  `;
+
+  const response = await fetch(ARCADE_GRAPHQL_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query,
+      variables: {
+        collection: collectionAddress,
+        tokenId: tokenIdHex,
+        limit,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
+  }
+
+  const result = await response.json();
+
+  if (result.errors) {
+    console.error("[Arcade Token Offers] GraphQL errors:", result.errors);
+    throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
+  }
+
+  const edges = result.data?.arcadeOrderModels?.edges ?? [];
+  const offers = edges
+    .map((edge: any) => parseGraphQLOrder(edge.node))
+    .filter(Boolean) as ArcadeOrderModelCompat[];
+
+  // Filter out expired offers
+  const now = Math.floor(Date.now() / 1000);
+  return offers.filter(offer => offer.expiration > now);
+}
+
+export function useOffersForToken(collectionAddress: string, tokenId: string | undefined, enabled: boolean = true) {
+  const queryKey = useMemo(
+    () => ["arcadeTokenOffers", collectionAddress, tokenId],
+    [collectionAddress, tokenId]
+  );
+
+  return useQuery({
+    queryKey,
+    enabled: enabled && !!collectionAddress && !!tokenId,
+    staleTime: 15_000, // Consider data fresh for 15 seconds (offers change frequently)
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      if (!tokenId) return [];
+
+      console.log(`[Arcade Token Offers] Fetching offers for token ${tokenId}...`);
+      const startTime = performance.now();
+
+      try {
+        const offers = await fetchOffersForTokenGraphQL(collectionAddress, tokenId, 50);
+        const endTime = performance.now();
+        console.log(`[Arcade Token Offers] Fetched ${offers.length} offers in ${(endTime - startTime).toFixed(0)}ms`);
+        return offers;
+      } catch (error) {
+        console.error('[Arcade Token Offers] Error during fetch:', error);
+        throw error;
+      }
+    },
+  });
+}
+
+/**
+ * Fetch all offers (buy orders) for the collection from the Arcade GraphQL API
+ * This is used to show all offers received by a seller
+ */
+async function fetchAllOffersForCollectionGraphQL(
+  collectionAddress: string,
+  limit: number = 500
+): Promise<ArcadeOrderModelCompat[]> {
+  const query = `
+    query GetAllOffersForCollection($collection: String!, $limit: Int!) {
+      arcadeOrderModels(
+        where: {
+          collection: $collection,
+          category: 1,
+          status: 1
+        },
+        limit: $limit
+      ) {
+        edges {
+          node {
+            id
+            status
+            category
+            collection
+            token_id
+            price
+            currency
+            owner
+            expiration
+            quantity
+          }
+        }
+      }
+    }
+  `;
+
+  const response = await fetch(ARCADE_GRAPHQL_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query,
+      variables: {
+        collection: collectionAddress,
+        limit,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
+  }
+
+  const result = await response.json();
+
+  if (result.errors) {
+    console.error("[Arcade All Offers] GraphQL errors:", result.errors);
+    throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
+  }
+
+  const edges = result.data?.arcadeOrderModels?.edges ?? [];
+  const offers = edges
+    .map((edge: any) => parseGraphQLOrder(edge.node))
+    .filter(Boolean) as ArcadeOrderModelCompat[];
+
+  // Filter out expired offers
+  const now = Math.floor(Date.now() / 1000);
+  return offers.filter(offer => offer.expiration > now);
+}
+
+export type OfferWithBeastInfo = ArcadeOrderModelCompat & {
+  beastName?: string;
+};
+
+export function useOffersReceivedForListings(
+  collectionAddress: string,
+  userListedTokenIds: string[],
+  enabled: boolean = true
+) {
+  const queryKey = useMemo(
+    () => ["arcadeOffersReceived", collectionAddress, userListedTokenIds.sort().join(",")],
+    [collectionAddress, userListedTokenIds]
+  );
+
+  const query = useQuery({
+    queryKey,
+    enabled: enabled && !!collectionAddress && userListedTokenIds.length > 0,
+    staleTime: 30_000, // Consider data fresh for 30 seconds
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      if (userListedTokenIds.length === 0) return [];
+
+      console.log(`[Arcade Offers Received] Fetching offers for ${userListedTokenIds.length} listed tokens...`);
+      const startTime = performance.now();
+
+      try {
+        // Fetch all offers for the collection
+        const allOffers = await fetchAllOffersForCollectionGraphQL(collectionAddress, 500);
+
+        // Filter to only offers on user's listed tokens
+        const userTokenIdSet = new Set(userListedTokenIds.map(id => String(id)));
+        const offersReceived = allOffers.filter(offer =>
+          userTokenIdSet.has(String(offer.tokenId))
+        );
+
+        const endTime = performance.now();
+        console.log(`[Arcade Offers Received] Found ${offersReceived.length} offers on user's listings in ${(endTime - startTime).toFixed(0)}ms`);
+
+        // Sort by price descending (highest first)
+        return offersReceived.sort((a, b) => b.price - a.price);
+      } catch (error) {
+        console.error('[Arcade Offers Received] Error during fetch:', error);
+        throw error;
+      }
+    },
+  });
+
+  return {
+    ...query,
+    refetch: query.refetch,
+  };
+}
+
+/**
+ * Fetch sales from the GraphQL API where the user is either the buyer or seller
+ */
+export function useUserSales(
+  userAddress: string | undefined,
+  collectionAddress: string,
+  enabled: boolean = true
+) {
+  const queryKey = useMemo(
+    () => ["arcadeUserSales", userAddress, collectionAddress],
+    [userAddress, collectionAddress]
+  );
+
+  const query = useQuery({
+    queryKey,
+    enabled: enabled && !!userAddress && !!collectionAddress,
+    staleTime: 30_000, // Consider data fresh for 30 seconds
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
+    queryFn: async () => {
+      if (!userAddress) return [];
+
+      console.log(`[Arcade User Sales] Fetching sales for user ${userAddress.slice(0, 10)}...`);
+      const startTime = performance.now();
+
+      try {
+        // Fetch recent sales for the collection
+        const sales = await fetchArcadeSalesGraphQL(collectionAddress, 200);
+
+        // Filter to only sales where user is buyer or seller
+        const userSales = sales.filter(sale =>
+          compareStarknetAddresses(sale.from, userAddress) ||
+          compareStarknetAddresses(sale.to, userAddress)
+        );
+
+        const endTime = performance.now();
+        console.log(`[Arcade User Sales] Found ${userSales.length} sales for user in ${(endTime - startTime).toFixed(0)}ms`);
+
+        // Sort by time descending (most recent first)
+        return userSales.sort((a, b) => b.time - a.time);
+      } catch (error) {
+        console.error('[Arcade User Sales] Error during fetch:', error);
+        throw error;
+      }
+    },
+  });
+
+  return {
+    ...query,
+    refetch: query.refetch,
+  };
 }

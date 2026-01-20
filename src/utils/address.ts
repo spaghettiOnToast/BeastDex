@@ -69,3 +69,21 @@ export function padStarknetAddresses(values: Array<string | null | undefined>): 
     ),
   );
 }
+
+/**
+ * Compare two Starknet addresses for equality
+ * Handles different formats (with/without leading zeros, different padding)
+ */
+export function compareStarknetAddresses(
+  address1: string | null | undefined,
+  address2: string | null | undefined
+): boolean {
+  const normalised1 = normaliseStarknetAddress(address1);
+  const normalised2 = normaliseStarknetAddress(address2);
+
+  if (!normalised1 || !normalised2) {
+    return false;
+  }
+
+  return normalised1 === normalised2;
+}

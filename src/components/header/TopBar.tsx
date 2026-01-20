@@ -1,8 +1,8 @@
 import { type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Trophy, Store } from "lucide-react";
-import Logo from "../Logo";
-import SearchBar from "../SearchBar";
+import Logo from "../common/Logo";
+import SearchBar from "../common/SearchBar";
 import WalletButton from "../wallet/WalletButton";
 import MobileNav from "../layout/MobileNav";
 import { Button } from "../ui/button";

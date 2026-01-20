@@ -3,18 +3,7 @@ import { CategoryType, StatusType } from "@cartridge/marketplace";
 import { deriveTokenHex, fetchBeastsByIds } from "../beast";
 import type { Beast } from "../beast";
 import type { Listing, ListingStatus } from "./types";
-
-/**
- * Normalize a Starknet address to a consistent format for comparison
- * Converts to lowercase, removes 0x prefix, strips leading zeros, then re-adds 0x
- */
-function normalizeStarknetAddress(address: string): string {
-  if (!address) return '';
-  // Remove 0x prefix, convert to lowercase, strip leading zeros
-  const cleaned = address.toLowerCase().replace(/^0x/i, '').replace(/^0+/, '');
-  // If the result is empty (address was all zeros), return "0"
-  return '0x' + (cleaned || '0');
-}
+import { compareStarknetAddresses } from "../../utils/address";
 
 function getListingStatus(order: OrderModel): ListingStatus {
   const now = Math.floor(Date.now() / 1000);
@@ -91,64 +80,80 @@ export async function hydrateOrders(orders: OrderModel[]): Promise<Listing[]> {
 
   const idsToFetch = uniqueTokenIds.filter((id) => !beastCache.has(id));
   const cacheMisses = idsToFetch.length;
-  const BATCH_SIZE = 100;
+  const BATCH_SIZE = 100; // Batch size for SQL queries
+  const HYDRATION_TIMEOUT = 90000; // 90 second total timeout (accounts for 60s SQL timeout + retries)
 
-  for (let i = 0; i < idsToFetch.length; i += BATCH_SIZE) {
-    const chunk = idsToFetch.slice(i, i + BATCH_SIZE);
-    try {
-      const chunkBeasts = await fetchBeastsByIds(chunk);
-      const indexes = buildBeastLookup(chunkBeasts);
+  // Wrap hydration in a timeout to prevent indefinite blocking
+  const hydrationPromise = (async () => {
+    // Process batches sequentially to avoid overwhelming the indexer
+    // The SQL client semaphore provides additional protection
+    for (let i = 0; i < idsToFetch.length; i += BATCH_SIZE) {
+      const chunk = idsToFetch.slice(i, i + BATCH_SIZE);
 
-      for (const identifier of chunk) {
-        const beast = resolveBeastForIdentifier(identifier, indexes);
-        beastCache.set(identifier, beast);
-        beastMap.set(identifier, beast);
-      }
-    } catch (error) {
-      console.error("[Hydration] Failed to batch fetch beasts", error);
-      for (const identifier of chunk) {
-        if (!beastCache.has(identifier)) {
-          beastCache.set(identifier, null);
+      try {
+        const chunkBeasts = await fetchBeastsByIds(chunk);
+        const indexes = buildBeastLookup(chunkBeasts);
+
+        for (const identifier of chunk) {
+          const beast = resolveBeastForIdentifier(identifier, indexes);
+          beastCache.set(identifier, beast);
+          beastMap.set(identifier, beast);
         }
-        if (!beastMap.has(identifier)) {
-          beastMap.set(identifier, beastCache.get(identifier) ?? null);
+      } catch (error) {
+        console.warn("[Hydration] Batch failed, continuing with nulls", error);
+        // Cache nulls for failed fetches to avoid retrying
+        for (const identifier of chunk) {
+          if (!beastCache.has(identifier)) {
+            beastCache.set(identifier, null);
+          }
+          if (!beastMap.has(identifier)) {
+            beastMap.set(identifier, null);
+          }
         }
       }
     }
-  }
+  })();
+
+  // Race hydration against timeout
+  const timeoutPromise = new Promise<void>((resolve) => {
+    setTimeout(() => {
+      console.warn(`[Hydration] Timeout after ${HYDRATION_TIMEOUT}ms - proceeding with partial data`);
+      resolve();
+    }, HYDRATION_TIMEOUT);
+  });
+
+  await Promise.race([hydrationPromise, timeoutPromise]);
 
   const endTime = performance.now();
+  const duration = (endTime - startTime).toFixed(0);
+  const fetchedCount = Array.from(beastMap.values()).filter(b => b !== null).length;
+
   if (import.meta.env.DEV) {
     console.log(
-      `[Hydration] Complete in ${(endTime - startTime).toFixed(
-        0
-      )}ms (${cacheHits} cached, ${cacheMisses} fetched)`
+      `[Hydration] Complete in ${duration}ms (${cacheHits} cached, ${fetchedCount}/${cacheMisses} fetched)`
     );
   }
 
-  // Map listings with beast data and filter out stale listings
+  // Map listings with beast data
   const hydratedListings = skeletons.map((listing) => ({
     ...listing,
     beast: beastMap.get(listing.tokenId) ?? null,
   }));
 
   // Filter out listings where the seller no longer owns the token
+  // BUT ONLY if we successfully fetched the beast data
   const validListings = hydratedListings.filter((listing) => {
-    // If we don't have beast data, keep the listing (benefit of the doubt)
+    // If we don't have beast data, KEEP the listing (don't filter based on missing data)
     if (!listing.beast || !listing.beast.owner) {
       return true;
     }
 
-    // Normalize addresses for comparison - Starknet addresses can have different formats
-    const sellerAddress = normalizeStarknetAddress(listing.seller ?? '');
-    const currentOwner = normalizeStarknetAddress(listing.beast.owner);
-
     // Keep only listings where the seller still owns the token
-    const isValid = sellerAddress === currentOwner;
+    const isValid = compareStarknetAddresses(listing.seller, listing.beast.owner);
 
     if (!isValid && import.meta.env.DEV) {
       console.log(
-        `[Hydration] Filtered out stale listing for token ${listing.tokenId}: seller=${sellerAddress}, current owner=${currentOwner}`
+        `[Hydration] Filtered out stale listing for token ${listing.tokenId}: seller=${listing.seller}, current owner=${listing.beast.owner}`
       );
     }
 
@@ -162,8 +167,6 @@ export async function hydrateOrders(orders: OrderModel[]): Promise<Listing[]> {
       } stale listings`
     );
   }
-
-  console.log(validListings);
 
   return validListings;
 }
@@ -184,9 +187,9 @@ function buildBeastLookup(beasts: Beast[]) {
       byId.set(normalisedId, beast);
     }
 
-    const derivedHex = deriveTokenHex(beast.id ?? "");
-    if (derivedHex) {
-      byHex.set(derivedHex.toLowerCase(), beast);
+    const derivedHexes = deriveTokenHex(beast.id ?? "");
+    for (const hex of derivedHexes) {
+      byHex.set(hex.toLowerCase(), beast);
     }
 
     if (
@@ -209,9 +212,9 @@ function resolveBeastForIdentifier(
     return lookup.byId.get(normalised) ?? null;
   }
 
-  const derivedHex = deriveTokenHex(identifier ?? "");
-  if (derivedHex) {
-    const match = lookup.byHex.get(derivedHex.toLowerCase());
+  const derivedHexes = deriveTokenHex(identifier ?? "");
+  for (const hex of derivedHexes) {
+    const match = lookup.byHex.get(hex.toLowerCase());
     if (match) return match;
   }
 

@@ -1,197 +1,135 @@
 import { useMemo } from "react";
 import type { TxEntry } from "../types";
-import type { Beast } from "../../../services/beast";
-import { useMarketplace, type ListingEvent, type OfferEvent, type SaleEvent } from "@cartridge/marketplace";
+import type { Listing } from "../../../services/marketplace/types";
+import { CategoryType } from "@cartridge/marketplace";
 import { BEASTS_COLLECTION_ADDRESS } from "../../../services/marketplace/constants";
+import { compareStarknetAddresses, normaliseStarknetAddress } from "../../../utils/address";
+import { useUserOffers, useUserSales, type ArcadeOrderModelCompat } from "../../../hooks/useArcadeOrders";
+import { useBeastLookup } from "../../../hooks/useBeastLookup";
 
 /**
- * Normalize a Starknet address to a consistent format for comparison
+ * Check if an offer is still active (not expired)
  */
-function normalizeAddress(address: string): string {
-  if (!address) return '';
-  const cleaned = address.toLowerCase().replace(/^0x/i, '').replace(/^0+/, '');
-  return '0x' + (cleaned || '0');
-}
-
-/**
- * Check if two Starknet addresses are equal
- */
-function addressesEqual(a: string, b: string): boolean {
-  return normalizeAddress(a) === normalizeAddress(b);
-}
-
-/**
- * Extract transaction hash from event identifier
- * The identifier format may be the tx hash directly or contain it
- */
-function extractTxHash(identifier: string | undefined): string | undefined {
-  if (!identifier) return undefined;
-
-  // If the identifier looks like a hex string (0x...), it might be the tx hash
-  if (identifier.startsWith('0x')) {
-    // Could be just the tx hash or format like "0x{txHash}_{index}"
-    const parts = identifier.split('_');
-    const potentialHash = parts[0];
-    // Starknet tx hashes are typically 64 hex chars (+ 0x prefix = 66 chars)
-    if (potentialHash.length >= 64) {
-      return potentialHash;
-    }
-  }
-
-  // Return the identifier as-is if it looks like a valid hash
-  if (identifier.length >= 64) {
-    return identifier.startsWith('0x') ? identifier : `0x${identifier}`;
-  }
-
-  return undefined;
+function getOfferStatus(offer: ArcadeOrderModelCompat): "active" | "expired" {
+  const now = Math.floor(Date.now() / 1000);
+  return offer.expiration > now ? "active" : "expired";
 }
 
 interface UseUserTransactionsProps {
   address: string | undefined;
-  listings: Array<{ tokenId: string; beast?: Beast | null }>;
+  listings: Listing[];
 }
 
 /**
- * Hook for fetching user transaction history from the marketplace indexer
- * Replaces localStorage-based transaction tracking with indexer data
+ * Hook for fetching user transaction history from the marketplace
+ * Combines listings data, Arcade GraphQL offers, and Arcade GraphQL sales
  */
 export function useUserTransactions({ address, listings }: UseUserTransactionsProps) {
-  const marketplace = useMarketplace();
+  const { data: userOffers, isLoading: offersLoading, refetch: refetchOffers } = useUserOffers(
+    address,
+    BEASTS_COLLECTION_ADDRESS
+  );
 
-  // Create a map of tokenId -> beast for quick lookup
-  const beastMap = useMemo(() => {
-    const map = new Map<string, Beast | null>();
-    for (const listing of listings) {
-      if (listing.beast) {
-        map.set(listing.tokenId, listing.beast);
-      }
-    }
-    return map;
-  }, [listings]);
+  const { data: userSales, isLoading: salesLoading, refetch: refetchSales } = useUserSales(
+    address,
+    BEASTS_COLLECTION_ADDRESS
+  );
 
-  // Get user's transactions from marketplace context
-  const userTransactions = useMemo((): TxEntry[] => {
+  // Collect all token IDs from sales and offers for beast lookup
+  const additionalTokenIds = useMemo(() => {
+    const ids: string[] = [];
+    userSales?.forEach(sale => ids.push(String(sale.order.tokenId)));
+    userOffers?.forEach(offer => ids.push(String(offer.tokenId)));
+    return ids;
+  }, [userSales, userOffers]);
+
+  // Use shared beast lookup hook
+  const { getBeast } = useBeastLookup(listings, additionalTokenIds);
+
+  // Build user transactions
+  const transactions = useMemo((): TxEntry[] => {
     if (!address) return [];
 
-    const transactions: TxEntry[] = [];
-    const normalizedUserAddress = normalizeAddress(address);
+    const result: TxEntry[] = [];
+    const normalizedUserAddress = normaliseStarknetAddress(address);
 
-    // Filter listings created by the user (for beasts collection only)
-    if (marketplace.listings) {
-      for (const listing of marketplace.listings as ListingEvent[]) {
-        if (!listing.exists?.() && listing.exists !== undefined) continue;
-
-        const order = listing.order;
-        if (!order) continue;
-
-        // Only include listings for the beasts collection
-        if (!addressesEqual(order.collection, BEASTS_COLLECTION_ADDRESS)) continue;
-
-        // Check if user owns this listing
-        if (addressesEqual(order.owner, normalizedUserAddress)) {
-          const tokenId = order.tokenId?.toString() ?? '';
-          const beast = beastMap.get(tokenId);
-          // The identifier may contain the tx hash (format varies)
-          const txHash = extractTxHash(listing.identifier);
-
-          transactions.push({
-            type: "list",
-            tokenId,
-            beastName: beast?.name,
-            price: order.price?.toString(),
-            paymentToken: order.currency,
-            expiration: order.expiration,
-            timestamp: listing.time * 1000, // Convert to milliseconds
-            txHash,
-          });
-        }
+    // Add user's active listings
+    for (const listing of listings) {
+      if (compareStarknetAddresses(listing.seller, normalizedUserAddress)) {
+        result.push({
+          type: "list",
+          tokenId: listing.tokenId,
+          beastName: listing.beast?.name,
+          price: listing.price,
+          paymentToken: listing.paymentToken ?? undefined,
+          expiration: listing.expiration,
+          timestamp: listing.createdAt ? listing.createdAt * 1000 : 0,
+        });
       }
     }
 
-    // Filter offers made by the user (for beasts collection only)
-    if (marketplace.offers) {
-      for (const offer of marketplace.offers as OfferEvent[]) {
-        if (!offer.exists?.() && offer.exists !== undefined) continue;
+    // Add user's offers
+    userOffers?.forEach(offer => {
+      const tokenId = String(offer.tokenId);
+      result.push({
+        type: "offer",
+        tokenId,
+        beastName: getBeast(tokenId)?.name,
+        price: String(offer.price),
+        paymentToken: offer.currency,
+        expiration: offer.expiration,
+        timestamp: 0,
+        status: getOfferStatus(offer),
+      });
+    });
 
-        const order = offer.order;
-        if (!order) continue;
+    // Add user's sales (where user is buyer or seller)
+    userSales?.forEach(sale => {
+      const tokenId = String(sale.order.tokenId);
+      const beastName = getBeast(tokenId)?.name;
+      const isSeller = compareStarknetAddresses(sale.from, normalizedUserAddress);
+      const isBuyer = compareStarknetAddresses(sale.to, normalizedUserAddress);
+      const wasOffer = sale.order.category.value === CategoryType.Buy;
 
-        // Only include offers for the beasts collection
-        if (!addressesEqual(order.collection, BEASTS_COLLECTION_ADDRESS)) continue;
-
-        // Check if user made this offer
-        if (addressesEqual(order.owner, normalizedUserAddress)) {
-          const tokenId = order.tokenId?.toString() ?? '';
-          const beast = beastMap.get(tokenId);
-          const txHash = extractTxHash(offer.identifier);
-
-          transactions.push({
-            type: "offer",
-            tokenId,
-            beastName: beast?.name,
-            price: order.price?.toString(),
-            paymentToken: order.currency,
-            expiration: order.expiration,
-            timestamp: offer.time * 1000,
-            txHash,
-          });
-        }
+      if (isSeller) {
+        result.push({
+          type: wasOffer ? "offer-accepted" : "sold",
+          tokenId,
+          beastName,
+          price: String(sale.order.price),
+          paymentToken: sale.order.currency,
+          timestamp: sale.time * 1000,
+          status: "completed",
+        });
       }
-    }
 
-    // Filter sales involving the user (for beasts collection only)
-    if (marketplace.sales) {
-      for (const sale of marketplace.sales as SaleEvent[]) {
-        if (!sale.exists?.() && sale.exists !== undefined) continue;
-
-        const order = sale.order;
-        if (!order) continue;
-
-        // Only include sales for the beasts collection
-        if (!addressesEqual(order.collection, BEASTS_COLLECTION_ADDRESS)) continue;
-
-        const tokenId = order.tokenId?.toString() ?? '';
-        const beast = beastMap.get(tokenId);
-        const txHash = extractTxHash(sale.identifier);
-        const isSeller = addressesEqual(sale.from, normalizedUserAddress);
-        const isBuyer = addressesEqual(sale.to, normalizedUserAddress);
-
-        if (isSeller) {
-          transactions.push({
-            type: "sell",
-            tokenId,
-            beastName: beast?.name,
-            price: order.price?.toString(),
-            paymentToken: order.currency,
-            timestamp: sale.time * 1000,
-            txHash,
-            note: `Sold to ${sale.to.slice(0, 6)}...${sale.to.slice(-4)}`,
-          });
-        }
-
-        if (isBuyer) {
-          transactions.push({
-            type: "buy",
-            tokenId,
-            beastName: beast?.name,
-            price: order.price?.toString(),
-            paymentToken: order.currency,
-            timestamp: sale.time * 1000,
-            txHash,
-            note: `Bought from ${sale.from.slice(0, 6)}...${sale.from.slice(-4)}`,
-          });
-        }
+      if (isBuyer) {
+        result.push({
+          type: "buy",
+          tokenId,
+          beastName,
+          price: String(sale.order.price),
+          paymentToken: sale.order.currency,
+          timestamp: sale.time * 1000,
+          status: "completed",
+        });
       }
-    }
+    });
 
-    // Sort by timestamp descending (most recent first)
-    transactions.sort((a, b) => b.timestamp - a.timestamp);
+    // Sort: items with timestamps first, then by timestamp descending
+    result.sort((a, b) => {
+      if (a.timestamp === 0 && b.timestamp !== 0) return 1;
+      if (b.timestamp === 0 && a.timestamp !== 0) return -1;
+      return b.timestamp - a.timestamp;
+    });
 
-    return transactions;
-  }, [address, marketplace.listings, marketplace.offers, marketplace.sales, beastMap]);
+    return result;
+  }, [address, listings, userOffers, userSales, getBeast]);
 
   return {
-    transactions: userTransactions,
-    isLoading: false, // Data comes from context which is already loaded
+    transactions,
+    isLoading: offersLoading || salesLoading,
+    refetchOffers,
+    refetchSales,
   };
 }

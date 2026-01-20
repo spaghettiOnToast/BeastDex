@@ -22,7 +22,7 @@ if (typeof document !== "undefined") {
 }
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
-import BeastCard from "../components/BeastCard";
+import BeastCard from "../components/beast/BeastCard";
 import BeastModal from "../components/beast/BeastModal";
 import {
   fetchBeastAttributeFilters,
@@ -38,7 +38,7 @@ import {
 } from "../utils/beastCollection";
 import { normaliseStarknetAddress } from "../utils/address";
 import { lookupControllerAddresses } from "../services/controller";
-import { getErrorMessage } from "../utils/error";
+import { getUserFriendlyErrorMessage, isSqlEndpointError } from "../utils/error";
 import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
 import { Button } from "../components/ui/button";
 import { getBeastTemplate } from "../data/beastTemplates";
@@ -262,7 +262,7 @@ function CollectionPage() {
       .catch((err: unknown) => {
         if (cancelled) return;
         setResolvedAddress("");
-        setIdentifierError(getErrorMessage(err, "Failed to resolve username"));
+        setIdentifierError(getUserFriendlyErrorMessage(err, "Failed to resolve username"));
       })
       .finally(() => {
         if (!cancelled) {
@@ -288,8 +288,9 @@ function CollectionPage() {
     return Array.from(unique).filter(Boolean);
   }, [ownedBeasts, resolvedAddress]);
 
+  // Defer username lookups to allow beasts to render first
   const { usernames: ownerUsernames } =
-    useControllerUsernames(ownerLookupAddresses);
+    useControllerUsernames(ownerLookupAddresses, { delayMs: 300 });
 
   const loadSummary = useCallback(async () => {
     if (resolvingIdentifier) {
@@ -357,7 +358,7 @@ function CollectionPage() {
       console.error("Failed to load collection summary", err);
       setOwnedBeasts([]);
       setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
-      setSummaryError(getErrorMessage(err, "Failed to load collection"));
+      setSummaryError(getUserFriendlyErrorMessage(err, "Failed to load collection"));
     } finally {
       if (summaryRequestRef.current === requestId) {
         setSummaryLoading(false);
@@ -464,7 +465,7 @@ function CollectionPage() {
         setGenesisCache(genesisMap);
       } catch (err: unknown) {
         if (cancelled) return;
-        setFiltersError(getErrorMessage(err, "Failed to load beast list"));
+        setFiltersError(getUserFriendlyErrorMessage(err, "Failed to load beast list"));
       }
     }
 
@@ -1066,15 +1067,40 @@ function CollectionPage() {
           ))}
         </div>
 
-        {summaryError ? (
-          <p className="text-xs text-red-400">❌ {summaryError}</p>
-        ) : null}
-        {catalogError ? (
-          <p className="text-xs text-red-400">❌ {catalogError}</p>
-        ) : null}
-        {filtersError ? (
-          <p className="text-xs text-red-400">❌ {filtersError}</p>
-        ) : null}
+        {/* Consolidate SQL errors into a single banner */}
+        {(() => {
+          const errors = [summaryError, catalogError, filtersError].filter(Boolean);
+          if (errors.length === 0) return null;
+
+          // Check if any error is a SQL endpoint error
+          const hasSqlError = errors.some(err => err && isSqlEndpointError(err));
+
+          if (hasSqlError) {
+            // Show single clean message for SQL errors
+            return (
+              <div className="flex items-center gap-3 py-3 px-4 bg-red-900/20 border border-red-400/30 rounded-md">
+                <span className="text-red-300 text-lg">⚠️</span>
+                <div className="flex-1">
+                  <p className="text-sm text-red-200 font-medium">
+                    Beast data temporarily unavailable
+                  </p>
+                  <p className="text-xs text-red-300/80 mt-1">
+                    Our indexing service is experiencing issues. Please try again in a few minutes.
+                  </p>
+                </div>
+              </div>
+            );
+          }
+
+          // Show individual errors for non-SQL errors
+          return (
+            <div className="flex flex-col gap-2">
+              {errors.map((error, idx) => (
+                <p key={idx} className="text-xs text-red-400">❌ {error}</p>
+              ))}
+            </div>
+          );
+        })()}
 
         <div className="flex items-center justify-center gap-2 py-2 px-4 bg-blue-900/20 border border-blue-400/30 rounded-md">
           <span className="text-blue-300 text-xs">ℹ️</span>

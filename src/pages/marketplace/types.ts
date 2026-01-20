@@ -1,6 +1,3 @@
-import type { SaleEvent } from "@cartridge/marketplace";
-import type { Beast } from "../../services/beast";
-
 /**
  * Marketplace view types
  */
@@ -14,13 +11,13 @@ export type ExploreSubTab = "browse" | "recent-listed" | "recent-sold";
 /**
  * My Activity sub-tab types
  */
-export type MyActivitySubTab = "listings" | "beasts" | "transactions";
+export type MyActivitySubTab = "listings" | "beasts" | "offers-received" | "transactions";
 
 /**
  * Transaction entry for user activity tracking
  */
 export type TxEntry = {
-  type: "list" | "cancel" | "buy" | "edit" | "offer" | "sell";
+  type: "list" | "cancel" | "buy" | "edit" | "offer" | "sell" | "offer-accepted" | "sold";
   tokenId: string;
   beastName?: string;
   price?: string; // in token base units
@@ -29,14 +26,7 @@ export type TxEntry = {
   txHash?: string;
   timestamp: number;
   note?: string;
-};
-
-/**
- * Recent sale with associated beast data
- */
-export type RecentSale = {
-  sale: SaleEvent;
-  beast: Beast | null;
+  status?: "active" | "expired" | "canceled" | "completed"; // For offers/listings status
 };
 
 /**

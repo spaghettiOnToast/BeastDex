@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import type { Beast, BeastAttributeFilters } from "../../../services/beast";
 import type { Listing } from "../../../services/marketplace/types";
 import type { SortOption } from "../../../components/sort/SortDropdown";
@@ -146,10 +146,23 @@ export function useMarketplaceFilters({
   /**
    * Progressively load listings for performance
    */
+  const progressiveLoadRef = useRef<{ cancelled: boolean; timer: number | null }>({
+    cancelled: false,
+    timer: null,
+  });
+
   useEffect(() => {
     const target = sortedListings.length;
     const INITIAL = 120;
     const STEP = 60;
+    const ref = progressiveLoadRef.current;
+
+    // Clean up any previous progressive load
+    ref.cancelled = true;
+    if (ref.timer !== null) {
+      window.clearTimeout(ref.timer);
+      ref.timer = null;
+    }
 
     if (activeTab !== "explore") {
       setVisibleListingCount(target);
@@ -162,20 +175,21 @@ export function useMarketplaceFilters({
       return;
     }
 
-    let cancelled = false;
-    let timer: number | null = null;
+    // Start new progressive load
+    ref.cancelled = false;
 
     const schedule = () => {
-      if (cancelled || typeof window === "undefined") return;
-      timer = window.setTimeout(() => {
+      if (ref.cancelled || typeof window === "undefined") return;
+      ref.timer = window.setTimeout(() => {
+        if (ref.cancelled) return;
         setVisibleListingCount((prev) => {
-          if (prev >= target) {
-            cancelled = true;
-            return prev;
+          const next = Math.min(prev + STEP, target);
+          if (next >= target) {
+            ref.cancelled = true;
           }
-          return Math.min(prev + STEP, target);
+          return next;
         });
-        if (!cancelled) {
+        if (!ref.cancelled) {
           schedule();
         }
       }, 90);
@@ -184,12 +198,13 @@ export function useMarketplaceFilters({
     schedule();
 
     return () => {
-      cancelled = true;
-      if (timer !== null && typeof window !== "undefined") {
-        window.clearTimeout(timer);
+      ref.cancelled = true;
+      if (ref.timer !== null && typeof window !== "undefined") {
+        window.clearTimeout(ref.timer);
+        ref.timer = null;
       }
     };
-  }, [sortedListings, activeTab, hideExpired]);
+  }, [sortedListings.length, activeTab]);
 
   /**
    * Filter user beasts based on current filters

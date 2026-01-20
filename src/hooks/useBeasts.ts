@@ -5,7 +5,7 @@ import {
   type AttributeFilterInput,
   type Beast,
 } from "../services/beast";
-import { getErrorMessage } from "../utils/error";
+import { getUserFriendlyErrorMessage } from "../utils/error";
 
 type UseBeastsOptions = {
   limit?: number;
@@ -59,7 +59,7 @@ export function useBeasts({
       } catch (error: unknown) {
         if (signal?.aborted) return;
         console.error("Failed to fetch beasts:", error);
-        setError(getErrorMessage(error, "Failed to fetch beasts"));
+        setError(getUserFriendlyErrorMessage(error, "Failed to fetch beasts"));
       } finally {
         if (!signal?.aborted) {
           setLoading(false);

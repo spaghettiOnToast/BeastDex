@@ -5,6 +5,7 @@ import { AppLayout } from "../components/layout/AppLayout";
 import { Button } from "../components/ui/button";
 import ListingCard from "../components/marketplace/ListingCard";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
+import { useOffersForToken, useOffersReceivedForListings } from "../hooks/useArcadeOrders";
 import type { Listing } from "../services/marketplace/types";
 import {
   getPaymentTokenByAddress,
@@ -14,8 +15,9 @@ import {
 import { cancelListingFlow } from "../services/marketplace/flows";
 import {
   useMarketplace,
-  useMarketplaceActions,
   type OrderModel,
+  CategoryType,
+  StatusType,
 } from "@cartridge/marketplace";
 import type { Beast } from "../services/beast";
 import FiltersButton from "../components/filters/FiltersButton";
@@ -32,6 +34,13 @@ import PurchaseCartDialog from "../components/marketplace/PurchaseCartDialog";
 import MakeOfferDialog from "../components/marketplace/MakeOfferDialog";
 import OffersDialog from "../components/marketplace/OffersDialog";
 import UnifiedCartDialog from "../components/marketplace/UnifiedCartDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "../components/ui/dialog";
 import { ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
 
@@ -46,6 +55,9 @@ import { ViewToggle } from "./marketplace/components/ViewToggle";
 import { toBigInt } from "./marketplace/utils";
 import type { ExploreSubTab, MyActivitySubTab } from "./marketplace/types";
 
+// Storage key for hidden offers
+const HIDDEN_OFFERS_KEY = "beastdex-hidden-offers";
+
 /**
  * Main Marketplace Page Component - Refactored for maintainability
  *
@@ -58,7 +70,6 @@ import type { ExploreSubTab, MyActivitySubTab } from "./marketplace/types";
 export default function MarketplacePage() {
   const { address, account } = useAccount();
   const marketplace = useMarketplace();
-  const marketplaceSDKActions = useMarketplaceActions();
 
   // Dialog states
   const [exploreSubTab, setExploreSubTab] = useState<ExploreSubTab>("browse");
@@ -74,10 +85,49 @@ export default function MarketplacePage() {
   const [offerTokenId, setOfferTokenId] = useState<string | undefined>(undefined);
   const [offersDialogOpen, setOffersDialogOpen] = useState(false);
   const [selectedListingForOffers, setSelectedListingForOffers] = useState<Listing | null>(null);
-  const [offersForToken, setOffersForToken] = useState<OrderModel[]>([]);
   const [unifiedCartOpen, setUnifiedCartOpen] = useState(false);
+  const [acceptOfferConfirmOpen, setAcceptOfferConfirmOpen] = useState(false);
+  const [offerToAccept, setOfferToAccept] = useState<{
+    offer: OrderModel;
+    beastName: string;
+    priceFormatted: string;
+    buyerAddress: string;
+  } | null>(null);
   const [selectedPaymentToken] = useState(DEFAULT_PAYMENT_TOKEN);
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Hidden offers state (persisted to localStorage)
+  const [hiddenOfferIds, setHiddenOfferIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(HIDDEN_OFFERS_KEY);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const [showHiddenOffers, setShowHiddenOffers] = useState(false);
+
+  // Persist hidden offers to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(HIDDEN_OFFERS_KEY, JSON.stringify([...hiddenOfferIds]));
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [hiddenOfferIds]);
+
+  // Toggle hide/unhide offer
+  const handleToggleHideOffer = useCallback((offerId: string) => {
+    setHiddenOfferIds(prev => {
+      const next = new Set(prev);
+      if (next.has(offerId)) {
+        next.delete(offerId);
+      } else {
+        next.add(offerId);
+      }
+      return next;
+    });
+  }, []);
 
   // Data fetching hook
   const dataHook = useMarketplaceData(address, marketplace);
@@ -104,7 +154,7 @@ export default function MarketplacePage() {
   });
 
   // User transactions hook (from indexer instead of localStorage)
-  const { transactions: userTransactions } = useUserTransactions({
+  const { transactions: userTransactions, refetchOffers, refetchSales } = useUserTransactions({
     address,
     listings: dataHook.listings,
   });
@@ -115,15 +165,76 @@ export default function MarketplacePage() {
     limit: 20,
   });
 
-  // Load username resolution for all sellers
-  useControllerUsernames(filtersHook.ownerAddresses);
+  // Defer username lookups to allow listings to render first
+  useControllerUsernames(filtersHook.ownerAddresses, { delayMs: 300 });
 
-  // Reset offers when dialog closes
-  useEffect(() => {
-    if (!offersDialogOpen) {
-      setOffersForToken([]);
+  // Fetch offers for selected token when offers dialog is open
+  const { data: arcadeOffers, isLoading: offersLoading } = useOffersForToken(
+    BEASTS_COLLECTION_ADDRESS,
+    selectedListingForOffers?.tokenId,
+    offersDialogOpen
+  );
+
+  // Convert ArcadeOrderModelCompat to OrderModel format for OffersDialog
+  const offersForToken = useMemo((): OrderModel[] => {
+    if (!arcadeOffers || arcadeOffers.length === 0) return [];
+
+    return arcadeOffers.map((offer) => ({
+      id: offer.id,
+      identifier: offer.identifier,
+      category: { value: CategoryType.Buy, into: () => 1 },
+      status: { value: StatusType.Placed, into: () => 1 },
+      expiration: offer.expiration,
+      collection: offer.collection,
+      tokenId: BigInt(offer.tokenId),
+      quantity: offer.quantity,
+      price: BigInt(offer.price),
+      currency: offer.currency,
+      owner: offer.owner,
+    })) as unknown as OrderModel[];
+  }, [arcadeOffers]);
+
+  // Get user's listed token IDs for offers received query
+  const userListedTokenIds = useMemo(() => {
+    return filtersHook.myActiveListings
+      .filter(l => l.status === "active")
+      .map(l => l.tokenId);
+  }, [filtersHook.myActiveListings]);
+
+  // Fetch offers received on user's listings
+  const { data: offersReceived, isLoading: offersReceivedLoading, refetch: refetchOffersReceived } = useOffersReceivedForListings(
+    BEASTS_COLLECTION_ADDRESS,
+    userListedTokenIds,
+    filtersHook.activeTab === "my" && myActivitySubTab === "offers-received"
+  );
+
+  // Enrich offers with beast names from listings and hidden state
+  const enrichedOffersReceived = useMemo(() => {
+    if (!offersReceived || offersReceived.length === 0) return [];
+
+    return offersReceived.map(offer => {
+      const tokenId = String(offer.tokenId);
+      const matchingListing = filtersHook.myActiveListings.find(l => l.tokenId === tokenId);
+      return {
+        ...offer,
+        beastName: matchingListing?.beast?.name,
+        isHidden: hiddenOfferIds.has(offer.id.toString()),
+      };
+    });
+  }, [offersReceived, filtersHook.myActiveListings, hiddenOfferIds]);
+
+  // Filter offers based on visibility
+  const visibleOffersReceived = useMemo(() => {
+    if (showHiddenOffers) {
+      return enrichedOffersReceived;
     }
-  }, [offersDialogOpen]);
+    return enrichedOffersReceived.filter(offer => !offer.isHidden);
+  }, [enrichedOffersReceived, showHiddenOffers]);
+
+  // Count hidden offers for badge
+  const hiddenOffersCount = useMemo(() => {
+    return enrichedOffersReceived.filter(offer => offer.isHidden).length;
+  }, [enrichedOffersReceived]);
 
   // Load recent listings when tab is active
   useEffect(() => {
@@ -414,11 +525,6 @@ export default function MarketplacePage() {
           </div>
         )}
 
-        {!dataHook.hydratingListings && dataHook.listings.length >= 450 && (
-          <div className="rounded-md border border-yellow-500/20 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-200">
-            Showing first ~500 listings for performance. Use filters to narrow down results.
-          </div>
-        )}
 
         {/* Filters toolbar */}
 
@@ -430,7 +536,12 @@ export default function MarketplacePage() {
             {filtersHook.activeTab === "my" && (
               <Button
                 variant="outline"
-                onClick={() => dataHook.reloadUserBeasts()}
+                onClick={() => {
+                  dataHook.reloadUserBeasts();
+                  refetchOffers();
+                  refetchOffersReceived();
+                  refetchSales();
+                }}
                 disabled={dataHook.userBeastsLoading}
               >
                 {dataHook.userBeastsLoading ? "Refreshing…" : "Refresh"}
@@ -558,11 +669,28 @@ export default function MarketplacePage() {
                         subtitlePriceLabel={formatSubtitlePrice(listing)}
                         status={listing.status}
                         buyDisabled={!listing.active}
+                        inCart={cartsHook.isInPurchaseCart(listing.listingId)}
+                        primaryActionLabel={cartsHook.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
                         onBuyNow={() => {
                           setPurchasingListing(listing);
                           setPurchaseConfirmOpen(true);
                         }}
                         onAddToCart={() => cartsHook.handleAddToPurchaseCart(listing)}
+                        onMakeOffer={() => {
+                          setOfferBeast(listing.beast ?? null);
+                          setOfferTokenId(listing.tokenId);
+                          setMakeOfferOpen(true);
+                        }}
+                        onViewOffers={() => {
+                          setSelectedListingForOffers(listing);
+                          setOffersDialogOpen(true);
+                        }}
+                        ownedByUser={address?.toLowerCase() === listing.seller?.toLowerCase()}
+                        onEdit={() => {
+                          setEditingListing(listing);
+                          setEditDialogOpen(true);
+                        }}
+                        onCancel={listing.active ? () => handleCancelListing(listing) : undefined}
                       />
                     ))}
                   </div>
@@ -630,6 +758,23 @@ export default function MarketplacePage() {
                 )}
               >
                 My Beasts
+              </button>
+              <button
+                type="button"
+                onClick={() => setMyActivitySubTab("offers-received")}
+                className={cn(
+                  "rounded-md px-4 py-2 text-xs font-semibold uppercase tracking-wider transition",
+                  myActivitySubTab === "offers-received"
+                    ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
+                    : "text-gray-400 hover:text-lsGold"
+                )}
+              >
+                Offers Received
+                {visibleOffersReceived.length > 0 && (
+                  <span className="ml-1.5 bg-purple-500/30 text-purple-300 text-[10px] px-1.5 py-0.5 rounded-full">
+                    {visibleOffersReceived.length}
+                  </span>
+                )}
               </button>
               <button
                 type="button"
@@ -743,6 +888,140 @@ export default function MarketplacePage() {
               </>
             )}
 
+            {myActivitySubTab === "offers-received" && (
+              <>
+                {offersReceivedLoading ? (
+                  <p className="text-xs text-gray-400">Loading offers...</p>
+                ) : userListedTokenIds.length === 0 ? (
+                  <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
+                    You don't have any active listings. List a beast to receive offers!
+                  </p>
+                ) : enrichedOffersReceived.length === 0 ? (
+                  <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
+                    No offers received on your listings yet.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Toggle for hidden offers */}
+                    {hiddenOffersCount > 0 && (
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-2 cursor-pointer group">
+                          <input
+                            type="checkbox"
+                            checked={showHiddenOffers}
+                            onChange={(e) => setShowHiddenOffers(e.target.checked)}
+                            className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-lsGold focus:ring-lsGold focus:ring-offset-gray-900"
+                          />
+                          <span className="text-xs font-medium text-gray-400 group-hover:text-lsGold transition-colors">
+                            Show Hidden Offers ({hiddenOffersCount})
+                          </span>
+                        </label>
+                      </div>
+                    )}
+                    {visibleOffersReceived.length === 0 ? (
+                      <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
+                        All offers are hidden. Check "Show Hidden Offers" to view them.
+                      </p>
+                    ) : visibleOffersReceived.map((offer, idx) => {
+                      const token = getPaymentTokenByAddress(offer.currency);
+                      const symbol = token?.symbol ?? 'LORDS';
+                      const priceFormatted = formatPrice(String(offer.price), symbol);
+                      const expirationDate = new Date(offer.expiration * 1000);
+                      const now = new Date();
+                      const hoursRemaining = Math.floor((expirationDate.getTime() - now.getTime()) / (1000 * 60 * 60));
+                      const daysRemaining = Math.floor(hoursRemaining / 24);
+                      const beastName = offer.beastName || `Beast #${offer.tokenId}`;
+
+                      return (
+                        <div
+                          key={`offer-${offer.id}-${idx}`}
+                          className={cn(
+                            "rounded-lg border p-4 transition-all",
+                            offer.isHidden
+                              ? "border-gray-700/50 bg-gray-900/30 opacity-60"
+                              : "border-gray-800 bg-gray-900/50"
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-2">
+                                <p className="font-semibold text-white truncate">
+                                  {beastName}
+                                </p>
+                                {idx === 0 && !offer.isHidden && (
+                                  <span className="flex-shrink-0 text-[10px] bg-lsGold/20 text-lsGold px-2 py-0.5 rounded">
+                                    Highest
+                                  </span>
+                                )}
+                                {offer.isHidden && (
+                                  <span className="flex-shrink-0 text-[10px] bg-gray-700/50 text-gray-400 px-2 py-0.5 rounded">
+                                    Hidden
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xl font-bold text-lsGold mb-2">
+                                {priceFormatted}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
+                                <span>From: {offer.owner.slice(0, 6)}...{offer.owner.slice(-4)}</span>
+                                <span className="text-gray-600">•</span>
+                                <span>
+                                  {daysRemaining > 1
+                                    ? `Expires in ${daysRemaining} days`
+                                    : hoursRemaining > 1
+                                    ? `Expires in ${hoursRemaining} hours`
+                                    : `Expires ${expirationDate.toLocaleString()}`}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex-shrink-0 flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleToggleHideOffer(offer.id.toString())}
+                                className="text-gray-400 hover:text-white text-xs px-3"
+                              >
+                                {offer.isHidden ? "Unhide" : "Hide"}
+                              </Button>
+                              <Button
+                                onClick={() => {
+                                  // Convert to OrderModel format and open confirmation dialog
+                                  const orderModel = {
+                                    id: offer.id,
+                                    identifier: offer.identifier,
+                                    category: { value: CategoryType.Buy, into: () => 1 },
+                                    status: { value: StatusType.Placed, into: () => 1 },
+                                    expiration: offer.expiration,
+                                    collection: offer.collection,
+                                    tokenId: BigInt(offer.tokenId),
+                                    quantity: offer.quantity,
+                                    price: BigInt(offer.price),
+                                    currency: offer.currency,
+                                    owner: offer.owner,
+                                  } as unknown as OrderModel;
+                                  setOfferToAccept({
+                                    offer: orderModel,
+                                    beastName,
+                                    priceFormatted,
+                                    buyerAddress: offer.owner,
+                                  });
+                                  setAcceptOfferConfirmOpen(true);
+                                }}
+                                disabled={!!actionsHook.acceptingOfferId}
+                                className="bg-green-600 hover:bg-green-500 text-white font-semibold px-6 py-2"
+                              >
+                                Accept Offer
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+
             {myActivitySubTab === "transactions" && (
               <>
                 {userTransactions.length === 0 ? (
@@ -757,10 +1036,8 @@ export default function MarketplacePage() {
                           <th className="px-4 py-3 text-left font-semibold text-gray-300">Type</th>
                           <th className="px-4 py-3 text-left font-semibold text-gray-300">Beast</th>
                           <th className="px-4 py-3 text-left font-semibold text-gray-300">Price</th>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Expiration</th>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Date</th>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Note</th>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-300">TX</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Status</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Expires</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -768,14 +1045,39 @@ export default function MarketplacePage() {
                           const token = tx.paymentToken ? getPaymentTokenByAddress(tx.paymentToken) : null;
                           const symbol = token?.symbol ?? 'LORDS';
 
+                          // Determine type badge styling and label
+                          const typeConfig: Record<string, { class: string; label: string }> = {
+                            offer: { class: "bg-purple-500/20 text-purple-400", label: "Offer" },
+                            list: { class: "bg-blue-500/20 text-blue-400", label: "List" },
+                            buy: { class: "bg-green-500/20 text-green-400", label: "Buy" },
+                            sell: { class: "bg-green-500/20 text-green-400", label: "Sell" },
+                            sold: { class: "bg-green-500/20 text-green-400", label: "Sold" },
+                            "offer-accepted": { class: "bg-emerald-500/20 text-emerald-400", label: "Accepted Offer" },
+                            cancel: { class: "bg-red-500/20 text-red-400", label: "Cancel" },
+                            edit: { class: "bg-yellow-500/20 text-yellow-400", label: "Edit" },
+                          };
+                          const typeBadgeClass = typeConfig[tx.type]?.class ?? "bg-lsGold/10 text-lsGold";
+                          const typeLabel = typeConfig[tx.type]?.label ?? tx.type;
+
+                          // Determine status badge styling
+                          const statusBadgeClass = tx.status === "active"
+                            ? "bg-green-500/20 text-green-400"
+                            : tx.status === "expired"
+                            ? "bg-gray-500/20 text-gray-400"
+                            : tx.status === "completed"
+                            ? "bg-blue-500/20 text-blue-400"
+                            : tx.status === "canceled"
+                            ? "bg-red-500/20 text-red-400"
+                            : "";
+
                           return (
                             <tr
-                              key={`${tx.timestamp}-${idx}`}
+                              key={`${tx.timestamp}-${tx.type}-${tx.tokenId}-${idx}`}
                               className="border-b border-gray-800 hover:bg-gray-900/30 transition-colors"
                             >
                               <td className="px-4 py-3">
-                                <span className="inline-block px-2 py-1 rounded text-[10px] font-semibold uppercase bg-lsGold/10 text-lsGold">
-                                  {tx.type}
+                                <span className={cn("inline-block px-2 py-1 rounded text-[10px] font-semibold", typeBadgeClass)}>
+                                  {typeLabel}
                                 </span>
                               </td>
                               <td className="px-4 py-3 text-gray-300">
@@ -784,30 +1086,19 @@ export default function MarketplacePage() {
                               <td className="px-4 py-3 text-gray-400">
                                 {tx.price ? formatPrice(tx.price, symbol) : '-'}
                               </td>
+                              <td className="px-4 py-3">
+                                {tx.status ? (
+                                  <span className={cn("inline-block px-2 py-1 rounded text-[10px] font-semibold uppercase", statusBadgeClass)}>
+                                    {tx.status}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-500">-</span>
+                                )}
+                              </td>
                               <td className="px-4 py-3 text-gray-400">
                                 {tx.expiration
                                   ? new Date(tx.expiration * 1000).toLocaleDateString()
                                   : '-'}
-                              </td>
-                              <td className="px-4 py-3 text-gray-500">
-                                {new Date(tx.timestamp).toLocaleDateString()}
-                              </td>
-                              <td className="px-4 py-3 text-gray-400">
-                                {tx.note || '-'}
-                              </td>
-                              <td className="px-4 py-3">
-                                {tx.txHash ? (
-                                  <a
-                                    href={`https://voyager.online/tx/${tx.txHash}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-400 hover:text-blue-300 hover:underline"
-                                  >
-                                    View
-                                  </a>
-                                ) : (
-                                  <span className="text-gray-600">-</span>
-                                )}
                               </td>
                             </tr>
                           );
@@ -837,8 +1128,7 @@ export default function MarketplacePage() {
           onOpenChange={setEditDialogOpen}
           listing={editingListing}
           account={account}
-          cancel={marketplaceSDKActions.cancel}
-          list={marketplaceSDKActions.list}
+          editListing={actionsHook.editListing}
           onEdited={actionsHook.handleListed}
         />
 
@@ -869,9 +1159,9 @@ export default function MarketplacePage() {
           listings={cartsHook.purchaseCart}
           onRemove={cartsHook.handleRemoveFromPurchaseCart}
           onClearAll={cartsHook.handleClearPurchaseCart}
-          onPurchaseAll={() =>
+          onPurchaseAll={(validListings) =>
             actionsHook.handlePurchaseAll(
-              cartsHook.purchaseCart,
+              validListings ?? cartsHook.purchaseCart,
               cartsHook.handleRemoveFromPurchaseCart
             ).then((success) => {
               if (success) setPurchaseCartOpen(false);
@@ -893,7 +1183,12 @@ export default function MarketplacePage() {
           onOpenChange={setOffersDialogOpen}
           tokenId={selectedListingForOffers?.tokenId || ""}
           orders={offersForToken}
-          isOwner={true}
+          isOwner={
+            !!address &&
+            !!selectedListingForOffers?.seller &&
+            address.toLowerCase() === selectedListingForOffers.seller.toLowerCase()
+          }
+          isLoading={offersLoading}
           onAcceptOffer={(order) => {
             actionsHook.handleAcceptOffer(order).then((success) => {
               if (success) setOffersDialogOpen(false);
@@ -901,6 +1196,69 @@ export default function MarketplacePage() {
           }}
           isAccepting={!!actionsHook.acceptingOfferId}
         />
+
+        {/* Accept Offer Confirmation Dialog */}
+        <Dialog open={acceptOfferConfirmOpen} onOpenChange={setAcceptOfferConfirmOpen}>
+          <DialogContent className="bg-[#0b0b0f] border-gray-800 max-w-md">
+            <DialogHeader>
+              <DialogTitle>Accept Offer</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to accept this offer?
+              </DialogDescription>
+            </DialogHeader>
+            {offerToAccept && (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-4 space-y-3">
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">Beast</p>
+                    <p className="text-white font-semibold">{offerToAccept.beastName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">Offer Amount</p>
+                    <p className="text-xl font-bold text-green-400">{offerToAccept.priceFormatted}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">Buyer</p>
+                    <p className="text-sm text-gray-300 font-mono">
+                      {offerToAccept.buyerAddress.slice(0, 10)}...{offerToAccept.buyerAddress.slice(-8)}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">
+                  By accepting this offer, your beast will be transferred to the buyer and you will receive the payment.
+                </p>
+                <div className="flex justify-end gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setAcceptOfferConfirmOpen(false);
+                      setOfferToAccept(null);
+                    }}
+                    disabled={!!actionsHook.acceptingOfferId}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      if (offerToAccept) {
+                        actionsHook.handleAcceptOffer(offerToAccept.offer).then((success) => {
+                          if (success) {
+                            setAcceptOfferConfirmOpen(false);
+                            setOfferToAccept(null);
+                          }
+                        });
+                      }
+                    }}
+                    disabled={!!actionsHook.acceptingOfferId}
+                    className="bg-green-600 hover:bg-green-500 text-white"
+                  >
+                    {actionsHook.acceptingOfferId ? "Accepting..." : "Confirm & Accept"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
         <FiltersDrawer
           open={filtersOpen}
@@ -927,11 +1285,12 @@ export default function MarketplacePage() {
             cartsHook.setPurchaseCart([]);
             cartsHook.setBeastPrices(new Map());
           }}
-          onExecuteAll={() =>
+          onExecuteAll={(validBuyItems) =>
             actionsHook.handleExecuteUnifiedCart(
               cartsHook.cartBeasts,
               cartsHook.purchaseCart,
-              cartsHook.beastPrices
+              cartsHook.beastPrices,
+              validBuyItems
             ).then((success) => {
               if (success) setUnifiedCartOpen(false);
             })

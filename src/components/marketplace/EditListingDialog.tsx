@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,8 +19,18 @@ import {
 } from "../../services/marketplace/constants";
 import { toWei, fromWei, TOKEN_DECIMALS } from "../../utils/price";
 import { toast } from "sonner";
-import { editListingFlow } from "../../services/marketplace/flows";
-import type { AccountInterface } from "starknet";
+import type { AccountInterface, BigNumberish } from "starknet";
+
+// Error messages that indicate user rejection
+const USER_REJECTION_PATTERNS = [
+  "user abort",
+  "user rejected",
+  "user denied",
+  "user cancelled",
+  "rejected by user",
+  "transaction was rejected",
+  "cancel",
+];
 
 const CUSTOM_DURATION_VALUE = "custom";
 
@@ -34,13 +44,23 @@ const DURATION_SELECT_OPTIONS = [
 
 const DEFAULT_DURATION_VALUE = String(DEFAULT_LISTING_DURATION_SECONDS);
 
+type EditListingFn = (
+  account: AccountInterface,
+  orderId: BigNumberish,
+  collection: string,
+  tokenId: BigNumberish,
+  quantity: BigNumberish,
+  newPrice: BigNumberish,
+  currency: string,
+  expiration: BigNumberish
+) => Promise<unknown>;
+
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   listing: Listing | null;
   account: AccountInterface | undefined;
-  cancel: any;
-  list: any;
+  editListing: EditListingFn;
   onEdited?: (result?: { tokenId: string; beastName: string; newPrice: string; currency: string }) => void;
 };
 
@@ -49,8 +69,7 @@ export default function EditListingDialog({
   onOpenChange,
   listing,
   account,
-  cancel,
-  list,
+  editListing,
   onEdited,
 }: Props) {
   const [price, setPrice] = useState("");
@@ -59,6 +78,8 @@ export default function EditListingDialog({
   const [customExpiration, setCustomExpiration] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const toastIdRef = useRef<string | number | null>(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     if (open && listing) {
@@ -177,6 +198,25 @@ export default function EditListingDialog({
     );
   }, [account, listing, priceBigInt, expirationDetails.error, expirationDetails.expirationSeconds]);
 
+  const isUserRejection = useCallback((error: Error): boolean => {
+    const message = error.message?.toLowerCase() || "";
+    return USER_REJECTION_PATTERNS.some(pattern => message.includes(pattern));
+  }, []);
+
+  const handleOpenChange = useCallback((newOpen: boolean) => {
+    // If closing while submitting, dismiss toast and show cancelled
+    if (!newOpen && submittingRef.current) {
+      if (toastIdRef.current) {
+        toast.dismiss(toastIdRef.current);
+        toast.info("Update cancelled");
+        toastIdRef.current = null;
+      }
+      setSubmitting(false);
+      submittingRef.current = false;
+    }
+    onOpenChange(newOpen);
+  }, [onOpenChange]);
+
   const onSubmit = async () => {
     if (!account || !listing) return;
     if (priceBigInt === null) {
@@ -185,8 +225,10 @@ export default function EditListingDialog({
     }
 
     setSubmitting(true);
+    submittingRef.current = true;
     setError(null);
     const toastId = toast.loading("Updating listing...");
+    toastIdRef.current = toastId;
 
     try {
       const expirationSeconds = expirationDetails.expirationSeconds;
@@ -196,21 +238,20 @@ export default function EditListingDialog({
       const expiration = BigInt(expirationSeconds);
       const quantity = listing.quantity ?? 1;
 
-      await editListingFlow(
-        { cancel, list },
-        {
-          account: account as any,
-          collectionAddress: BEASTS_COLLECTION_ADDRESS,
-          tokenId: listing.tokenId,
-          orderId: listing.orderId ?? 0,
-          newPrice: priceBigInt.toString(),
-          currencyAddress,
-          quantity,
-          expiration,
-        }
+      // Use atomic editListing - combines cancel + list in single transaction
+      await editListing(
+        account,
+        listing.orderId ?? 0,
+        BEASTS_COLLECTION_ADDRESS,
+        listing.tokenId,
+        quantity,
+        priceBigInt.toString(),
+        currencyAddress,
+        expiration
       );
 
       toast.success("Listing updated successfully!", { id: toastId });
+      toastIdRef.current = null;
       onOpenChange(false);
       setPrice("");
       onEdited?.({
@@ -220,16 +261,25 @@ export default function EditListingDialog({
         currency: selectedToken.symbol,
       });
     } catch (e) {
-      const errorMessage = (e as Error).message || "Failed to update listing";
-      setError(errorMessage);
-      toast.error(errorMessage, { id: toastId });
+      const err = e as Error;
+
+      if (isUserRejection(err)) {
+        // User rejected the transaction
+        toast.info("Transaction cancelled by user", { id: toastId });
+      } else {
+        const errorMessage = err.message || "Failed to update listing";
+        setError(errorMessage);
+        toast.error(errorMessage, { id: toastId });
+      }
+      toastIdRef.current = null;
     } finally {
       setSubmitting(false);
+      submittingRef.current = false;
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="bg-[#0b0b0f] border-gray-800">
         <DialogHeader>
           <DialogTitle>Edit Listing</DialogTitle>
@@ -241,6 +291,15 @@ export default function EditListingDialog({
           <p className="text-sm text-gray-400">No listing selected.</p>
         ) : (
           <div className="space-y-4">
+            {listing.beast?.image && (
+              <div className="flex justify-center">
+                <img
+                  src={listing.beast.image}
+                  alt={listing.beast.name}
+                  className="max-w-[200px] w-full rounded-lg"
+                />
+              </div>
+            )}
             <div>
               <p className="text-sm text-gray-400">Beast</p>
               <p className="text-sm font-medium">{listing.beast?.name || `#${listing.tokenId}`}</p>
@@ -316,7 +375,7 @@ export default function EditListingDialog({
             </div>
             {error && <p className="text-sm text-red-400">{error}</p>}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+              <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={submitting}>
                 Cancel
               </Button>
               <Button onClick={onSubmit} disabled={!canSubmit || submitting}>

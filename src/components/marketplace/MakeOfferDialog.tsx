@@ -23,10 +23,12 @@ import {
   BEASTS_COLLECTION_ADDRESS,
   DEFAULT_LISTING_DURATION_SECONDS,
   LISTING_DURATION_OPTIONS,
+  CLIENT_FEE_BP,
 } from "../../services/marketplace/constants";
-import { useMarketplaceActions } from "@cartridge/marketplace";
-import { toWei, TOKEN_DECIMALS } from "../../utils/price";
+import { useMarketplace, useMarketplaceActions } from "@cartridge/marketplace";
+import { toWei, fromWei, TOKEN_DECIMALS } from "../../utils/price";
 import { toast } from "sonner";
+import { cairo, CallData } from "starknet";
 
 const CUSTOM_DURATION_VALUE = "custom";
 
@@ -69,7 +71,8 @@ export default function MakeOfferDialog({
   const [customExpiration, setCustomExpiration] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { offer } = useMarketplaceActions();
+  const marketplace = useMarketplace();
+  const { buildOfferCalls } = useMarketplaceActions();
 
   useEffect(() => {
     if (open) {
@@ -116,6 +119,20 @@ export default function MakeOfferDialog({
       return null;
     }
   }, [price, selectedToken]);
+
+  // Calculate fee and total (fee is paid by buyer)
+  const feeDetails = useMemo(() => {
+    if (!priceBigInt) return null;
+    const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
+    const totalAmount = priceBigInt + feeAmount;
+    const decimals = TOKEN_DECIMALS[selectedToken.symbol] ?? 18;
+    return {
+      feeAmount,
+      totalAmount,
+      feeFormatted: fromWei(feeAmount, decimals),
+      totalFormatted: fromWei(totalAmount, decimals),
+    };
+  }, [priceBigInt, selectedToken]);
 
   const toLocalInputValue = (date: Date) => {
     const timezoneOffset = date.getTimezoneOffset() * 60000;
@@ -195,14 +212,14 @@ export default function MakeOfferDialog({
 
   const onSubmit = async () => {
     if (!account || (!beast && !tokenId)) return;
-    if (priceBigInt === null) {
+    if (priceBigInt === null || !feeDetails) {
       toast.error("Please enter a valid offer amount greater than 0");
       return;
     }
 
     setSubmitting(true);
     setError(null);
-    const toastId = toast.loading("Making offer...");
+    const toastId = toast.loading("Preparing offer...");
 
     try {
       const rawTokenId = beast?.id
@@ -215,14 +232,32 @@ export default function MakeOfferDialog({
       }
       const expirationBigInt = BigInt(expirationSeconds);
 
-      await offer(
-        account as any,
+      // Use SDK's buildOfferCalls to get properly configured calls
+      // Then modify the approval amount to include the fee
+      const calls = buildOfferCalls(
         BEASTS_COLLECTION_ADDRESS,
         tokenIdBigInt,
-        0n,
+        0n, // quantity - must be 0n for ERC721 offers (same as original SDK call)
         priceBigInt,
         currencyAddress,
         expirationBigInt
+      );
+
+      // Modify the first call (approval) to use totalAmount (price + fee)
+      if (calls[0] && calls[0].entrypoint === "approve") {
+        const existingCalldata = calls[0].calldata as string[];
+        calls[0].calldata = CallData.compile({
+          spender: existingCalldata[0], // Keep the same spender from SDK
+          amount: cairo.uint256(feeDetails.totalAmount), // Use price + fee
+        });
+      }
+
+      // Execute the modified calls
+      toast.loading("Making offer...", { id: toastId });
+      await marketplace.provider.execute(
+        account as any,
+        calls,
+        "MARKETPLACE"
       );
 
       toast.success("Offer made successfully!", { id: toastId });
@@ -239,15 +274,28 @@ export default function MakeOfferDialog({
       });
     } catch (e) {
       const errorMessage = (e as Error).message || "Failed to make offer";
+      const lowerError = errorMessage.toLowerCase();
 
       // Check if user cancelled the transaction
       if (
-        errorMessage.toLowerCase().includes("user") &&
-        (errorMessage.toLowerCase().includes("reject") ||
-          errorMessage.toLowerCase().includes("cancel") ||
-          errorMessage.toLowerCase().includes("abort"))
+        lowerError.includes("user") &&
+        (lowerError.includes("reject") ||
+          lowerError.includes("cancel") ||
+          lowerError.includes("abort"))
       ) {
         toast.info("Offer cancelled", { id: toastId });
+      } else if (
+        lowerError.includes("insufficient") ||
+        lowerError.includes("balance") ||
+        lowerError.includes("invalid balance")
+      ) {
+        // Insufficient balance error
+        toast.error("Insufficient balance to make this offer", { id: toastId });
+        setError("Insufficient balance");
+      } else if (lowerError.includes("invalid value")) {
+        // Contract validation error
+        toast.error("Offer rejected: The marketplace contract rejected this offer. The currency may not be supported.", { id: toastId });
+        setError("Currency may not be supported for offers");
       } else {
         setError(errorMessage);
         toast.error(errorMessage, { id: toastId });
@@ -357,6 +405,23 @@ export default function MakeOfferDialog({
               </p>
             ) : null}
           </div>
+          {/* Fee breakdown */}
+          {feeDetails && priceBigInt && (
+            <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-3 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Offer Amount</span>
+                <span className="text-white">{price} {selectedToken.symbol}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Platform Fee (2%)</span>
+                <span className="text-gray-300">{feeDetails.feeFormatted} {selectedToken.symbol}</span>
+              </div>
+              <div className="border-t border-gray-700 pt-2 flex justify-between text-sm font-semibold">
+                <span className="text-gray-300">Total Cost</span>
+                <span className="text-lsGold">{feeDetails.totalFormatted} {selectedToken.symbol}</span>
+              </div>
+            </div>
+          )}
           {error && <p className="text-sm text-red-400">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button

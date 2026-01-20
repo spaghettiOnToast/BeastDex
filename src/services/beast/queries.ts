@@ -355,14 +355,23 @@ export function buildBeastByIdQuery(id: string, tokenHex?: string) {
 
   const idClause = hasId ? `LOWER(t.id) = '${escapedIdLower}'` : "";
 
-  const hexClause = normalisedHex
-    ? `LOWER(
+  // For numeric IDs, also generate the padded version for comparison
+  let hexClause = "";
+  if (normalisedHex) {
+    const hexVariants = [escapedHex];
+    // If it's an unpadded hex, also include the padded version
+    if (normalisedHex.startsWith("0x") && normalisedHex.length < 66) {
+      const paddedHex = `0x${normalisedHex.slice(2).padStart(64, "0")}`;
+      hexVariants.push(escapeSqlLiteral(paddedHex));
+    }
+    const hexList = hexVariants.map(h => `'${h}'`).join(", ");
+    hexClause = `LOWER(
           CASE
             WHEN instr(t.id, ':') > 0 THEN substr(t.id, instr(t.id, ':') + 1)
             ELSE t.token_id
           END
-        ) = '${escapedHex}'`
-    : "";
+        ) IN (${hexList})`;
+  }
 
   const whereClauses = [idClause, hexClause].filter(
     (clause) => clause.length > 0

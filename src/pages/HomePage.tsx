@@ -21,7 +21,7 @@ import {
   type Beast,
 } from "../services/beast";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
-import { getErrorMessage } from "../utils/error";
+import { getUserFriendlyErrorMessage } from "../utils/error";
 import { config } from "../config";
 
 const HIDDEN_FILTER_TRAITS = new Set<string>([
@@ -70,15 +70,21 @@ function HomePage() {
     [beasts]
   );
 
-  const { usernames: ownerUsernames } = useControllerUsernames(ownerAddresses);
+  // Defer username lookups to allow beasts to render first
+  const { usernames: ownerUsernames } = useControllerUsernames(ownerAddresses, {
+    delayMs: 300,
+  });
 
   useEffect(() => {
     const searchQuery = searchParams.get("search") ?? "";
     setSearch(searchQuery);
   }, [searchParams]);
 
+  // Staggered data loading to avoid overwhelming the indexer
+  // Filters load first (needed for UI), then stats and highlights after a delay
   useEffect(() => {
     let mounted = true;
+
     async function loadFilters() {
       try {
         setFiltersLoading(true);
@@ -101,23 +107,15 @@ function HomePage() {
           return Object.fromEntries(nextEntries) as BeastAttributeFilters;
         });
       } catch (error: unknown) {
-        console.error("❌ Failed to load beast filters", error);
+        console.error("Failed to load beast filters", error);
         if (!mounted) return;
-        setFiltersError(getErrorMessage(error, "Failed to load filters"));
+        setFiltersError(getUserFriendlyErrorMessage(error, "Failed to load filters"));
       } finally {
         if (!mounted) return;
         setFiltersLoading(false);
       }
     }
 
-    loadFilters();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
     async function loadBeastStats() {
       try {
         setMintedLoading(true);
@@ -126,23 +124,15 @@ function HomePage() {
         if (!mounted) return;
         setBeastStats(stats);
       } catch (error: unknown) {
-        console.error("❌ Failed to load minted beast count", error);
+        console.error("Failed to load minted beast count", error);
         if (!mounted) return;
-        setMintedError(getErrorMessage(error, "Failed to load beast stats"));
+        setMintedError(getUserFriendlyErrorMessage(error, "Failed to load beast stats"));
       } finally {
         if (!mounted) return;
         setMintedLoading(false);
       }
     }
 
-    loadBeastStats();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
     async function loadHighlights() {
       try {
         setHighlightsLoading(true);
@@ -151,10 +141,10 @@ function HomePage() {
         if (!mounted) return;
         setHighlights(highlightsData);
       } catch (error: unknown) {
-        console.error("❌ Failed to load beast highlights", error);
+        console.error("Failed to load beast highlights", error);
         if (!mounted) return;
         setHighlightsError(
-          getErrorMessage(error, "Failed to load beast highlights")
+          getUserFriendlyErrorMessage(error, "Failed to load beast highlights")
         );
       } finally {
         if (!mounted) return;
@@ -162,9 +152,22 @@ function HomePage() {
       }
     }
 
-    loadHighlights();
+    // Load filters first (needed for UI interaction)
+    loadFilters();
+
+    // Stagger secondary data loading to reduce initial burst
+    const statsTimer = setTimeout(() => {
+      if (mounted) loadBeastStats();
+    }, 500);
+
+    const highlightsTimer = setTimeout(() => {
+      if (mounted) loadHighlights();
+    }, 1000);
+
     return () => {
       mounted = false;
+      clearTimeout(statsTimer);
+      clearTimeout(highlightsTimer);
     };
   }, []);
 
@@ -279,6 +282,7 @@ function HomePage() {
         onRefresh={() => reload()}
         refreshing={loading}
         filtersControl={filtersAndSortControls}
+        globalError={error}
       />
 
       <BeastGrid
@@ -288,19 +292,6 @@ function HomePage() {
         loading={loading}
         emptyMessage={config.ui.emptyMessages.beasts}
       />
-
-      {error && (
-        <div className="text-center text-red-400">
-          <p>❌ {error}</p>
-          <button
-            onClick={() => reload()}
-            type="button"
-            className="mt-2 text-lsGold hover:underline"
-          >
-            Try again
-          </button>
-        </div>
-      )}
 
       {/* Pagination at bottom */}
       <div className="flex justify-center">

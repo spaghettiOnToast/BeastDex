@@ -1,13 +1,17 @@
 import { useState, useCallback } from "react";
 import { toast } from "sonner";
-import type { AccountInterface } from "starknet";
+import type { AccountInterface, BigNumberish } from "starknet";
 import type { Beast } from "../../../services/beast";
 import type { Listing } from "../../../services/marketplace/types";
 import type { OrderModel } from "@cartridge/marketplace";
-import { useMarketplaceActions as useCartridgeMarketplaceActions } from "@cartridge/marketplace";
+import {
+  useMarketplaceActions as useCartridgeMarketplaceActions,
+  useMarketplace,
+} from "@cartridge/marketplace";
 import {
   checkSufficientBalance,
   ensureErc20Allowance,
+  ensureCollectionApproval,
   executePurchaseWithApproval,
   validateListingOwnership,
   getProvider,
@@ -38,14 +42,66 @@ export function useMarketplaceActions({
   refetchOrders,
   reloadUserBeasts,
 }: UseMarketplaceActionsProps) {
-  const { executeListing, cancel, list, executeOffer } =
+  const { executeListing, cancel, list, executeOffer, buildListCalls } =
     useCartridgeMarketplaceActions();
+  const marketplaceCtx = useMarketplace();
 
   // Action state
   const [buyingListingId, setBuyingListingId] = useState<string | null>(null);
   const [acceptingOfferId, setAcceptingOfferId] = useState<string | null>(null);
   const [purchasingBatch, setPurchasingBatch] = useState(false);
   const [listingBatch, setListingBatch] = useState(false);
+
+  /**
+   * Edit a listing atomically (cancel + relist in single transaction)
+   * This ensures the user only needs to approve one transaction.
+   */
+  const editListing = useCallback(
+    async (
+      snAccount: AccountInterface,
+      orderId: BigNumberish,
+      collection: string,
+      tokenId: BigNumberish,
+      quantity: BigNumberish,
+      newPrice: BigNumberish,
+      currency: string,
+      expiration: BigNumberish
+    ) => {
+      try {
+        // Build cancel call using the marketplace provider
+        const cancelCall = marketplaceCtx.provider.marketplace.buildCancelCalldata(
+          orderId,
+          collection,
+          tokenId
+        );
+
+        // Build list calls (includes approval + list)
+        const listCalls = buildListCalls(
+          collection,
+          tokenId,
+          quantity,
+          newPrice,
+          currency,
+          expiration
+        );
+
+        // Combine all calls into a single multicall
+        const allCalls = [cancelCall, ...listCalls];
+
+        // Execute as a single transaction
+        // Cast to any to handle starknet.js Account vs AccountInterface typing
+        return await marketplaceCtx.provider.execute(
+          snAccount as any,
+          allCalls,
+          "MARKETPLACE"
+        );
+      } catch (error) {
+        console.error("Edit listing error:", error);
+        throw error;
+      }
+    },
+    [marketplaceCtx, buildListCalls]
+  );
 
   /**
    * Handle successful listing
@@ -297,6 +353,10 @@ export function useMarketplaceActions({
 
   /**
    * Handle accepting an offer
+   * When a seller accepts a buyer's offer:
+   * 1. Validate seller still owns the NFT (prevents wasted gas)
+   * 2. Seller must approve marketplace to transfer their NFT
+   * 3. Execute the offer (transfers NFT to buyer, payment to seller)
    */
   const handleAcceptOffer = useCallback(
     async (order: OrderModel) => {
@@ -308,7 +368,7 @@ export function useMarketplaceActions({
 
       const offerId = order.id?.toString() || "";
       setAcceptingOfferId(offerId);
-      const toastId = toast.loading("Accepting offer...");
+      const toastId = toast.loading("Validating ownership...");
 
       try {
         const tokenIdBigInt = toBigInt(order.tokenId);
@@ -316,14 +376,35 @@ export function useMarketplaceActions({
         const currency = order.currency;
         const orderId = toBigInt(order.id);
 
-        // Execute the offer (seller accepts buyer's offer)
+        // Step 1: Validate that the current user (seller) still owns the NFT
+        // This prevents wasted gas fees if they no longer own it
+        const provider = getProvider(account);
+        const isOwner = await validateListingOwnership(
+          provider,
+          BEASTS_COLLECTION_ADDRESS,
+          tokenIdBigInt,
+          account.address
+        );
+
+        if (!isOwner) {
+          toast.error("You no longer own this beast. Cannot accept offer.", { id: toastId });
+          setAcceptingOfferId(null);
+          return false;
+        }
+
+        // Step 2: Ensure the seller has approved the marketplace to transfer their NFT
+        toast.loading("Approving NFT transfer...", { id: toastId });
+        await ensureCollectionApproval(account);
+
+        // Step 3: Execute the offer (seller accepts buyer's offer)
+        toast.loading("Accepting offer...", { id: toastId });
         await executeOffer(
           account as any,
           orderId,
           BEASTS_COLLECTION_ADDRESS,
           tokenIdBigInt,
-          BigInt(order.quantity ?? 0),
-          true, // taker fulfills taker
+          BigInt(order.quantity ?? 1),
+          true, // royalties enabled
           currency,
           priceBigInt,
           BigInt(CLIENT_FEE_BP),
@@ -339,7 +420,30 @@ export function useMarketplaceActions({
       } catch (error) {
         const errorMessage =
           (error as Error).message || "Failed to accept offer";
-        toast.error(errorMessage, { id: toastId });
+        const lowerError = errorMessage.toLowerCase();
+
+        // Check for user rejection - cover multiple patterns
+        const isUserRejection =
+          (lowerError.includes("user") && (
+            lowerError.includes("reject") ||
+            lowerError.includes("cancel") ||
+            lowerError.includes("abort") ||
+            lowerError.includes("denied")
+          )) ||
+          lowerError.includes("user rejected") ||
+          lowerError.includes("user cancelled") ||
+          lowerError.includes("user denied") ||
+          lowerError.includes("rejected by user") ||
+          lowerError.includes("cancelled by user") ||
+          lowerError.includes("transaction was rejected");
+
+        if (isUserRejection) {
+          toast.info("Transaction cancelled", { id: toastId });
+        } else if (lowerError.includes("invalid value")) {
+          toast.error("Offer rejected by marketplace contract", { id: toastId });
+        } else {
+          toast.error(errorMessage, { id: toastId });
+        }
         return false;
       } finally {
         setAcceptingOfferId(null);
@@ -350,21 +454,29 @@ export function useMarketplaceActions({
 
   /**
    * Execute unified cart (listings + purchases)
+   * @param cartBeasts - Beasts to list
+   * @param purchaseCart - All listings in cart
+   * @param beastPrices - Prices for beasts to list
+   * @param validBuyItems - Optional: only valid buy items (if validation found invalid items)
    */
   const handleExecuteUnifiedCart = useCallback(
     async (
       cartBeasts: Beast[],
       purchaseCart: Listing[],
-      beastPrices: Map<string, string>
+      beastPrices: Map<string, string>,
+      validBuyItems?: Listing[]
     ) => {
       if (!account?.address) {
         toast.error("Please connect your wallet");
         return;
       }
 
+      // Use validBuyItems if provided (from cart validation), otherwise use all purchaseCart items
+      const itemsToPurchase = validBuyItems ?? purchaseCart;
+
       // Check if we have items to process
       const hasListings = cartBeasts.length > 0;
-      const hasPurchases = purchaseCart.length > 0;
+      const hasPurchases = itemsToPurchase.length > 0;
 
       if (!hasListings && !hasPurchases) {
         toast.error("Cart is empty");
@@ -406,7 +518,7 @@ export function useMarketplaceActions({
           const provider = getProvider(account);
 
           let successCount = 0;
-          for (const listing of purchaseCart) {
+          for (const listing of itemsToPurchase) {
             try {
               if (!listing.active) {
                 continue;
@@ -512,5 +624,6 @@ export function useMarketplaceActions({
     cancel,
     list,
     executeOffer,
+    editListing,
   };
 }

@@ -24,6 +24,9 @@ export function useApi<T>(
   });
 
   const requestIdRef = useRef(0);
+  // Store apiFn in a ref to avoid stale closures in the effect
+  const apiFnRef = useRef(apiFn);
+  apiFnRef.current = apiFn;
 
   const refetch = useCallback(async () => {
     if (!enabled) return;
@@ -34,7 +37,7 @@ export function useApi<T>(
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      const result = await apiFn();
+      const result = await apiFnRef.current();
 
       if (currentRequestId === requestIdRef.current) {
         setState({ data: result, loading: false, error: null });
@@ -48,13 +51,14 @@ export function useApi<T>(
         });
       }
     }
-  }, [apiFn, enabled]);
+  }, [enabled]);
 
   useEffect(() => {
     if (immediate && enabled) {
       refetch();
     }
-  }, [...deps, enabled, immediate, refetch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [...deps, enabled, immediate]);
 
   return {
     ...state,

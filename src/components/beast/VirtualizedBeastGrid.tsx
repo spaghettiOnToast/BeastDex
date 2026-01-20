@@ -1,7 +1,7 @@
 import { memo, useMemo } from "react";
 import { Grid } from "react-window";
 import type { Beast } from "../../services/beast";
-import BeastCard from "../BeastCard";
+import BeastCard from "./BeastCard";
 import { normaliseStarknetAddress } from "../../utils/address";
 
 type VirtualizedBeastGridProps = {

@@ -7,7 +7,7 @@ import {
 } from "@starknet-react/core";
 import { mainnet, type Chain } from "@starknet-react/chains";
 import { connectors } from "./wallet/controller";
-import ErrorBoundary from "./components/ErrorBoundary";
+import ErrorBoundary from "./components/common/ErrorBoundary";
 import { GlobalSearchProvider } from "./hooks/useGlobalSearch";
 import { Toaster } from "sonner";
 

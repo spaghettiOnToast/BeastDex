@@ -5,6 +5,7 @@ import type {
   BigNumberish,
 } from "starknet";
 import { BEASTS_COLLECTION_ADDRESS, MARKETPLACE_ADDRESS } from "./constants";
+import { compareStarknetAddresses } from "../../utils/address";
 
 type Uint256 = [string, string];
 
@@ -279,18 +280,6 @@ async function getTokenOwner(
 }
 
 /**
- * Normalize a Starknet address to a consistent format for comparison
- * Converts to lowercase, removes 0x prefix, strips leading zeros, then re-adds 0x
- */
-function normalizeStarknetAddress(address: string): string {
-  if (!address) return '';
-  // Remove 0x prefix, convert to lowercase, strip leading zeros
-  const cleaned = address.toLowerCase().replace(/^0x/i, '').replace(/^0+/, '');
-  // If the result is empty (address was all zeros), return "0"
-  return '0x' + (cleaned || '0');
-}
-
-/**
  * Validate that a listing is still valid by checking if the seller still owns the token
  * @returns true if the listing is valid (seller still owns the token), false otherwise
  */
@@ -306,15 +295,10 @@ export async function validateListingOwnership(
     return false; // Unable to verify ownership
   }
 
-  // Normalize addresses for comparison - Starknet addresses can have different formats
-  // (with/without leading zeros, different padding)
-  const normalizedActual = normalizeStarknetAddress(actualOwner);
-  const normalizedExpected = normalizeStarknetAddress(expectedOwner);
-
-  const isValid = normalizedActual === normalizedExpected;
+  const isValid = compareStarknetAddresses(actualOwner, expectedOwner);
 
   if (!isValid && import.meta.env.DEV) {
-    console.log(`[validateListingOwnership] Mismatch: actual=${normalizedActual}, expected=${normalizedExpected}`);
+    console.log(`[validateListingOwnership] Mismatch: actual=${actualOwner}, expected=${expectedOwner}`);
   }
 
   return isValid;

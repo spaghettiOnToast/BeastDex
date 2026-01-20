@@ -19,6 +19,7 @@ type Props = {
   tokenId: string;
   orders: OrderModel[];
   isOwner: boolean;
+  isLoading?: boolean;
   onAcceptOffer?: (order: OrderModel) => void;
   isAccepting?: boolean;
 };
@@ -29,6 +30,7 @@ export default function OffersDialog({
   tokenId,
   orders,
   isOwner,
+  isLoading,
   onAcceptOffer,
   isAccepting,
 }: Props) {
@@ -83,16 +85,22 @@ export default function OffersDialog({
         <DialogHeader>
           <DialogTitle>Offers on Beast #{tokenId}</DialogTitle>
           <DialogDescription>
-            {offers.length === 0
-              ? "No active offers on this beast. Offer viewing is being integrated with the indexer."
+            {isLoading
+              ? "Loading offers..."
+              : offers.length === 0
+              ? "No active offers on this beast yet."
               : isOwner
               ? "Review and accept offers from potential buyers."
-              : "Active offers from other users."}
+              : "View active offers from other users."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          {offers.length === 0 ? (
+          {isLoading ? (
+            <p className="text-sm text-gray-400 text-center py-8">
+              Loading offers...
+            </p>
+          ) : offers.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-8">
               No offers yet. Be the first to make an offer!
             </p>

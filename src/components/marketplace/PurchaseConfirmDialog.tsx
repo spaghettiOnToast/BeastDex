@@ -10,6 +10,7 @@ import { Button } from "../ui/button";
 import type { Listing } from "../../services/marketplace/types";
 import { formatPrice } from "../../utils/price";
 import { getPaymentTokenByAddress } from "../../services/marketplace/constants";
+import { toBigIntSafe } from "../../utils/bigint";
 import TokenIcon from "../ui/TokenIcon";
 
 type Props = {
@@ -31,7 +32,7 @@ export default function PurchaseConfirmDialog({
 }: Props) {
   if (!listing) return null;
 
-  const priceBigInt = BigInt(listing.price);
+  const priceBigInt = toBigIntSafe(listing.price);
   // Buyer pays 2% platform fee (200 basis points out of 10000)
   const BUYER_FEE_BP = 200; // 2%
   const buyerFeeBigInt = (priceBigInt * BigInt(BUYER_FEE_BP)) / 10000n;
@@ -58,7 +59,7 @@ export default function PurchaseConfirmDialog({
               <img
                 src={listing.beast.image}
                 alt={listing.beast.name}
-                className="w-32 h-32 rounded object-cover"
+                className="max-w-[200px] w-full rounded-lg"
               />
             </div>
           )}

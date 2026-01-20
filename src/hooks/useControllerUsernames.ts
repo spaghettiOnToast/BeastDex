@@ -9,7 +9,17 @@ export type ControllerUsernamesState = {
   error: string | null;
 };
 
-export function useControllerUsernames(addresses: Array<string | null | undefined>) {
+export type ControllerUsernamesOptions = {
+  /** Delay in ms before fetching usernames (allows UI to render first) */
+  delayMs?: number;
+};
+
+export function useControllerUsernames(
+  addresses: Array<string | null | undefined>,
+  options: ControllerUsernamesOptions = {}
+) {
+  const { delayMs = 0 } = options;
+
   const [state, setState] = useState<ControllerUsernamesState>({
     usernames: {},
     loading: false,
@@ -27,6 +37,7 @@ export function useControllerUsernames(addresses: Array<string | null | undefine
     }
 
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     async function run() {
       setState((prev) => ({ ...prev, loading: true, error: null }));
@@ -44,12 +55,20 @@ export function useControllerUsernames(addresses: Array<string | null | undefine
       }
     }
 
-    run();
+    if (delayMs > 0) {
+      // Defer username lookup to allow UI to render first
+      timeoutId = setTimeout(() => {
+        if (!cancelled) run();
+      }, delayMs);
+    } else {
+      run();
+    }
 
     return () => {
       cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [uniqueAddresses]);
+  }, [uniqueAddresses, delayMs]);
 
   return state;
 }

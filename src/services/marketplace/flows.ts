@@ -45,6 +45,18 @@ export type EditListingParams<TAccount> = CancelListingParams<TAccount> & {
   expiration?: BigNumberishInput;
 };
 
+export class EditListingError extends Error {
+  public step: "cancel" | "list";
+  public cancelSucceeded: boolean;
+
+  constructor(message: string, step: "cancel" | "list", cancelSucceeded: boolean) {
+    super(message);
+    this.name = "EditListingError";
+    this.step = step;
+    this.cancelSucceeded = cancelSucceeded;
+  }
+}
+
 export async function editListingFlow<TAccount>(
   actions: {
     cancel: (
@@ -84,16 +96,35 @@ export async function editListingFlow<TAccount>(
     expiration ?? getDefaultListingExpiration()
   );
 
-  await actions.cancel(account, orderIdBigInt, collectionAddress, tokenIdBigInt);
-  await actions.list(
-    account,
-    collectionAddress,
-    tokenIdBigInt,
-    quantityBigInt,
-    priceBigInt,
-    currencyAddress,
-    expirationBigInt
-  );
+  // Step 1: Cancel existing listing
+  try {
+    await actions.cancel(account, orderIdBigInt, collectionAddress, tokenIdBigInt);
+  } catch (error) {
+    throw new EditListingError(
+      (error as Error).message || "Failed to cancel existing listing",
+      "cancel",
+      false
+    );
+  }
+
+  // Step 2: Create new listing
+  try {
+    await actions.list(
+      account,
+      collectionAddress,
+      tokenIdBigInt,
+      quantityBigInt,
+      priceBigInt,
+      currencyAddress,
+      expirationBigInt
+    );
+  } catch (error) {
+    throw new EditListingError(
+      (error as Error).message || "Failed to create new listing",
+      "list",
+      true // Cancel already succeeded
+    );
+  }
 }
 
 export { toBigInt };

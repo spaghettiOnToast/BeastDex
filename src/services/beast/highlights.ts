@@ -9,9 +9,9 @@ import {
 import type { BeastHighlights } from "./types";
 import { normaliseStarknetAddress } from "../../utils/address";
 
-const BOOLEAN_TRUE_VALUES = ["1", "true", "True", "TRUE"]; // coarse normalization
+const BOOLEAN_TRUE_VALUES = ["1", "true", "True", "TRUE"];
 
-function buildBaseCte() {
+function buildCombinedHighlightsQuery() {
   return `
     WITH base AS (
       SELECT
@@ -41,17 +41,80 @@ function buildBaseCte() {
       SELECT
         id,
         owner,
-        MAX(CASE WHEN LOWER(trait) LIKE 'shiny%' AND value IN ('${BOOLEAN_TRUE_VALUES.join(
-          "','"
-        )}') THEN 1 ELSE 0 END) AS is_shiny,
-        MAX(CASE WHEN LOWER(trait) LIKE 'animated%' AND value IN ('${BOOLEAN_TRUE_VALUES.join(
-          "','"
-        )}') THEN 1 ELSE 0 END) AS is_animated
+        MAX(CASE WHEN LOWER(trait) LIKE 'shiny%' AND value IN ('${BOOLEAN_TRUE_VALUES.join("','")}') THEN 1 ELSE 0 END) AS is_shiny,
+        MAX(CASE WHEN LOWER(trait) LIKE 'animated%' AND value IN ('${BOOLEAN_TRUE_VALUES.join("','")}') THEN 1 ELSE 0 END) AS is_animated
       FROM base
       GROUP BY id, owner
+    ),
+    counts AS (
+      SELECT
+        (SELECT COUNT(*) FROM normalized WHERE is_shiny = 1 AND is_animated = 1) AS animated_shiny_count,
+        (SELECT COUNT(*) FROM normalized WHERE is_shiny = 1) AS shiny_count,
+        (SELECT COUNT(*) FROM normalized WHERE is_animated = 1) AS animated_count,
+        (SELECT COUNT(*) FROM normalized WHERE is_shiny = 0 AND is_animated = 0) AS standard_count
+    ),
+    leader_overall AS (
+      SELECT 'overall' AS category, owner, COUNT(*) AS value
+      FROM normalized
+      GROUP BY owner
+      ORDER BY value DESC
+      LIMIT 1
+    ),
+    leader_animated_shiny AS (
+      SELECT 'animated_shiny' AS category, owner, COUNT(*) AS value
+      FROM normalized
+      WHERE is_shiny = 1 AND is_animated = 1
+      GROUP BY owner
+      ORDER BY value DESC
+      LIMIT 1
+    ),
+    leader_shiny AS (
+      SELECT 'shiny' AS category, owner, COUNT(*) AS value
+      FROM normalized
+      WHERE is_shiny = 1
+      GROUP BY owner
+      ORDER BY value DESC
+      LIMIT 1
+    ),
+    leader_animated AS (
+      SELECT 'animated' AS category, owner, COUNT(*) AS value
+      FROM normalized
+      WHERE is_animated = 1
+      GROUP BY owner
+      ORDER BY value DESC
+      LIMIT 1
     )
+    SELECT
+      'counts' AS row_type,
+      NULL AS category,
+      NULL AS owner,
+      NULL AS value,
+      c.animated_shiny_count,
+      c.shiny_count,
+      c.animated_count,
+      c.standard_count
+    FROM counts c
+    UNION ALL
+    SELECT 'leader', category, owner, value, NULL, NULL, NULL, NULL FROM leader_overall
+    UNION ALL
+    SELECT 'leader', category, owner, value, NULL, NULL, NULL, NULL FROM leader_animated_shiny
+    UNION ALL
+    SELECT 'leader', category, owner, value, NULL, NULL, NULL, NULL FROM leader_shiny
+    UNION ALL
+    SELECT 'leader', category, owner, value, NULL, NULL, NULL, NULL FROM leader_animated;
   `;
 }
+
+type CombinedRow = {
+  row_type: "counts" | "leader";
+  category: string | null;
+  owner: string | null;
+  value: number | null;
+  animated_shiny_count: number | null;
+  shiny_count: number | null;
+  animated_count: number | null;
+  standard_count: number | null;
+};
 
 let highlightsCache: { data: BeastHighlights; expiresAt: number } | null = null;
 
@@ -61,83 +124,31 @@ export async function fetchBeastHighlights(forceRefresh = false): Promise<BeastH
     return highlightsCache.data;
   }
 
-  const baseCte = buildBaseCte();
+  const query = buildCombinedHighlightsQuery();
+  const rows = await runBeastSql<CombinedRow[]>(query, "fetchBeastHighlights");
 
-  const countsQuery = `
-    ${baseCte}
-    SELECT
-      (SELECT COUNT(*) FROM normalized WHERE is_shiny = 1 AND is_animated = 1) AS animated_shiny_count,
-      (SELECT COUNT(*) FROM normalized WHERE is_shiny = 1) AS shiny_count,
-      (SELECT COUNT(*) FROM normalized WHERE is_animated = 1) AS animated_count,
-      (SELECT COUNT(*) FROM normalized WHERE is_shiny = 0 AND is_animated = 0) AS standard_count;
-  `;
-
-  const leaderboardQuery = `
-    ${baseCte}
-    SELECT 'overall' AS category, owner, value FROM (
-      SELECT owner, COUNT(*) AS value
-      FROM normalized
-      GROUP BY owner
-      ORDER BY value DESC
-      LIMIT 1
-    )
-    UNION ALL
-    SELECT 'animated_shiny' AS category, owner, value FROM (
-      SELECT owner, COUNT(*) AS value
-      FROM normalized
-      WHERE is_shiny = 1 AND is_animated = 1
-      GROUP BY owner
-      ORDER BY value DESC
-      LIMIT 1
-    )
-    UNION ALL
-    SELECT 'shiny' AS category, owner, value FROM (
-      SELECT owner, COUNT(*) AS value
-      FROM normalized
-      WHERE is_shiny = 1
-      GROUP BY owner
-      ORDER BY value DESC
-      LIMIT 1
-    )
-    UNION ALL
-    SELECT 'animated' AS category, owner, value FROM (
-      SELECT owner, COUNT(*) AS value
-      FROM normalized
-      WHERE is_animated = 1
-      GROUP BY owner
-      ORDER BY value DESC
-      LIMIT 1
-    );
-  `;
-
-  const countsRows = await runBeastSql<Array<{ animated_shiny_count: number; shiny_count: number; animated_count: number; standard_count: number }>>(
-    countsQuery,
-    "fetchBeastHighlights-counts"
-  );
-
-  const leaderboardRows = await runBeastSql<Array<{ category: string; owner: string | null; value: number }>>(
-    leaderboardQuery,
-    "fetchBeastHighlights-leaderboards"
-  );
-
-  const counts = countsRows?.[0] ?? {
-    animated_shiny_count: 0,
-    shiny_count: 0,
-    animated_count: 0,
-    standard_count: 0,
+  // Parse counts from the first row
+  const countsRow = rows?.find((r) => r.row_type === "counts");
+  const counts = {
+    animated_shiny_count: countsRow?.animated_shiny_count ?? 0,
+    shiny_count: countsRow?.shiny_count ?? 0,
+    animated_count: countsRow?.animated_count ?? 0,
+    standard_count: countsRow?.standard_count ?? 0,
   };
 
-  const leaders = leaderboardRows ?? [];
-  const leaderMap = leaders.reduce<Record<string, { owner: string | null; value: number }>>((acc, row) => {
-    if (!acc[row.category]) {
+  // Parse leaders from remaining rows
+  const leaderRows = rows?.filter((r) => r.row_type === "leader") ?? [];
+  const leaderMap = leaderRows.reduce<Record<string, { owner: string | null; value: number }>>((acc, row) => {
+    if (row.category && !acc[row.category]) {
       acc[row.category] = { owner: row.owner ?? null, value: row.value ?? 0 };
     }
     return acc;
   }, {});
 
+  // Lookup usernames for leaders
   const uniqueAddresses = Array.from(
     new Set(
-      leaders
+      leaderRows
         .map((row) => row.owner)
         .filter((owner): owner is string => typeof owner === "string" && owner.length > 0)
     )

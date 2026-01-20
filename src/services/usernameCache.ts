@@ -1,5 +1,4 @@
 import { lookupControllerUsernames } from "./controller";
-import { starknetIdService } from "./starknetId";
 import { normaliseStarknetAddresses } from "../utils/address";
 import { config } from "../config";
 
@@ -65,7 +64,7 @@ class UsernameCache {
   private async fetchUsernames(addresses: string[]): Promise<Record<string, string>> {
     const result: Record<string, string> = {};
 
-    // 1. First, try to get Cartridge usernames
+    // 1. Get Cartridge usernames (fast, single API call)
     try {
       const cartridgeUsernames = await lookupControllerUsernames(addresses);
       Object.assign(result, cartridgeUsernames);
@@ -73,27 +72,8 @@ class UsernameCache {
       console.warn("Failed to fetch Cartridge usernames:", error);
     }
 
-    // 2. For addresses without Cartridge usernames, try Starknet.id
-    const addressesWithoutCartridge = addresses.filter(
-      address => !result[address.toLowerCase()]
-    );
-
-    if (addressesWithoutCartridge.length > 0) {
-      try {
-        const starknetIdNames = await starknetIdService.getStarkNames(addressesWithoutCartridge);
-
-        // Add Starknet.id names where found
-        for (const [address, starkName] of Object.entries(starknetIdNames)) {
-          if (starkName && !result[address]) {
-            result[address] = starkName;
-          }
-        }
-      } catch (error) {
-        console.warn("Failed to fetch Starknet.id names:", error);
-      }
-    }
-
-    // 3. For addresses still without names, use truncated wallet address
+    // 2. For addresses without Cartridge usernames, use truncated wallet address
+    // Note: Starknet.id lookups removed for performance - still available via search/account pages
     addresses.forEach(address => {
       const normalizedAddress = address.toLowerCase();
       if (!result[normalizedAddress]) {
