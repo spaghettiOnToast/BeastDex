@@ -7,6 +7,7 @@ import {
 } from "react-router-dom";
 import BeastGrid from "../components/beast/BeastGrid";
 import BeastModal from "../components/beast/BeastModal";
+import { BeastTableView } from "../components/beast/BeastTableView";
 import PaginationControls from "../components/pagination/PaginationControls";
 import { FiltersButton } from "../components/filters/FiltersButton";
 import { FiltersDrawer } from "../components/filters/FiltersDrawer";
@@ -28,6 +29,8 @@ import { starknetIdService } from "../services/starknetId";
 import { getErrorMessage } from "../utils/error";
 import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
 import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
+import { Grid, Table } from "lucide-react";
+import { Button } from "../components/ui/button";
 import type { OverviewCard } from "@/components/account/OverviewCards";
 import {
   calculateTotalPower,
@@ -61,6 +64,8 @@ function AccountPage() {
   const [selectedBeast, setSelectedBeast] = useState<Beast | null>(null);
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+  const [allBeasts, setAllBeasts] = useState<Beast[]>([]);
   const [collectionStats, setCollectionStats] = useState(
     EMPTY_BEAST_COLLECTION_STATS
   );
@@ -347,6 +352,7 @@ function AccountPage() {
 
       // Set collection total and compute stats with ALL beasts for accuracy
       setCollectionTotal(totalCount);
+      setAllBeasts(allUserBeasts);
 
       // Compute stats with complete data (like ProfilePage and CollectionPage)
       const stats = computeBeastCollectionStats(allUserBeasts);
@@ -364,6 +370,7 @@ function AccountPage() {
       setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
       setCollectionTotal(0);
       setCollectionPower(0);
+      setAllBeasts([]);
       setAccountRanking(null);
       setHealthRanking(null);
       setSummaryError(getErrorMessage(err, "Failed to load account summary"));
@@ -684,6 +691,25 @@ function AccountPage() {
           <div className="flex items-center gap-2">
             <SortDropdown value={sortOption} onChange={setSortOption} />
             {filtersControl}
+            {/* View Mode Toggle */}
+            <div className="flex items-center border border-border/50 rounded-md bg-card/90 backdrop-blur-sm">
+              <Button
+                variant={viewMode === "grid" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("grid")}
+                className="rounded-r-none border-0 h-8"
+              >
+                <Grid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === "table" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("table")}
+                className="rounded-l-none border-0 h-8"
+              >
+                <Table className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -694,32 +720,42 @@ function AccountPage() {
           </div>
         ) : null}
 
-        {/* Beast Grid */}
-        <BeastGrid
-          beasts={beasts}
-          ownerUsernames={ownerUsernames}
-          onSelect={handleSelectBeast}
-          loading={loading}
-          emptyMessage="No beasts found for this account."
-        />
-
-        {/* Pagination */}
-        <div className="flex justify-center pb-4">
-          <PaginationControls
-            page={page}
-            totalPages={totalPages}
-            disablePrevious={page === 1 || loading}
-            disableNext={loading || isLastPage}
-            loading={loading}
-            onRefresh={reload}
-            onPrevious={() => setPage((prev) => Math.max(prev - 1, 1))}
-            onNext={() => {
-              if (!loading && hasMore) {
-                setPage((prev) => prev + 1);
-              }
-            }}
+        {/* Grid / Table View */}
+        {viewMode === "table" ? (
+          <BeastTableView
+            beasts={allBeasts}
+            onBeastSelect={handleSelectBeast}
+            ownerUsernames={ownerUsernames}
           />
-        </div>
+        ) : (
+          <BeastGrid
+            beasts={beasts}
+            ownerUsernames={ownerUsernames}
+            onSelect={handleSelectBeast}
+            loading={loading}
+            emptyMessage="No beasts found for this account."
+          />
+        )}
+
+        {/* Pagination - only show for grid view */}
+        {viewMode === "grid" && (
+          <div className="flex justify-center pb-4">
+            <PaginationControls
+              page={page}
+              totalPages={totalPages}
+              disablePrevious={page === 1 || loading}
+              disableNext={loading || isLastPage}
+              loading={loading}
+              onRefresh={reload}
+              onPrevious={() => setPage((prev) => Math.max(prev - 1, 1))}
+              onNext={() => {
+                if (!loading && hasMore) {
+                  setPage((prev) => prev + 1);
+                }
+              }}
+            />
+          </div>
+        )}
 
         {/* Beast Modal */}
         <BeastModal
