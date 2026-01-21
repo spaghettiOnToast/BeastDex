@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { PAYMENT_TOKENS } from './constants';
+import { fetchEkuboTokens } from '../tokens/ekubo';
 
 export type RatesInSTRK = {
   STRK: number;
@@ -94,8 +94,6 @@ async function fetchTokenPriceInUSDC(tokenAddress: string): Promise<number | nul
     // Quoter API format: /{chainId}/{amount}/{tokenAddress}/{quoteToken}
     const apiUrl = `${EKUBO_QUOTER_API_BASE}/${CHAIN_ID_DECIMAL}/${STANDARD_AMOUNT}/${tokenAddress}/${USDC_ADDRESS}`;
 
-    console.log(`Fetching price from quoter API: ${apiUrl}`);
-
     const fetchPromise = (async () => {
       const response = await fetch(apiUrl);
 
@@ -110,8 +108,6 @@ async function fetchTokenPriceInUSDC(tokenAddress: string): Promise<number | nul
 
       const quoteResponse: QuoterResponse = await response.json();
 
-      console.log(`Fetched quote for ${tokenAddress}:`, quoteResponse);
-
       // The quoter returns the amount of USDC we'd get for the input amount
       // USDC has 6 decimals, so divide by 10^6 to get the dollar price
       if (!quoteResponse.total_calculated) {
@@ -125,19 +121,19 @@ async function fetchTokenPriceInUSDC(tokenAddress: string): Promise<number | nul
 
     // Race between the timeout and the fetch
     return await Promise.race([fetchPromise, timeoutPromise]);
-  } catch (error) {
-    console.error(`Error fetching price for ${tokenAddress}:`, error);
+  } catch {
     return null;
   }
 }
 
 async function fetchEkuboRates(): Promise<RatesInSTRK> {
   try {
-    // Get token addresses from payment tokens
-    const strkToken = PAYMENT_TOKENS.find((t) => t.symbol === 'STRK');
-    const lordsToken = PAYMENT_TOKENS.find((t) => t.symbol === 'LORDS');
-    const ethToken = PAYMENT_TOKENS.find((t) => t.symbol === 'ETH');
-    const survivorToken = PAYMENT_TOKENS.find((t) => t.symbol === 'SURVIVOR');
+    // Get token addresses from Ekubo API
+    const tokens = await fetchEkuboTokens();
+    const strkToken = tokens.find((t) => t.symbol === 'STRK');
+    const lordsToken = tokens.find((t) => t.symbol === 'LORDS');
+    const ethToken = tokens.find((t) => t.symbol === 'ETH');
+    const survivorToken = tokens.find((t) => t.symbol === 'SURVIVOR');
 
     // Fetch all prices in parallel, denominated in USDC
     const [strkUsdcPrice, lordsUsdcPrice, ethUsdcPrice, survivorUsdcPrice] =
@@ -174,18 +170,11 @@ async function fetchEkuboRates(): Promise<RatesInSTRK> {
       }
     }
 
-    console.log('Ekubo rates fetched:', {
-      prices: { strkUsdcPrice, lordsUsdcPrice, ethUsdcPrice, survivorUsdcPrice },
-      rates,
-    });
-
     // Cache the rates
     setCachedRates(rates);
 
     return rates;
-  } catch (error) {
-    console.error('Error fetching Ekubo rates:', error);
-
+  } catch {
     // Fallback to env-provided rates if available
     const env = (import.meta as any).env || {};
     const lords = parseFloat(env.VITE_RATE_LORDS_IN_STRK || '');

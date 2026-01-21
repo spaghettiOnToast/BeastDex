@@ -25,7 +25,7 @@ interface UseRecentSalesProps {
  */
 export function useRecentSales({ listings, limit = 20 }: UseRecentSalesProps) {
   // Fetch sales via GraphQL
-  const { data: sales = [], isLoading, refetch: refetchSales } = useArcadeSalesForCollection(
+  const { data: sales = [], isLoading, refetch: refetchSales, invalidateAndRefetch } = useArcadeSalesForCollection(
     BEASTS_COLLECTION_ADDRESS,
     limit
   );
@@ -61,5 +61,6 @@ export function useRecentSales({ listings, limit = 20 }: UseRecentSalesProps) {
     namedRecentSales: recentSales,
     isLoading,
     refetchSales,
+    invalidateAndRefetch,
   };
 }

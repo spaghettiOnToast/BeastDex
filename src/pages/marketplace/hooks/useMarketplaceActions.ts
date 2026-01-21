@@ -25,6 +25,7 @@ import {
 } from "../../../services/marketplace/constants";
 import { fromWei, TOKEN_DECIMALS } from "../../../utils/price";
 import { toBigIntSafe } from "../../../utils/bigint";
+import { VOYAGER_BASE } from "../types";
 
 const toBigInt = toBigIntSafe;
 
@@ -32,6 +33,7 @@ export interface UseMarketplaceActionsProps {
   account: AccountInterface | undefined;
   refetchOrders: () => Promise<any>;
   reloadUserBeasts: () => Promise<void>;
+  invalidateSales?: () => Promise<void>;
 }
 
 /**
@@ -41,10 +43,21 @@ export function useMarketplaceActions({
   account,
   refetchOrders,
   reloadUserBeasts,
+  invalidateSales,
 }: UseMarketplaceActionsProps) {
   const { executeListing, cancel, list, executeOffer, buildListCalls } =
     useCartridgeMarketplaceActions();
   const marketplaceCtx = useMarketplace();
+
+  // Helper to poll for sales updates after a transaction
+  // The indexer takes time to process transactions, so we poll a few times
+  const pollForSalesUpdates = useCallback(async (attempts = 3, delayMs = 3000) => {
+    if (!invalidateSales) return;
+    for (let i = 0; i < attempts; i++) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      await invalidateSales();
+    }
+  }, [invalidateSales]);
 
   // Action state
   const [buyingListingId, setBuyingListingId] = useState<string | null>(null);
@@ -208,16 +221,25 @@ export function useMarketplaceActions({
           res?.transactionHash;
         const txHash = extractTxHash(result);
 
-        toast.success(
-          txHash
-            ? `Purchase successful! Tx: ${txHash.slice(0, 8)}…${txHash.slice(
-                -6
-              )}`
-            : "Purchase successful!",
-          { id: toastId }
-        );
+        if (txHash) {
+          toast.success(
+            `Purchase successful! Tx: ${txHash.slice(0, 8)}…${txHash.slice(-6)}`,
+            {
+              id: toastId,
+              action: {
+                label: "View",
+                onClick: () => window.open(`${VOYAGER_BASE}/tx/${txHash}`, "_blank"),
+              },
+            }
+          );
+        } else {
+          toast.success("Purchase successful!", { id: toastId });
+        }
+
         await refetchOrders();
         await reloadUserBeasts();
+        // Poll for sales updates in background (indexer takes time to process)
+        void pollForSalesUpdates();
       } catch (error) {
         const errorMessage = (error as Error).message || "Purchase failed";
         toast.error(errorMessage, { id: toastId });
@@ -398,7 +420,7 @@ export function useMarketplaceActions({
 
         // Step 3: Execute the offer (seller accepts buyer's offer)
         toast.loading("Accepting offer...", { id: toastId });
-        await executeOffer(
+        const result = await executeOffer(
           account as any,
           orderId,
           BEASTS_COLLECTION_ADDRESS,
@@ -411,11 +433,33 @@ export function useMarketplaceActions({
           CLIENT_FEE_RECEIVER
         );
 
-        toast.success("Offer accepted successfully!", { id: toastId });
+        const extractTxHash = (res: any): string | undefined =>
+          res?.transaction_hash ||
+          res?.hash ||
+          res?.txHash ||
+          res?.transactionHash;
+        const txHash = extractTxHash(result);
+
+        if (txHash) {
+          toast.success(
+            `Offer accepted! Tx: ${txHash.slice(0, 8)}…${txHash.slice(-6)}`,
+            {
+              id: toastId,
+              action: {
+                label: "View",
+                onClick: () => window.open(`${VOYAGER_BASE}/tx/${txHash}`, "_blank"),
+              },
+            }
+          );
+        } else {
+          toast.success("Offer accepted successfully!", { id: toastId });
+        }
 
         // Refresh data
         await refetchOrders();
         await reloadUserBeasts();
+        // Poll for sales updates in background (indexer takes time to process)
+        void pollForSalesUpdates();
         return true;
       } catch (error) {
         const errorMessage =

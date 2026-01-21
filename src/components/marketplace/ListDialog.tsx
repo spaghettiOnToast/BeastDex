@@ -12,17 +12,19 @@ import { Input } from "../ui/input";
 import type { Beast } from "../../services/beast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import {
-  DEFAULT_PAYMENT_TOKEN,
   BEASTS_COLLECTION_ADDRESS,
   DEFAULT_LISTING_DURATION_SECONDS,
   LISTING_DURATION_OPTIONS,
   CLIENT_FEE_BP,
   CLIENT_FEE_RECEIVER,
+  DEFAULT_PAYMENT_TOKEN,
 } from "../../services/marketplace/constants";
 import { NAMESPACE, useMarketplace, useMarketplaceActions } from "@cartridge/marketplace";
 import { getContractByName, parseDojoCall } from "@dojoengine/core";
-import { toWei, fromWei, TOKEN_DECIMALS } from "../../utils/price";
+import { toWei, fromWei } from "../../utils/price";
 import { toast } from "sonner";
+import TokenSelect from "./TokenSelect";
+import { useSelectedToken } from "../../hooks/useEkuboTokens";
 
 const CUSTOM_DURATION_VALUE = "custom";
 
@@ -56,6 +58,10 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
   const [estimatingFee, setEstimatingFee] = useState(false);
   const [feeError, setFeeError] = useState<string | null>(null);
 
+  // Token selection - default to LORDS
+  const [currencyAddress, setCurrencyAddress] = useState(DEFAULT_PAYMENT_TOKEN.address);
+  const { decimals: tokenDecimals, symbol: tokenSymbol } = useSelectedToken(currencyAddress);
+
   useEffect(() => {
     if (open) {
       setDuration(DEFAULT_DURATION_VALUE);
@@ -70,10 +76,6 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
     }
   }, [duration]);
 
-  // Lock currency to the fee token (Cartridge default)
-  const selectedToken = DEFAULT_PAYMENT_TOKEN;
-  const currencyAddress = selectedToken.address;
-
   const toBigInt = (value: string) => {
     const trimmed = value.trim();
     return BigInt(trimmed.startsWith("0x") ? trimmed : trimmed);
@@ -86,13 +88,12 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
     const numericValue = Number.parseFloat(trimmed);
     if (!Number.isFinite(numericValue) || numericValue <= 0) return null;
     try {
-      const decimals = TOKEN_DECIMALS[selectedToken.symbol] ?? 18;
-      const wei = toWei(trimmed, decimals);
+      const wei = toWei(trimmed, tokenDecimals);
       return wei > 0n ? wei : null;
     } catch {
       return null;
     }
-  }, [price, selectedToken]);
+  }, [price, tokenDecimals]);
 
   const formatFee = (feeWei: bigint) => {
     return fromWei(feeWei, 18);
@@ -413,7 +414,7 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
                 min="0"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                placeholder={`e.g., 1.5 ${selectedToken.symbol}`}
+                placeholder={`e.g., 1.5 ${tokenSymbol}`}
                 className="mt-1"
               />
               {priceBigInt && priceBigInt > 0n && (
@@ -423,10 +424,10 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
                     <p className="text-xs text-amber-200 font-medium">Listing fee (paid by you):</p>
                     <div className="flex justify-between text-xs">
                       <span className="text-gray-400">Platform fee (2%):</span>
-                      <span className="text-white">{fromWei((priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n, TOKEN_DECIMALS[selectedToken.symbol] ?? 18)} {selectedToken.symbol}</span>
+                      <span className="text-white">{fromWei((priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n, tokenDecimals)} {tokenSymbol}</span>
                     </div>
                     <div className="border-t border-amber-500/20 pt-1">
-                      <p className="text-[10px] text-amber-200/80">Buyer will pay exactly your listing price ({fromWei(priceBigInt, TOKEN_DECIMALS[selectedToken.symbol] ?? 18)} {selectedToken.symbol}) - no additional fees.</p>
+                      <p className="text-[10px] text-amber-200/80">Buyer will pay exactly your listing price ({fromWei(priceBigInt, tokenDecimals)} {tokenSymbol}) - no additional fees.</p>
                     </div>
                   </div>
                 </div>
@@ -434,8 +435,12 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
             </div>
             <div>
               <label className="text-sm text-gray-400">Currency</label>
-              <div className="mt-1 text-sm">{selectedToken.symbol}</div>
-              <div className="mt-1 text-[10px] text-gray-500 break-all">{currencyAddress}</div>
+              <TokenSelect
+                value={currencyAddress}
+                onValueChange={setCurrencyAddress}
+                className="mt-1"
+                disabled={submitting}
+              />
             </div>
             <div>
               <label className="text-sm text-gray-400">Listing duration</label>

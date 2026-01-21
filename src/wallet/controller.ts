@@ -5,9 +5,8 @@ import { mainnet } from "@starknet-react/chains";
 export const controllerConnector = new ControllerConnector({
   chains: [{ rpcUrl: mainnet.rpcUrls.cartridge.http[0] }],
   defaultChainId: "0x534e5f4d41494e",
-  slot:
-    (import.meta.env.VITE_CONTROLLER_SLOT as string | undefined)?.trim() ||
-    "pg-mainnet-10",
+  preset: "loot-survivor",
+  slot: "pg-mainnet-10",
 });
 
 // The current @starknet-react release expects additional methods.

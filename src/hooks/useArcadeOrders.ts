@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getChecksumAddress } from "starknet";
 import { CategoryType, StatusType } from "@cartridge/marketplace";
 import { compareStarknetAddresses } from "../utils/address";
@@ -108,7 +108,6 @@ async function fetchArcadeOrdersGraphQL(
   const result = await response.json();
 
   if (result.errors) {
-    console.error("[Arcade Orders] GraphQL errors:", result.errors);
     throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
   }
 
@@ -174,7 +173,6 @@ async function fetchArcadeOrderByTokenGraphQL(
   const result = await response.json();
 
   if (result.errors) {
-    console.error("[Arcade Orders] GraphQL errors:", result.errors);
     throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
   }
 
@@ -193,20 +191,7 @@ export function useArcadeListedTokensForCollection(collectionAddress: string) {
     staleTime: 60_000, // Consider data fresh for 60 seconds
     refetchOnWindowFocus: false, // Prevent refetch on tab switch
     refetchOnMount: false, // Don't refetch if data exists
-    queryFn: async () => {
-      console.log(`[Arcade Orders] Starting GraphQL fetch for collection ${collectionAddress}`);
-      const startTime = performance.now();
-
-      try {
-        const orders = await fetchArcadeOrdersGraphQL(collectionAddress, 1000);
-        const endTime = performance.now();
-        console.log(`[Arcade Orders] Fetched ${orders.length} orders in ${(endTime - startTime).toFixed(0)}ms`);
-        return orders;
-      } catch (error) {
-        console.error('[Arcade Orders] Error during fetch:', error);
-        throw error;
-      }
-    },
+    queryFn: () => fetchArcadeOrdersGraphQL(collectionAddress, 1000),
   });
 }
 
@@ -308,7 +293,6 @@ async function fetchArcadeSalesGraphQL(
   const result = await response.json();
 
   if (result.errors) {
-    console.error("[Arcade Sales] GraphQL errors:", result.errors);
     throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
   }
 
@@ -324,29 +308,27 @@ async function fetchArcadeSalesGraphQL(
 }
 
 export function useArcadeSalesForCollection(collectionAddress: string, limit: number = 100) {
+  const queryClient = useQueryClient();
   const queryKey = useMemo(() => ["arcadeSales", collectionAddress, limit], [collectionAddress, limit]);
 
-  return useQuery({
+  const query = useQuery({
     queryKey,
     enabled: !!collectionAddress,
     staleTime: 60_000, // Consider data fresh for 60 seconds
     refetchOnWindowFocus: false, // Prevent refetch on tab switch
     refetchOnMount: false, // Don't refetch if data exists
-    queryFn: async () => {
-      console.log(`[Arcade Sales] Starting GraphQL fetch for collection ${collectionAddress}`);
-      const startTime = performance.now();
-
-      try {
-        const sales = await fetchArcadeSalesGraphQL(collectionAddress, limit);
-        const endTime = performance.now();
-        console.log(`[Arcade Sales] Fetched ${sales.length} sales in ${(endTime - startTime).toFixed(0)}ms`);
-        return sales;
-      } catch (error) {
-        console.error('[Arcade Sales] Error during fetch:', error);
-        throw error;
-      }
-    },
+    queryFn: () => fetchArcadeSalesGraphQL(collectionAddress, limit),
   });
+
+  // Force invalidate and refetch (bypasses staleTime)
+  const invalidateAndRefetch = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey });
+  }, [queryClient, queryKey]);
+
+  return {
+    ...query,
+    invalidateAndRefetch,
+  };
 }
 
 /**
@@ -409,7 +391,6 @@ async function fetchUserOffersGraphQL(
   const result = await response.json();
 
   if (result.errors) {
-    console.error("[Arcade Offers] GraphQL errors:", result.errors);
     throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
   }
 
@@ -438,19 +419,7 @@ export function useUserOffers(userAddress: string | undefined, collectionAddress
     refetchOnMount: true, // Refetch when component mounts to get latest offers
     queryFn: async () => {
       if (!userAddress) return [];
-
-      console.log(`[Arcade Offers] Fetching offers for user ${userAddress.slice(0, 10)}...`);
-      const startTime = performance.now();
-
-      try {
-        const offers = await fetchUserOffersGraphQL(userAddress, collectionAddress, 100);
-        const endTime = performance.now();
-        console.log(`[Arcade Offers] Fetched ${offers.length} offers in ${(endTime - startTime).toFixed(0)}ms`);
-        return offers;
-      } catch (error) {
-        console.error('[Arcade Offers] Error during fetch:', error);
-        throw error;
-      }
+      return fetchUserOffersGraphQL(userAddress, collectionAddress, 100);
     },
   });
 
@@ -521,7 +490,6 @@ async function fetchOffersForTokenGraphQL(
   const result = await response.json();
 
   if (result.errors) {
-    console.error("[Arcade Token Offers] GraphQL errors:", result.errors);
     throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
   }
 
@@ -548,19 +516,7 @@ export function useOffersForToken(collectionAddress: string, tokenId: string | u
     refetchOnWindowFocus: false,
     queryFn: async () => {
       if (!tokenId) return [];
-
-      console.log(`[Arcade Token Offers] Fetching offers for token ${tokenId}...`);
-      const startTime = performance.now();
-
-      try {
-        const offers = await fetchOffersForTokenGraphQL(collectionAddress, tokenId, 50);
-        const endTime = performance.now();
-        console.log(`[Arcade Token Offers] Fetched ${offers.length} offers in ${(endTime - startTime).toFixed(0)}ms`);
-        return offers;
-      } catch (error) {
-        console.error('[Arcade Token Offers] Error during fetch:', error);
-        throw error;
-      }
+      return fetchOffersForTokenGraphQL(collectionAddress, tokenId, 50);
     },
   });
 }
@@ -622,7 +578,6 @@ async function fetchAllOffersForCollectionGraphQL(
   const result = await response.json();
 
   if (result.errors) {
-    console.error("[Arcade All Offers] GraphQL errors:", result.errors);
     throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
   }
 
@@ -658,28 +613,17 @@ export function useOffersReceivedForListings(
     queryFn: async () => {
       if (userListedTokenIds.length === 0) return [];
 
-      console.log(`[Arcade Offers Received] Fetching offers for ${userListedTokenIds.length} listed tokens...`);
-      const startTime = performance.now();
+      // Fetch all offers for the collection
+      const allOffers = await fetchAllOffersForCollectionGraphQL(collectionAddress, 500);
 
-      try {
-        // Fetch all offers for the collection
-        const allOffers = await fetchAllOffersForCollectionGraphQL(collectionAddress, 500);
+      // Filter to only offers on user's listed tokens
+      const userTokenIdSet = new Set(userListedTokenIds.map(id => String(id)));
+      const offersReceived = allOffers.filter(offer =>
+        userTokenIdSet.has(String(offer.tokenId))
+      );
 
-        // Filter to only offers on user's listed tokens
-        const userTokenIdSet = new Set(userListedTokenIds.map(id => String(id)));
-        const offersReceived = allOffers.filter(offer =>
-          userTokenIdSet.has(String(offer.tokenId))
-        );
-
-        const endTime = performance.now();
-        console.log(`[Arcade Offers Received] Found ${offersReceived.length} offers on user's listings in ${(endTime - startTime).toFixed(0)}ms`);
-
-        // Sort by price descending (highest first)
-        return offersReceived.sort((a, b) => b.price - a.price);
-      } catch (error) {
-        console.error('[Arcade Offers Received] Error during fetch:', error);
-        throw error;
-      }
+      // Sort by price descending (highest first)
+      return offersReceived.sort((a, b) => b.price - a.price);
     },
   });
 
@@ -697,6 +641,7 @@ export function useUserSales(
   collectionAddress: string,
   enabled: boolean = true
 ) {
+  const queryClient = useQueryClient();
   const queryKey = useMemo(
     () => ["arcadeUserSales", userAddress, collectionAddress],
     [userAddress, collectionAddress]
@@ -711,33 +656,28 @@ export function useUserSales(
     queryFn: async () => {
       if (!userAddress) return [];
 
-      console.log(`[Arcade User Sales] Fetching sales for user ${userAddress.slice(0, 10)}...`);
-      const startTime = performance.now();
+      // Fetch recent sales for the collection
+      const sales = await fetchArcadeSalesGraphQL(collectionAddress, 200);
 
-      try {
-        // Fetch recent sales for the collection
-        const sales = await fetchArcadeSalesGraphQL(collectionAddress, 200);
+      // Filter to only sales where user is buyer or seller
+      const userSales = sales.filter(sale =>
+        compareStarknetAddresses(sale.from, userAddress) ||
+        compareStarknetAddresses(sale.to, userAddress)
+      );
 
-        // Filter to only sales where user is buyer or seller
-        const userSales = sales.filter(sale =>
-          compareStarknetAddresses(sale.from, userAddress) ||
-          compareStarknetAddresses(sale.to, userAddress)
-        );
-
-        const endTime = performance.now();
-        console.log(`[Arcade User Sales] Found ${userSales.length} sales for user in ${(endTime - startTime).toFixed(0)}ms`);
-
-        // Sort by time descending (most recent first)
-        return userSales.sort((a, b) => b.time - a.time);
-      } catch (error) {
-        console.error('[Arcade User Sales] Error during fetch:', error);
-        throw error;
-      }
+      // Sort by time descending (most recent first)
+      return userSales.sort((a, b) => b.time - a.time);
     },
   });
+
+  // Force invalidate and refetch (bypasses staleTime)
+  const invalidateAndRefetch = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey });
+  }, [queryClient, queryKey]);
 
   return {
     ...query,
     refetch: query.refetch,
+    invalidateAndRefetch,
   };
 }

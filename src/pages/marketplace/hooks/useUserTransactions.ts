@@ -30,7 +30,7 @@ export function useUserTransactions({ address, listings }: UseUserTransactionsPr
     BEASTS_COLLECTION_ADDRESS
   );
 
-  const { data: userSales, isLoading: salesLoading, refetch: refetchSales } = useUserSales(
+  const { data: userSales, isLoading: salesLoading, refetch: refetchSales, invalidateAndRefetch: invalidateSales } = useUserSales(
     address,
     BEASTS_COLLECTION_ADDRESS
   );
@@ -131,5 +131,6 @@ export function useUserTransactions({ address, listings }: UseUserTransactionsPr
     isLoading: offersLoading || salesLoading,
     refetchOffers,
     refetchSales,
+    invalidateSales,
   };
 }

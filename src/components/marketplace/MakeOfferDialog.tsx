@@ -19,16 +19,17 @@ import {
 } from "../ui/select";
 import {
   DEFAULT_PAYMENT_TOKEN,
-  PAYMENT_TOKENS,
   BEASTS_COLLECTION_ADDRESS,
   DEFAULT_LISTING_DURATION_SECONDS,
   LISTING_DURATION_OPTIONS,
   CLIENT_FEE_BP,
 } from "../../services/marketplace/constants";
 import { useMarketplace, useMarketplaceActions } from "@cartridge/marketplace";
-import { toWei, fromWei, TOKEN_DECIMALS } from "../../utils/price";
+import { toWei, fromWei } from "../../utils/price";
 import { toast } from "sonner";
 import { cairo, CallData } from "starknet";
+import TokenSelect from "./TokenSelect";
+import { useSelectedToken } from "../../hooks/useEkuboTokens";
 
 const CUSTOM_DURATION_VALUE = "custom";
 
@@ -64,8 +65,8 @@ export default function MakeOfferDialog({
 }: Props) {
   const { account } = useAccount();
   const [price, setPrice] = useState("");
-  const [tokenSym, setTokenSym] = useState<string>(
-    DEFAULT_PAYMENT_TOKEN.symbol
+  const [currencyAddress, setCurrencyAddress] = useState<string>(
+    DEFAULT_PAYMENT_TOKEN.address
   );
   const [duration, setDuration] = useState<string>(DEFAULT_DURATION_VALUE);
   const [customExpiration, setCustomExpiration] = useState("");
@@ -73,6 +74,9 @@ export default function MakeOfferDialog({
   const [error, setError] = useState<string | null>(null);
   const marketplace = useMarketplace();
   const { buildOfferCalls } = useMarketplaceActions();
+
+  // Get token info from Ekubo
+  const { decimals: tokenDecimals, symbol: tokenSymbol } = useSelectedToken(currencyAddress);
 
   useEffect(() => {
     if (open) {
@@ -87,15 +91,6 @@ export default function MakeOfferDialog({
       setCustomExpiration("");
     }
   }, [duration]);
-
-  const selectedToken = useMemo(
-    () =>
-      PAYMENT_TOKENS.find((t) => t.symbol === tokenSym) ??
-      DEFAULT_PAYMENT_TOKEN,
-    [tokenSym]
-  );
-  const currencyAddress =
-    selectedToken.address ?? DEFAULT_PAYMENT_TOKEN.address;
 
   const toBigInt = (value: string) => {
     const trimmed = value.trim();
@@ -112,27 +107,25 @@ export default function MakeOfferDialog({
     }
 
     try {
-      const decimals = TOKEN_DECIMALS[selectedToken.symbol] ?? 18;
-      const wei = toWei(trimmed, decimals);
+      const wei = toWei(trimmed, tokenDecimals);
       return wei > 0n ? wei : null;
     } catch {
       return null;
     }
-  }, [price, selectedToken]);
+  }, [price, tokenDecimals]);
 
   // Calculate fee and total (fee is paid by buyer)
   const feeDetails = useMemo(() => {
     if (!priceBigInt) return null;
     const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
     const totalAmount = priceBigInt + feeAmount;
-    const decimals = TOKEN_DECIMALS[selectedToken.symbol] ?? 18;
     return {
       feeAmount,
       totalAmount,
-      feeFormatted: fromWei(feeAmount, decimals),
-      totalFormatted: fromWei(totalAmount, decimals),
+      feeFormatted: fromWei(feeAmount, tokenDecimals),
+      totalFormatted: fromWei(totalAmount, tokenDecimals),
     };
-  }, [priceBigInt, selectedToken]);
+  }, [priceBigInt, tokenDecimals]);
 
   const toLocalInputValue = (date: Date) => {
     const timezoneOffset = date.getTimezoneOffset() * 60000;
@@ -270,7 +263,7 @@ export default function MakeOfferDialog({
         tokenId: actualTokenId,
         beastName: beast?.name || `Beast #${actualTokenId}`,
         offerPrice: price,
-        currency: selectedToken.symbol,
+        currency: tokenSymbol,
       });
     } catch (e) {
       const errorMessage = (e as Error).message || "Failed to make offer";
@@ -330,37 +323,17 @@ export default function MakeOfferDialog({
               min="0"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              placeholder={`e.g., 1.5 ${selectedToken.symbol}`}
+              placeholder={`e.g., 1.5 ${tokenSymbol}`}
               className="mt-1"
             />
           </div>
           <div>
             <label className="text-sm text-gray-400">Currency</label>
-            <Select value={tokenSym} onValueChange={setTokenSym}>
-              <SelectTrigger className="mt-1 bg-black/50">
-                <SelectValue placeholder="Select token" />
-              </SelectTrigger>
-              <SelectContent className="bg-[#0b0b0f] border-gray-800">
-                {PAYMENT_TOKENS.map((t) => (
-                  <SelectItem
-                    key={t.symbol}
-                    value={t.symbol}
-                    className="focus:bg-gray-800/50"
-                  >
-                    <div className="flex items-center gap-2">
-                      {t.logo && (
-                        <img
-                          src={t.logo}
-                          alt={t.symbol}
-                          className="w-5 h-5 rounded-full"
-                        />
-                      )}
-                      <span>{t.symbol}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <TokenSelect
+              value={currencyAddress}
+              onValueChange={setCurrencyAddress}
+              className="mt-1"
+            />
           </div>
           <div>
             <label className="text-sm text-gray-400">Offer Duration</label>
@@ -410,15 +383,15 @@ export default function MakeOfferDialog({
             <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-3 space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-400">Offer Amount</span>
-                <span className="text-white">{price} {selectedToken.symbol}</span>
+                <span className="text-white">{price} {tokenSymbol}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-400">Platform Fee (2%)</span>
-                <span className="text-gray-300">{feeDetails.feeFormatted} {selectedToken.symbol}</span>
+                <span className="text-gray-300">{feeDetails.feeFormatted} {tokenSymbol}</span>
               </div>
               <div className="border-t border-gray-700 pt-2 flex justify-between text-sm font-semibold">
                 <span className="text-gray-300">Total Cost</span>
-                <span className="text-lsGold">{feeDetails.totalFormatted} {selectedToken.symbol}</span>
+                <span className="text-lsGold">{feeDetails.totalFormatted} {tokenSymbol}</span>
               </div>
             </div>
           )}

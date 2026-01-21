@@ -13,7 +13,6 @@ import type { Beast } from "../../services/beast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import {
   DEFAULT_PAYMENT_TOKEN,
-  PAYMENT_TOKENS,
   BEASTS_COLLECTION_ADDRESS,
   DEFAULT_LISTING_DURATION_SECONDS,
   LISTING_DURATION_OPTIONS,
@@ -22,10 +21,12 @@ import {
 } from "../../services/marketplace/constants";
 import { NAMESPACE, useMarketplace, useMarketplaceActions } from "@cartridge/marketplace";
 import { parseDojoCall } from "@dojoengine/core";
-import { toWei, TOKEN_DECIMALS, fromWei } from "../../utils/price";
+import { toWei, fromWei } from "../../utils/price";
 import { X, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import type { Listing } from "../../services/marketplace/types";
+import TokenSelect from "./TokenSelect";
+import { useSelectedToken } from "../../hooks/useEkuboTokens";
 
 const CUSTOM_DURATION_VALUE = "custom";
 
@@ -68,13 +69,16 @@ export default function CartListDialog({
 }: Props) {
   const { account } = useAccount();
   const [beastPrices, setBeastPrices] = useState<Map<string, string>>(new Map());
-  const [tokenSym, setTokenSym] = useState<string>(DEFAULT_PAYMENT_TOKEN.symbol);
+  const [currencyAddress, setCurrencyAddress] = useState<string>(DEFAULT_PAYMENT_TOKEN.address);
   const [duration, setDuration] = useState<string>(DEFAULT_DURATION_VALUE);
   const [customExpiration, setCustomExpiration] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const marketplace = useMarketplace();
   const { buildListCalls } = useMarketplaceActions();
+
+  // Get token info from Ekubo
+  const { decimals: tokenDecimals, symbol: tokenSymbol } = useSelectedToken(currencyAddress);
 
   // Check which beasts are already listed
   const alreadyListedTokenIds = useMemo(() => {
@@ -103,8 +107,8 @@ export default function CartListDialog({
     if (open) {
       setDuration(DEFAULT_DURATION_VALUE);
       setCustomExpiration("");
-      // Default to the primary currency (LORDS)
-      setTokenSym(DEFAULT_PAYMENT_TOKEN.symbol);
+      // Default to the primary currency
+      setCurrencyAddress(DEFAULT_PAYMENT_TOKEN.address);
       setError(null);
       // Initialize empty prices for all beasts
       const initialPrices = new Map<string, string>();
@@ -124,12 +128,6 @@ export default function CartListDialog({
       setCustomExpiration("");
     }
   }, [duration]);
-
-  const selectedToken = useMemo(
-    () => PAYMENT_TOKENS.find((t) => t.symbol === tokenSym) ?? DEFAULT_PAYMENT_TOKEN,
-    [tokenSym]
-  );
-  const currencyAddress = selectedToken.address ?? DEFAULT_PAYMENT_TOKEN.address;
 
   const toBigInt = (value: string) => {
     const trimmed = value.trim();
@@ -269,7 +267,7 @@ export default function CartListDialog({
           if (!Number.isFinite(numeric) || numeric <= 0) {
             throw new Error(`Invalid price for ${beast.name}`);
           }
-          const decimals = TOKEN_DECIMALS[selectedToken.symbol] ?? 18;
+          const decimals = tokenDecimals;
           const priceBigInt = toWei(priceStr, decimals);
           const rawTokenId = (beast.id.split(":").pop() || beast.id).trim();
           const tokenIdBigInt = toBigInt(rawTokenId);
@@ -279,7 +277,7 @@ export default function CartListDialog({
             tokenId: tokenIdBigInt.toString(),
             price: priceBigInt.toString(),
             priceFormatted: priceStr,
-            currency: selectedToken.symbol,
+            currency: tokenSymbol,
             currencyAddress,
             expiration: expirationBigInt.toString(),
             expirationDate: new Date(Number(expirationBigInt) * 1000).toLocaleString(),
@@ -332,7 +330,7 @@ export default function CartListDialog({
             tokenId: rawTokenId,
             beastName: beast.name || `Beast #${rawTokenId}`,
             price: priceStr,
-            currency: selectedToken.symbol,
+            currency: tokenSymbol,
           });
         } catch (beastError) {
           console.error('❌ Failed to prepare listing for beast:', beast.name, beastError);
@@ -472,12 +470,12 @@ export default function CartListDialog({
                         const priceStr = beastPrices.get(beast.id) || "";
                         const priceNum = Number.parseFloat(priceStr);
                         if (Number.isFinite(priceNum) && priceNum > 0) {
-                          const priceBigInt = toWei(priceStr, TOKEN_DECIMALS[selectedToken.symbol] ?? 18);
+                          const priceBigInt = toWei(priceStr, tokenDecimals);
                           const platformFeeBigInt = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
                           return (
                             <div className="text-[10px] space-y-0.5">
                               <div className="text-amber-300">
-                                You pay 2% fee: {fromWei(platformFeeBigInt, TOKEN_DECIMALS[selectedToken.symbol] ?? 18)} {selectedToken.symbol}
+                                You pay 2% fee: {fromWei(platformFeeBigInt, tokenDecimals)} {tokenSymbol}
                               </div>
                             </div>
                           );
@@ -492,7 +490,7 @@ export default function CartListDialog({
                         min="0"
                         value={beastPrices.get(beast.id) || ""}
                         onChange={(e) => handlePriceChange(beast.id, e.target.value)}
-                        placeholder={`Price in ${selectedToken.symbol}`}
+                        placeholder={`Price in ${tokenSymbol}`}
                         className="w-32"
                       />
                     )}
@@ -515,19 +513,11 @@ export default function CartListDialog({
             {/* Currency selector */}
             <div>
               <label className="text-sm text-gray-400">Payment Currency</label>
-              <Select value={tokenSym} onValueChange={setTokenSym}>
-                <SelectTrigger className="mt-1 bg-black/50">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-[#0b0b0f] border-gray-800">
-                  {PAYMENT_TOKENS.map((token) => (
-                    <SelectItem key={token.symbol} value={token.symbol} className="focus:bg-gray-800/50">
-                      {token.symbol}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="mt-1 text-[10px] text-gray-500 break-all">{currencyAddress}</div>
+              <TokenSelect
+                value={currencyAddress}
+                onValueChange={setCurrencyAddress}
+                className="mt-1"
+              />
             </div>
 
             {/* Duration selector */}

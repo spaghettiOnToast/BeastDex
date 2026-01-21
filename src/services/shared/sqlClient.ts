@@ -70,18 +70,12 @@ async function fetchWithRetry(
 ) {
   let attempt = 0;
   let lastError: unknown = null;
-  const startTime = performance.now();
-
-  console.log(`[${label}] Starting request (timeout: ${timeoutMs}ms, retries: ${retries})`);
 
   while (attempt <= retries) {
-    const attemptStart = performance.now();
     const controller = new AbortController();
     let isTimeout = false;
     const timer = setTimeout(() => {
       isTimeout = true;
-      const elapsed = (performance.now() - attemptStart).toFixed(0);
-      console.warn(`[${label}] Aborting request after ${elapsed}ms (timeout: ${timeoutMs}ms)`);
       controller.abort();
     }, timeoutMs);
 
@@ -92,68 +86,34 @@ async function fetchWithRetry(
       });
       clearTimeout(timer);
 
-      const elapsed = (performance.now() - attemptStart).toFixed(0);
       if (response.ok) {
-        console.log(`[${label}] Request succeeded in ${elapsed}ms (attempt ${attempt + 1})`);
         return response;
       }
 
       // Retry on transient 5xx errors (including 502 Bad Gateway)
+      const text = await response.text().catch(() => "");
       if (response.status >= 500 && response.status < 600) {
-        const text = await response.text().catch(() => "");
         lastError = new Error(
           `SQL API error: ${response.status} ${response.statusText} ${text}`
         );
-        console.warn(
-          `[${label}] Server error (${response.status}) after ${elapsed}ms, will retry. Attempt ${attempt + 1}/${retries + 1}`
-        );
       } else {
         // Non-retryable
-        const text = await response.text().catch(() => "");
-        console.error(`[${label}] Non-retryable error (${response.status}) after ${elapsed}ms: ${text}`);
         throw new Error(
           `SQL API error: ${response.status} ${response.statusText} ${text}`
         );
       }
     } catch (err) {
       clearTimeout(timer);
-      const elapsed = (performance.now() - attemptStart).toFixed(0);
 
       // Distinguish timeouts vs other aborts
       if (controller.signal.aborted && isTimeout) {
         lastError = new Error(`SQL API request timed out after ${timeoutMs}ms`);
-        console.warn(
-          `[${label}] Request timeout after ${elapsed}ms, will retry. Attempt ${attempt + 1}/${retries + 1}`
-        );
-      } else if (
-        err instanceof Error &&
-        err.message.includes("Failed to fetch")
-      ) {
-        // Network error, also retryable
-        lastError = err;
-        console.warn(
-          `[${label}] Network error after ${elapsed}ms: ${err.message}, will retry. Attempt ${attempt + 1}/${retries + 1}`
-        );
-      } else if (
-        err instanceof Error &&
-        err.name === "AbortError" &&
-        isTimeout
-      ) {
+      } else if (err instanceof Error && err.name === "AbortError" && isTimeout) {
         lastError = new Error(`SQL API request timed out after ${timeoutMs}ms`);
-        console.warn(
-          `[${label}] Request timeout (AbortError) after ${elapsed}ms, will retry. Attempt ${attempt + 1}/${retries + 1}`
-        );
       } else if (err instanceof Error && err.name === "AbortError") {
-        // Aborted but not by our timeout - could be browser or user navigation
-        lastError = new Error(`Request aborted externally after ${elapsed}ms`);
-        console.warn(
-          `[${label}] Request aborted externally after ${elapsed}ms (not timeout). Attempt ${attempt + 1}/${retries + 1}`
-        );
+        lastError = new Error("Request aborted externally");
       } else {
         lastError = err;
-        console.warn(
-          `[${label}] Unknown error after ${elapsed}ms: ${err instanceof Error ? err.message : String(err)}. Attempt ${attempt + 1}/${retries + 1}`
-        );
       }
       // AbortError or network error eligible for retry
     } finally {
@@ -164,14 +124,11 @@ async function fetchWithRetry(
     if (attempt > retries) break;
     const backoff = baseDelayMs * 2 ** (attempt - 1);
     const jitter = Math.floor(Math.random() * 200);
-    console.log(`[${label}] Waiting ${backoff + jitter}ms before retry ${attempt + 1}`);
     await sleep(backoff + jitter);
   }
 
-  const totalTime = (performance.now() - startTime).toFixed(0);
   const finalMessage =
     lastError instanceof Error ? lastError.message : String(lastError);
-  console.error(`[${label}] Request failed after ${retries + 1} attempts (${totalTime}ms total): ${finalMessage}`);
   throw new Error(
     `SQL request failed after ${retries + 1} attempts: ${finalMessage}`
   );
@@ -194,9 +151,6 @@ export function createSqlClient(config: SqlClientConfig) {
     // Check for in-flight request with same URL (deduplication)
     const existingRequest = pendingRequests.get(url);
     if (existingRequest) {
-      if (import.meta.env.DEV) {
-        console.log(`[${label}] Deduplicating request for ${debugLabel}`);
-      }
       return existingRequest as Promise<T>;
     }
 
@@ -216,9 +170,6 @@ export function createSqlClient(config: SqlClientConfig) {
 
         const data = (await response.json()) as T;
         return data;
-      } catch (error) {
-        console.error(`[${label}] Failed to fetch data for ${debugLabel}:`, error);
-        throw error;
       } finally {
         releaseSemaphore();
         // Clean up the pending request

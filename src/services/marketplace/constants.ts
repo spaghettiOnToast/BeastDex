@@ -17,62 +17,76 @@ export type PaymentToken = {
   logo?: string; // optional, icon URL for the token
 };
 
-// Common tokens; configure via env. If not set, STRK native placeholder is used
-// Prefer explicit env STRK override; else Cartridge manifest fee token
-const FALLBACK_STRK_ADDRESS =
-  (import.meta.env.VITE_TOKEN_STRK as string) ||
-  MAINNET_CONFIG?.feeTokenAddress ||
-  "0x0";
+// Ekubo tokens localStorage cache key (must match useEkuboTokens.ts)
+const EKUBO_TOKENS_CACHE_KEY = "ekubo-tokens-cache";
 
-export const PAYMENT_TOKENS: PaymentToken[] = [
-  {
-    symbol: "LORDS",
-    address:
-      (import.meta.env.VITE_TOKEN_LORDS as string) ||
-      "0x0124aeb495b947201f5fac96fd1138e326ad86195b98df6dec9009158a533b49",
-  },
-  {
-    symbol: "STRK",
-    address: FALLBACK_STRK_ADDRESS,
-  },
-  {
-    symbol: "ETH",
-    address:
-      (import.meta.env.VITE_TOKEN_ETH as string) ||
-      "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7",
-  },
-  {
-    symbol: "USDC",
-    address:
-      (import.meta.env.VITE_TOKEN_USDC as string) ||
-      "0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8",
-  },
-  {
-    symbol: "SURVIVOR",
-    address:
-      (import.meta.env.VITE_TOKEN_SURVIVOR as string) ||
-      "0x0", // Placeholder - configure via VITE_TOKEN_SURVIVOR env var
-  },
-];
+/**
+ * Normalize Starknet address to consistent format for comparison
+ * Handles different hex representations (with/without leading zeros)
+ */
+function normalizeStarknetAddress(address: string): string {
+  // Remove 0x prefix, pad to 64 chars, lowercase
+  const withoutPrefix = address.toLowerCase().replace(/^0x/, "");
+  const padded = withoutPrefix.padStart(64, "0");
+  return "0x" + padded;
+}
+
+/**
+ * Get tokens from Ekubo localStorage cache (sync read)
+ */
+function getEkuboTokensFromCache(): PaymentToken[] {
+  try {
+    const cached = localStorage.getItem(EKUBO_TOKENS_CACHE_KEY);
+    if (!cached) return [];
+    const { tokens } = JSON.parse(cached);
+    if (!Array.isArray(tokens)) return [];
+    // Map Ekubo Token format to PaymentToken format
+    return tokens.map((t: { symbol: string; address: string; decimals: number; logoUrl?: string }) => ({
+      symbol: t.symbol,
+      address: t.address,
+      decimals: t.decimals,
+      logo: t.logoUrl,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// Default token address - LORDS on mainnet
+const DEFAULT_LORDS_ADDRESS =
+  (import.meta.env.VITE_TOKEN_LORDS as string) ||
+  "0x0124aeb495b947201f5fac96fd1138e326ad86195b98df6dec9009158a533b49";
 
 export function getPaymentTokenBySymbol(symbol: string | undefined): PaymentToken | null {
   if (!symbol) return null;
   const sym = symbol.trim().toUpperCase();
-  return PAYMENT_TOKENS.find((t) => t.symbol.toUpperCase() === sym) || null;
+
+  // Check Ekubo cache
+  const ekuboTokens = getEkuboTokensFromCache();
+  const ekuboMatch = ekuboTokens.find((t) => t.symbol.toUpperCase() === sym);
+  if (ekuboMatch) return ekuboMatch;
+
+  return null;
 }
 
 export function getPaymentTokenByAddress(address?: string | null): PaymentToken | null {
   if (!address) return null;
-  const normalised = address.trim().toLowerCase();
-  return (
-    PAYMENT_TOKENS.find((t) => t.address.trim().toLowerCase() === normalised) ||
-    null
+  const normalizedInput = normalizeStarknetAddress(address.trim());
+
+  // Check Ekubo cache with normalized address comparison
+  const ekuboTokens = getEkuboTokensFromCache();
+  const ekuboMatch = ekuboTokens.find(
+    (t) => normalizeStarknetAddress(t.address) === normalizedInput
   );
+  if (ekuboMatch) return ekuboMatch;
+
+  return null;
 }
 
-export const DEFAULT_PAYMENT_TOKEN: PaymentToken = PAYMENT_TOKENS[0] || {
-  symbol: "STRK",
-  address: "0x0",
+// Default payment token for dialog initial state
+export const DEFAULT_PAYMENT_TOKEN: PaymentToken = {
+  symbol: "LORDS",
+  address: DEFAULT_LORDS_ADDRESS,
 };
 
 // Listing expiration handling

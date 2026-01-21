@@ -273,8 +273,7 @@ async function getTokenOwner(
 
     // ownerOf returns a single felt252 (address)
     return rawResult[0];
-  } catch (error) {
-    console.error("[validateListingOwnership] Error fetching token owner:", error);
+  } catch {
     return null;
   }
 }
@@ -418,8 +417,6 @@ export async function executePurchaseWithApproval(
     clientFee,
     clientReceiver
   );
-  console.log(approvalCall);
-  console.log(purchaseCall);
   calls.push(purchaseCall);
 
   // Execute all calls in one transaction

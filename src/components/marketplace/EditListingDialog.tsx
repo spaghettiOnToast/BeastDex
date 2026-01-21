@@ -12,14 +12,15 @@ import type { Listing } from "../../services/marketplace/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import {
   DEFAULT_PAYMENT_TOKEN,
-  PAYMENT_TOKENS,
   BEASTS_COLLECTION_ADDRESS,
   DEFAULT_LISTING_DURATION_SECONDS,
   LISTING_DURATION_OPTIONS,
 } from "../../services/marketplace/constants";
-import { toWei, fromWei, TOKEN_DECIMALS } from "../../utils/price";
+import { toWei, fromWei } from "../../utils/price";
 import { toast } from "sonner";
 import type { AccountInterface, BigNumberish } from "starknet";
+import TokenSelect from "./TokenSelect";
+import { useSelectedToken } from "../../hooks/useEkuboTokens";
 
 // Error messages that indicate user rejection
 const USER_REJECTION_PATTERNS = [
@@ -73,7 +74,7 @@ export default function EditListingDialog({
   onEdited,
 }: Props) {
   const [price, setPrice] = useState("");
-  const [tokenSym, setTokenSym] = useState<string>(DEFAULT_PAYMENT_TOKEN.symbol);
+  const [currencyAddress, setCurrencyAddress] = useState<string>(DEFAULT_PAYMENT_TOKEN.address);
   const [duration, setDuration] = useState<string>(DEFAULT_DURATION_VALUE);
   const [customExpiration, setCustomExpiration] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -81,35 +82,29 @@ export default function EditListingDialog({
   const toastIdRef = useRef<string | number | null>(null);
   const submittingRef = useRef(false);
 
+  // Get token info from Ekubo
+  const { decimals: tokenDecimals, symbol: tokenSymbol } = useSelectedToken(currencyAddress);
+
   useEffect(() => {
     if (open && listing) {
       // Pre-fill with current listing data
-      const currentToken = PAYMENT_TOKENS.find(
-        t => t.address.toLowerCase() === listing.paymentToken?.toLowerCase()
-      );
-      if (currentToken) {
-        setTokenSym(currentToken.symbol);
-        const decimals = TOKEN_DECIMALS[currentToken.symbol] ?? 18;
-        const priceFormatted = fromWei(listing.price, decimals);
-        setPrice(priceFormatted);
+      if (listing.paymentToken) {
+        setCurrencyAddress(listing.paymentToken);
       }
+      // Format price using the listing's token decimals (will update when tokenDecimals loads)
+      const priceFormatted = fromWei(listing.price, tokenDecimals);
+      setPrice(priceFormatted);
       setDuration(DEFAULT_DURATION_VALUE);
       setCustomExpiration("");
       setError(null);
     }
-  }, [open, listing]);
+  }, [open, listing, tokenDecimals]);
 
   useEffect(() => {
     if (duration !== CUSTOM_DURATION_VALUE) {
       setCustomExpiration("");
     }
   }, [duration]);
-
-  const selectedToken = useMemo(
-    () => PAYMENT_TOKENS.find((t) => t.symbol === tokenSym) ?? DEFAULT_PAYMENT_TOKEN,
-    [tokenSym]
-  );
-  const currencyAddress = selectedToken.address ?? DEFAULT_PAYMENT_TOKEN.address;
 
   const priceBigInt = useMemo(() => {
     const trimmed = price.trim();
@@ -121,13 +116,12 @@ export default function EditListingDialog({
     }
 
     try {
-      const decimals = TOKEN_DECIMALS[selectedToken.symbol] ?? 18;
-      const wei = toWei(trimmed, decimals);
+      const wei = toWei(trimmed, tokenDecimals);
       return wei > 0n ? wei : null;
     } catch {
       return null;
     }
-  }, [price, selectedToken]);
+  }, [price, tokenDecimals]);
 
   const toLocalInputValue = (date: Date) => {
     const timezoneOffset = date.getTimezoneOffset() * 60000;
@@ -258,7 +252,7 @@ export default function EditListingDialog({
         tokenId: listing.tokenId,
         beastName: listing.beast?.name || `Beast #${listing.tokenId}`,
         newPrice: price,
-        currency: selectedToken.symbol,
+        currency: tokenSymbol,
       });
     } catch (e) {
       const err = e as Error;
@@ -312,29 +306,17 @@ export default function EditListingDialog({
                 min="0"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                placeholder={`e.g., 1.5 ${selectedToken.symbol}`}
+                placeholder={`e.g., 1.5 ${tokenSymbol}`}
                 className="mt-1"
               />
             </div>
             <div>
               <label className="text-sm text-gray-400">Currency</label>
-              <Select value={tokenSym} onValueChange={setTokenSym}>
-                <SelectTrigger className="mt-1 bg-black/50">
-                  <SelectValue placeholder="Select token" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#0b0b0f] border-gray-800">
-                  {PAYMENT_TOKENS.map((t) => (
-                    <SelectItem key={t.symbol} value={t.symbol} className="focus:bg-gray-800/50">
-                      <div className="flex items-center gap-2">
-                        {t.logo && (
-                          <img src={t.logo} alt={t.symbol} className="w-5 h-5 rounded-full" />
-                        )}
-                        <span>{t.symbol}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <TokenSelect
+                value={currencyAddress}
+                onValueChange={setCurrencyAddress}
+                className="mt-1"
+              />
             </div>
             <div>
               <label className="text-sm text-gray-400">Listing duration</label>

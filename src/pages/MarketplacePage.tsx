@@ -146,23 +146,32 @@ export default function MarketplacePage() {
     alreadyListedTokenIds: filtersHook.alreadyListedTokenIds,
   });
 
-  // Actions hook
-  const actionsHook = useMarketplaceActionsHook({
-    account,
-    refetchOrders: dataHook.refetchOrders,
-    reloadUserBeasts: dataHook.reloadUserBeasts,
-  });
-
   // User transactions hook (from indexer instead of localStorage)
-  const { transactions: userTransactions, refetchOffers, refetchSales } = useUserTransactions({
+  const { transactions: userTransactions, refetchOffers, invalidateSales } = useUserTransactions({
     address,
     listings: dataHook.listings,
   });
 
   // Recent sales hook (from indexer)
-  const { namedRecentSales } = useRecentSales({
+  const { namedRecentSales, invalidateAndRefetch: invalidateRecentSales } = useRecentSales({
     listings: dataHook.listings,
     limit: 20,
+  });
+
+  // Combined invalidation function for all sales data
+  const invalidateAllSales = useCallback(async () => {
+    await Promise.all([
+      invalidateSales(),
+      invalidateRecentSales(),
+    ]);
+  }, [invalidateSales, invalidateRecentSales]);
+
+  // Actions hook
+  const actionsHook = useMarketplaceActionsHook({
+    account,
+    refetchOrders: dataHook.refetchOrders,
+    reloadUserBeasts: dataHook.reloadUserBeasts,
+    invalidateSales: invalidateAllSales,
   });
 
   // Defer username lookups to allow listings to render first
@@ -536,15 +545,26 @@ export default function MarketplacePage() {
             {filtersHook.activeTab === "my" && (
               <Button
                 variant="outline"
-                onClick={() => {
+                onClick={async () => {
                   dataHook.reloadUserBeasts();
                   refetchOffers();
                   refetchOffersReceived();
-                  refetchSales();
+                  // Use invalidation to force refetch even if data is "fresh"
+                  await invalidateSales();
                 }}
                 disabled={dataHook.userBeastsLoading}
               >
                 {dataHook.userBeastsLoading ? "Refreshing…" : "Refresh"}
+              </Button>
+            )}
+            {filtersHook.activeTab === "explore" && exploreSubTab === "recent-sold" && (
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  await invalidateRecentSales();
+                }}
+              >
+                Refresh
               </Button>
             )}
           </div>
@@ -1037,6 +1057,7 @@ export default function MarketplacePage() {
                           <th className="px-4 py-3 text-left font-semibold text-gray-300">Beast</th>
                           <th className="px-4 py-3 text-left font-semibold text-gray-300">Price</th>
                           <th className="px-4 py-3 text-left font-semibold text-gray-300">Status</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Tx</th>
                           <th className="px-4 py-3 text-left font-semibold text-gray-300">Expires</th>
                         </tr>
                       </thead>
@@ -1091,6 +1112,20 @@ export default function MarketplacePage() {
                                   <span className={cn("inline-block px-2 py-1 rounded text-[10px] font-semibold uppercase", statusBadgeClass)}>
                                     {tx.status}
                                   </span>
+                                ) : (
+                                  <span className="text-gray-500">-</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                {tx.txHash ? (
+                                  <a
+                                    href={`https://voyager.online/tx/${tx.txHash}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-lsGold hover:text-lsGold/80 hover:underline font-mono text-[10px]"
+                                  >
+                                    {tx.txHash.slice(0, 6)}…{tx.txHash.slice(-4)}
+                                  </a>
                                 ) : (
                                   <span className="text-gray-500">-</span>
                                 )}
