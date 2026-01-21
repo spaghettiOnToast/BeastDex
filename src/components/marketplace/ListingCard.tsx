@@ -200,21 +200,27 @@ export default function ListingCard({
 
               {/* Add to Cart */}
               {handleAddToCart && (
-                <Button
-                  className={[
-                    "flex-1 text-[9px] px-1.5 py-1 h-6",
-                    buyDisabled
-                      ? "bg-gray-800 text-gray-400 cursor-not-allowed border-gray-600"
-                      : inCart
-                      ? "bg-[#39ff14]/20 text-[#39ff14] border-[#39ff14] font-semibold"
-                      : "border-lsGold text-lsGold hover:bg-lsGold/10 hover:border-lsGold font-semibold",
-                  ].join(" ")}
-                  variant="outline"
-                  onClick={handleAddToCart}
-                  disabled={buyDisabled}
-                >
-                  {inCart ? "In Cart" : "Cart"}
-                </Button>
+                isAlreadyListed ? (
+                  <div className="flex-1 text-[9px] px-1.5 py-1 h-6 bg-green-500/20 text-green-300 border border-green-400/50 rounded-md flex items-center justify-center font-semibold">
+                    Listed
+                  </div>
+                ) : (
+                  <Button
+                    className={[
+                      "flex-1 text-[9px] px-1.5 py-1 h-6",
+                      buyDisabled
+                        ? "bg-gray-800 text-gray-400 cursor-not-allowed border-gray-600"
+                        : inCart
+                        ? "bg-[#39ff14]/20 text-[#39ff14] border-[#39ff14] font-semibold"
+                        : "border-lsGold text-lsGold hover:bg-lsGold/10 hover:border-lsGold font-semibold",
+                    ].join(" ")}
+                    variant="outline"
+                    onClick={handleAddToCart}
+                    disabled={buyDisabled}
+                  >
+                    {inCart ? "In Cart" : "Cart"}
+                  </Button>
+                )
               )}
 
               {/* Make Offer */}

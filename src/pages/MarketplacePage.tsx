@@ -99,6 +99,7 @@ export default function MarketplacePage() {
   const [selectedPaymentToken] = useState(DEFAULT_PAYMENT_TOKEN);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [detailModalListing, setDetailModalListing] = useState<Listing | null>(null);
+  const [transactionTypeFilter, setTransactionTypeFilter] = useState<string | null>(null);
 
   // Hidden offers state (persisted to localStorage)
   const [hiddenOfferIds, setHiddenOfferIds] = useState<Set<string>>(() => {
@@ -249,14 +250,8 @@ export default function MarketplacePage() {
     return enrichedOffersReceived.filter(offer => offer.isHidden).length;
   }, [enrichedOffersReceived]);
 
-  // Load recent listings when tab is active
-  useEffect(() => {
-    if (filtersHook.activeTab === "explore" && exploreSubTab === "recent-listed") {
-      dataHook.loadRecentListings();
-    }
-  }, [filtersHook.activeTab, exploreSubTab]);
-
-  // Recent sales are now loaded automatically from useRecentSales hook
+  // Recent listings now auto-update when main listings change (no manual load needed)
+  // Recent sales are loaded automatically from useRecentSales hook
 
   // Reload user beasts when My Activity tab is opened
   useEffect(() => {
@@ -816,9 +811,7 @@ export default function MarketplacePage() {
               </>
             ) : exploreSubTab === "recent-listed" ? (
               <>
-                {dataHook.loadingRecentListings ? (
-                  <p className="text-xs text-gray-400">Loading recent listings…</p>
-                ) : filtersHook.namedRecentListings.length === 0 ? (
+                {filtersHook.namedRecentListings.length === 0 ? (
                   <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
                     No recent listings available.
                   </p>
@@ -869,27 +862,45 @@ export default function MarketplacePage() {
                     No recent sales available.
                   </p>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {namedRecentSales.map(({ sale, beast, tokenId, price, from, to, time }, idx) => {
                       const token = sale.order?.currency ? getPaymentTokenByAddress(sale.order.currency) : null;
                       const symbol = token?.symbol ?? 'STRK';
                       return (
                         <div
                           key={`sale-${idx}`}
-                          className="rounded-lg border border-gray-800 bg-black/30 p-4 flex items-center gap-4"
+                          className="rounded-lg border border-gray-800 bg-gradient-to-r from-black/40 to-gray-900/20 p-3 flex items-center gap-4 hover:border-gray-700 transition-colors"
                         >
-                          <div className="flex-1">
-                            <p className="font-semibold">{beast?.name || `Beast #${tokenId}`}</p>
-                            <p className="text-xs text-gray-400">
-                              Sold for {formatPrice(price, symbol)}
+                          {/* Beast Image */}
+                          <div className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gradient-to-br from-gray-900/50 to-black/50 border border-gray-800">
+                            {beast?.image ? (
+                              <img
+                                src={beast.image}
+                                alt={beast.name || `Beast #${tokenId}`}
+                                className="w-full h-full object-contain"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-gray-600 text-xs">
+                                No img
+                              </div>
+                            )}
+                          </div>
+                          {/* Sale Details */}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-white truncate">{beast?.name || `Beast #${tokenId}`}</p>
+                            <p className="text-sm text-lsGold font-medium">
+                              {formatPrice(price, symbol)}
                             </p>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-gray-500 truncate">
                               {from.slice(0, 6)}...{from.slice(-4)} → {to.slice(0, 6)}...{to.slice(-4)}
                             </p>
                           </div>
-                          <p className="text-xs text-gray-500">
-                            {new Date(time * 1000).toLocaleDateString()}
-                          </p>
+                          {/* Date */}
+                          <div className="flex-shrink-0 text-right">
+                            <p className="text-xs text-gray-500">
+                              {new Date(time * 1000).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
                       );
                     })}
@@ -1029,25 +1040,23 @@ export default function MarketplacePage() {
                     </div>
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                       {filtersHook.sortedUserBeasts.map((beast) => {
-                        const tokenId = beast.id.split(":").pop() || beast.id;
+                        const rawTokenId = beast.id.split(":").pop() || beast.id;
+                        // Convert hex tokenId to decimal string for comparison with listing tokenIds
+                        const tokenId = rawTokenId.startsWith("0x")
+                          ? BigInt(rawTokenId).toString()
+                          : rawTokenId;
                         const isListed = filtersHook.alreadyListedTokenIds.has(tokenId);
                         const inCart = cartsHook.isInCart(beast.id);
 
                         return (
-                          <div key={beast.id} className="relative">
-                            <ListingCard
-                              beast={beast}
-                              tokenId={tokenId}
-                              inCart={inCart}
-                              isAlreadyListed={isListed}
-                              onAddToCart={() => cartsHook.handleToggleCart(beast)}
-                            />
-                            {isListed && (
-                              <div className="absolute top-2 right-2 bg-green-500 text-white text-[10px] px-2 py-1 rounded">
-                                Listed
-                              </div>
-                            )}
-                          </div>
+                          <ListingCard
+                            key={beast.id}
+                            beast={beast}
+                            tokenId={tokenId}
+                            inCart={inCart}
+                            isAlreadyListed={isListed}
+                            onAddToCart={() => cartsHook.handleToggleCart(beast)}
+                          />
                         );
                       })}
                     </div>
@@ -1197,20 +1206,65 @@ export default function MarketplacePage() {
                     No transaction history yet.
                   </p>
                 ) : (
-                  <div className="rounded-lg border border-gray-800 bg-black/30 overflow-hidden">
-                    <table className="w-full text-xs">
-                      <thead className="bg-gray-900/50 border-b border-gray-800">
-                        <tr>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Type</th>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Beast</th>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Price</th>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Status</th>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Tx</th>
-                          <th className="px-4 py-3 text-left font-semibold text-gray-300">Expires</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {userTransactions.map((tx, idx) => {
+                  <div className="space-y-3">
+                    {/* Transaction Type Filters */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-gray-400 mr-1">Filter:</span>
+                      <button
+                        type="button"
+                        onClick={() => setTransactionTypeFilter(null)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer",
+                          transactionTypeFilter === null
+                            ? "bg-lsGold/20 text-lsGold border border-lsGold/50"
+                            : "bg-gray-800/50 text-gray-400 border border-gray-700 hover:border-gray-600 hover:text-gray-300"
+                        )}
+                      >
+                        All
+                      </button>
+                      {[
+                        { type: "buy", label: "Buy", class: "bg-green-500/20 text-green-400 border-green-500/50", activeRing: "ring-2 ring-green-400/50" },
+                        { type: "list", label: "List", class: "bg-blue-500/20 text-blue-400 border-blue-500/50", activeRing: "ring-2 ring-blue-400/50" },
+                        { type: "sold", label: "Sold", class: "bg-green-500/20 text-green-400 border-green-500/50", activeRing: "ring-2 ring-green-400/50" },
+                        { type: "offer-accepted", label: "Accepted Offer", class: "bg-emerald-500/20 text-emerald-400 border-emerald-500/50", activeRing: "ring-2 ring-emerald-400/50" },
+                        { type: "offer", label: "Offer", class: "bg-purple-500/20 text-purple-400 border-purple-500/50", activeRing: "ring-2 ring-purple-400/50" },
+                        { type: "cancel", label: "Cancel", class: "bg-red-500/20 text-red-400 border-red-500/50", activeRing: "ring-2 ring-red-400/50" },
+                      ].map(({ type, label, class: colorClass, activeRing }) => {
+                        const count = userTransactions.filter(tx => tx.type === type).length;
+                        if (count === 0) return null;
+                        return (
+                          <button
+                            key={type}
+                            type="button"
+                            onClick={() => setTransactionTypeFilter(transactionTypeFilter === type ? null : type)}
+                            className={cn(
+                              "px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer border",
+                              colorClass,
+                              transactionTypeFilter === type && activeRing
+                            )}
+                          >
+                            {label} ({count})
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* Transactions Table */}
+                    <div className="rounded-lg border border-gray-800 bg-black/30 overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-900/50 border-b border-gray-800">
+                          <tr>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-300">Type</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-300">Beast</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-300">Price</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-300">Status</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-300">Tx</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-300">Expires</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {userTransactions
+                            .filter(tx => transactionTypeFilter === null || tx.type === transactionTypeFilter)
+                            .map((tx, idx) => {
                           const token = tx.paymentToken ? getPaymentTokenByAddress(tx.paymentToken) : null;
                           const symbol = token?.symbol ?? 'LORDS';
 
@@ -1284,10 +1338,11 @@ export default function MarketplacePage() {
                                   : '-'}
                               </td>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </>
@@ -1449,6 +1504,7 @@ export default function MarketplacePage() {
           ownerUsernames={ownerUsernames}
           onClose={handleCloseDetailModal}
           customActionSlot={detailModalActionSlot}
+          listingExpiration={detailModalListing?.expiration}
         />
 
         <FiltersDrawer

@@ -275,13 +275,16 @@ export function useMarketplaceFilters({
 
   /**
    * Track which token IDs are already actively listed
+   * Uses raw listings (not filtered) to ensure we catch all listed beasts
    */
   const alreadyListedTokenIds = useMemo(() => {
-    const activeListings = myActiveListings.filter(
-      (l) => l.status === "active"
+    if (!address) return new Set<string>();
+    const lower = address.toLowerCase();
+    const userActiveListings = listings.filter(
+      (l) => l.seller.toLowerCase() === lower && l.status === "active"
     );
-    return new Set(activeListings.map((l) => l.tokenId));
-  }, [myActiveListings]);
+    return new Set(userActiveListings.map((l) => String(l.tokenId).trim()));
+  }, [listings, address]);
 
   /**
    * Get all unique owner addresses for username fetching

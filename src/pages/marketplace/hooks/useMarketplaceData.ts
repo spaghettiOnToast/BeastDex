@@ -1,5 +1,4 @@
-import { useState, useCallback } from "react";
-import type { Listing } from "../../../services/marketplace/types";
+import { useMemo } from "react";
 import { useMarketplaceListings } from "./useMarketplaceListings";
 import { useUserBeasts } from "../../../hooks/useUserBeasts";
 import { useBeastFilters } from "../../../hooks/useBeastFilters";
@@ -13,10 +12,6 @@ import { useBeastFilters } from "../../../hooks/useBeastFilters";
  * - useBeastFilters: Handles available filter options
  */
 export function useMarketplaceData(address: string | undefined, _marketplace: any) {
-  // Recent listings state (derived from main listings)
-  const [recentListings, setRecentListings] = useState<Listing[]>([]);
-  const [loadingRecentListings, setLoadingRecentListings] = useState(false);
-
   // Marketplace listings (orders + hydration)
   const listingsHook = useMarketplaceListings();
 
@@ -27,20 +22,13 @@ export function useMarketplaceData(address: string | undefined, _marketplace: an
   const filtersHook = useBeastFilters();
 
   /**
-   * Load recent listings (derived from main listings)
+   * Recent listings - automatically derived from main listings
+   * Only shows active listings, sorted by most recently created
    */
-  const loadRecentListings = useCallback(async () => {
-    setLoadingRecentListings(true);
-    try {
-      // Use the actual listings data we already have, sorted by most recently created
-      const recent = [...listingsHook.listings]
-        .filter((listing) => listing.active)
-        .slice(0, 50);
-
-      setRecentListings(recent);
-    } finally {
-      setLoadingRecentListings(false);
-    }
+  const recentListings = useMemo(() => {
+    return [...listingsHook.listings]
+      .filter((listing) => listing.active)
+      .slice(0, 50);
   }, [listingsHook.listings]);
 
   return {
@@ -56,10 +44,8 @@ export function useMarketplaceData(address: string | undefined, _marketplace: an
     refetchOrders: listingsHook.refetchOrders,
     ordersError: listingsHook.ordersError,
 
-    // Recent data
+    // Recent data (auto-updates when listings change)
     recentListings,
-    loadingRecentListings,
-    loadRecentListings,
 
     // User beasts
     userBeasts: userBeastsHook.beasts,

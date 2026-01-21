@@ -12,7 +12,7 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
-import { ChevronLeft, ChevronRight, Send } from "lucide-react";
+import { ChevronLeft, ChevronRight, Send, Clock } from "lucide-react";
 import { normaliseStarknetAddress } from "../../utils/address";
 import { SendBeastDialog } from "./SendBeastDialog";
 
@@ -25,6 +25,7 @@ type BeastModalProps = {
   onNextDuplicate?: () => void;
   onPreviousDuplicate?: () => void;
   customActionSlot?: ReactNode; // Override default action buttons
+  listingExpiration?: number; // Unix timestamp for listing expiry
 };
 
 export function BeastModal({
@@ -36,6 +37,7 @@ export function BeastModal({
   onNextDuplicate,
   onPreviousDuplicate,
   customActionSlot,
+  listingExpiration,
 }: BeastModalProps) {
   const navigate = useNavigate();
   const { address: connectedAddress } = useAccount();
@@ -100,33 +102,43 @@ export function BeastModal({
         <DialogHeader className="px-4 py-5 border-b border-border/50 bg-muted/30">
           <div className="flex items-center justify-between pr-8">
             <DialogTitle className="text-xl font-bold tracking-tight">{beast.name}</DialogTitle>
-            {hasDuplicates && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground font-medium">
-                  {currentDuplicateIndex + 1} of {duplicates.length}
-                </span>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onPreviousDuplicate}
-                    disabled={!onPreviousDuplicate}
-                    className="h-8 w-8 p-0"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onNextDuplicate}
-                    disabled={!onNextDuplicate}
-                    className="h-8 w-8 p-0"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
+            <div className="flex items-center gap-3">
+              {listingExpiration && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/50 border border-border/50">
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">
+                    Expires {new Date(listingExpiration * 1000).toLocaleDateString()}
+                  </span>
                 </div>
-              </div>
-            )}
+              )}
+              {hasDuplicates && (
+                <>
+                  <span className="text-sm text-muted-foreground font-medium">
+                    {currentDuplicateIndex + 1} of {duplicates.length}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={onPreviousDuplicate}
+                      disabled={!onPreviousDuplicate}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={onNextDuplicate}
+                      disabled={!onNextDuplicate}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </DialogHeader>
         <ScrollArea className="max-h-[75vh]">
