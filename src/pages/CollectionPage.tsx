@@ -24,6 +24,8 @@ import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import BeastCard from "../components/beast/BeastCard";
 import BeastModal from "../components/beast/BeastModal";
+import { BeastTableView } from "../components/beast/BeastTableView";
+import { Grid, Table } from "lucide-react";
 import {
   fetchBeastAttributeFilters,
   fetchBeasts,
@@ -203,6 +205,7 @@ function CollectionPage() {
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
 
   const summaryRequestRef = useRef(0);
 
@@ -1147,6 +1150,25 @@ function CollectionPage() {
               <span className="text-muted-foreground mr-1.5">Show:</span>
               {showDuplicatesOnly ? "All Beasts" : "Duplicates Only"}
             </Button>
+            {/* View Mode Toggle */}
+            <div className="flex items-center border border-border/50 rounded-md bg-card/90 backdrop-blur-sm">
+              <Button
+                variant={viewMode === "grid" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("grid")}
+                className="rounded-r-none border-0 h-8"
+              >
+                <Grid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === "table" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("table")}
+                className="rounded-l-none border-0 h-8"
+              >
+                <Table className="h-4 w-4" />
+              </Button>
+            </div>
             <button
               type="button"
               onClick={() => {
@@ -1169,6 +1191,12 @@ function CollectionPage() {
 
         {catalogLoading ? (
           <p className="text-xs text-gray-400">Loading collection…</p>
+        ) : viewMode === "table" ? (
+          <BeastTableView
+            beasts={ownedBeasts}
+            onBeastSelect={handleBeastSelect}
+            ownerUsernames={ownerUsernames}
+          />
         ) : (
           <div className="grid gap-2 grid-cols-3 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 sm:gap-3">
             {tabEntries[activeTab].map((entry) => (
