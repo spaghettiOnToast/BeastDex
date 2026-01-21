@@ -2,6 +2,7 @@ type TokenIconProps = {
   symbol: string;
   size?: "xs" | "sm" | "md" | "lg";
   className?: string;
+  logoUrl?: string | null;
 };
 
 const TOKEN_LOGOS: Record<string, string> = {
@@ -9,7 +10,6 @@ const TOKEN_LOGOS: Record<string, string> = {
   STRK: "https://imagedelivery.net/0xPAQaDtnQhBs8IzYRIlNg/1b126320-367c-48ed-cf5a-ba7580e49600/logo",
   ETH: "https://imagedelivery.net/0xPAQaDtnQhBs8IzYRIlNg/e07829b7-0382-4e03-7ecd-a478c5aa9f00/logo",
   USDC: "https://imagedelivery.net/0xPAQaDtnQhBs8IzYRIlNg/e5aaa970-a998-47e8-bd43-4a3b56b87200/logo",
-  SURVIVOR: "https://imagedelivery.net/0xPAQaDtnQhBs8IzYRIlNg/a3bfe959-50c4-4f89-0aef-b19207d82a00/logo", // Using LORDS logo as fallback
 };
 
 const SIZE_CLASSES = {
@@ -22,8 +22,8 @@ const SIZE_CLASSES = {
 /**
  * TokenIcon - Displays token logo with fallback to symbol text
  */
-export default function TokenIcon({ symbol, size = "sm", className = "" }: TokenIconProps) {
-  const logoUrl = TOKEN_LOGOS[symbol.toUpperCase()];
+export default function TokenIcon({ symbol, size = "sm", className = "", logoUrl: providedLogoUrl }: TokenIconProps) {
+  const logoUrl = providedLogoUrl || TOKEN_LOGOS[symbol.toUpperCase()];
   const sizeClass = SIZE_CLASSES[size];
 
   if (!logoUrl) {

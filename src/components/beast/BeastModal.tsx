@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAccount } from "@starknet-react/core";
 import type { Beast } from "../../services/beast";
@@ -24,6 +24,7 @@ type BeastModalProps = {
   currentDuplicateIndex?: number;
   onNextDuplicate?: () => void;
   onPreviousDuplicate?: () => void;
+  customActionSlot?: ReactNode; // Override default action buttons
 };
 
 export function BeastModal({
@@ -33,7 +34,8 @@ export function BeastModal({
   duplicates = [],
   currentDuplicateIndex = 0,
   onNextDuplicate,
-  onPreviousDuplicate
+  onPreviousDuplicate,
+  customActionSlot,
 }: BeastModalProps) {
   const navigate = useNavigate();
   const { address: connectedAddress } = useAccount();
@@ -136,30 +138,32 @@ export function BeastModal({
               summitLoading={summitLoading}
               imageSize="modal"
               actionSlot={
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Button
-                    variant="default"
-                    size="default"
-                    onClick={() => {
-                      onClose();
-                      navigate(detailPath);
-                    }}
-                    className="w-full sm:w-auto font-semibold tracking-wide"
-                  >
-                    View Full Details
-                  </Button>
-                  {isOwner && (
+                customActionSlot ?? (
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <Button
-                      variant="outline"
+                      variant="default"
                       size="default"
-                      onClick={() => setShowSendDialog(true)}
-                      className="w-full sm:w-auto font-semibold tracking-wide cursor-pointer"
+                      onClick={() => {
+                        onClose();
+                        navigate(detailPath);
+                      }}
+                      className="w-full sm:w-auto font-semibold tracking-wide"
                     >
-                      <Send className="mr-2 h-4 w-4" />
-                      Send Beast
+                      View Full Details
                     </Button>
-                  )}
-                </div>
+                    {isOwner && (
+                      <Button
+                        variant="outline"
+                        size="default"
+                        onClick={() => setShowSendDialog(true)}
+                        className="w-full sm:w-auto font-semibold tracking-wide cursor-pointer"
+                      >
+                        <Send className="mr-2 h-4 w-4" />
+                        Send Beast
+                      </Button>
+                    )}
+                  </div>
+                )
               }
             />
           </div>

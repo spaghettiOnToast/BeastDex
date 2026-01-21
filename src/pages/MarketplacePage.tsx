@@ -34,6 +34,7 @@ import PurchaseCartDialog from "../components/marketplace/PurchaseCartDialog";
 import MakeOfferDialog from "../components/marketplace/MakeOfferDialog";
 import OffersDialog from "../components/marketplace/OffersDialog";
 import UnifiedCartDialog from "../components/marketplace/UnifiedCartDialog";
+import BeastModal from "../components/beast/BeastModal";
 import {
   Dialog,
   DialogContent,
@@ -51,6 +52,7 @@ import { useMarketplaceCarts } from "./marketplace/hooks/useMarketplaceCarts";
 import { useMarketplaceActions as useMarketplaceActionsHook } from "./marketplace/hooks/useMarketplaceActions";
 import { useUserTransactions } from "./marketplace/hooks/useUserTransactions";
 import { useRecentSales } from "./marketplace/hooks/useRecentSales";
+import { useTokenMap, tokenAmountToUsd } from "../hooks/useEkuboTokens";
 import { ViewToggle } from "./marketplace/components/ViewToggle";
 import { toBigInt } from "./marketplace/utils";
 import type { ExploreSubTab, MyActivitySubTab } from "./marketplace/types";
@@ -70,6 +72,7 @@ const HIDDEN_OFFERS_KEY = "beastdex-hidden-offers";
 export default function MarketplacePage() {
   const { address, account } = useAccount();
   const marketplace = useMarketplace();
+  const { getToken } = useTokenMap();
 
   // Dialog states
   const [exploreSubTab, setExploreSubTab] = useState<ExploreSubTab>("browse");
@@ -95,6 +98,7 @@ export default function MarketplacePage() {
   } | null>(null);
   const [selectedPaymentToken] = useState(DEFAULT_PAYMENT_TOKEN);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [detailModalListing, setDetailModalListing] = useState<Listing | null>(null);
 
   // Hidden offers state (persisted to localStorage)
   const [hiddenOfferIds, setHiddenOfferIds] = useState<Set<string>>(() => {
@@ -175,7 +179,7 @@ export default function MarketplacePage() {
   });
 
   // Defer username lookups to allow listings to render first
-  useControllerUsernames(filtersHook.ownerAddresses, { delayMs: 300 });
+  const { usernames: ownerUsernames } = useControllerUsernames(filtersHook.ownerAddresses, { delayMs: 300 });
 
   // Fetch offers for selected token when offers dialog is open
   const { data: arcadeOffers, isLoading: offersLoading } = useOffersForToken(
@@ -276,16 +280,67 @@ export default function MarketplacePage() {
   );
 
   /**
-   * Format subtitle price (always USDC equivalent)
-   * Temporarily disabled due to incorrect conversion rates
+   * Format subtitle price (USD equivalent using Ekubo prices)
    */
   const formatSubtitlePrice = useCallback(
-    (_listing: Listing) => {
-      // Disabled - conversion rates need to be fixed
-      return undefined;
+    (listing: Listing) => {
+      const tokenAddress = listing.paymentToken;
+      if (!tokenAddress) return undefined;
+
+      const token = getToken(tokenAddress);
+      if (!token?.usdPrice) return undefined;
+
+      const usdValue = tokenAmountToUsd(
+        listing.price,
+        token.decimals,
+        token.usdPrice
+      );
+
+      // Format with 2 decimal places and thousands separator
+      return usdValue.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
     },
-    []
+    [getToken]
   );
+
+  /**
+   * Get token logo URL from Ekubo data
+   */
+  const getTokenLogoUrl = useCallback(
+    (listing: Listing) => {
+      const tokenAddress = listing.paymentToken;
+      if (!tokenAddress) return undefined;
+      return getToken(tokenAddress)?.logoUrl;
+    },
+    [getToken]
+  );
+
+  /**
+   * Handle clicking on a listing card to open detail modal
+   */
+  const handleCardClick = useCallback((listing: Listing) => {
+    setDetailModalListing(listing);
+  }, []);
+
+  /**
+   * Handle closing the detail modal
+   */
+  const handleCloseDetailModal = useCallback(() => {
+    setDetailModalListing(null);
+  }, []);
+
+  /**
+   * Create beast object for detail modal with seller as owner
+   */
+  const detailModalBeast = useMemo(() => {
+    if (!detailModalListing?.beast) return null;
+    return {
+      ...detailModalListing.beast,
+      owner: detailModalListing.seller,
+    };
+  }, [detailModalListing]);
 
   /**
    * Calculate floor price listing - only compare listings in the same currency
@@ -464,6 +519,93 @@ export default function MarketplacePage() {
     [account, actionsHook, dataHook]
   );
 
+  /**
+   * Marketplace-specific action buttons for detail modal
+   */
+  const detailModalActionSlot = useMemo(() => {
+    if (!detailModalListing) return null;
+
+    const isOwner = address?.toLowerCase() === detailModalListing.seller?.toLowerCase();
+    const listing = detailModalListing;
+
+    if (isOwner) {
+      // Owner view: Edit and Cancel buttons
+      return (
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button
+            variant="default"
+            size="default"
+            onClick={() => {
+              handleCloseDetailModal();
+              setEditingListing(listing);
+              setEditDialogOpen(true);
+            }}
+            className="w-full sm:w-auto font-semibold tracking-wide cursor-pointer"
+          >
+            Edit Listing
+          </Button>
+          {listing.active && (
+            <Button
+              variant="destructive"
+              size="default"
+              onClick={() => {
+                handleCloseDetailModal();
+                handleCancelListing(listing);
+              }}
+              className="w-full sm:w-auto font-semibold tracking-wide cursor-pointer"
+            >
+              Cancel Listing
+            </Button>
+          )}
+        </div>
+      );
+    }
+
+    // Non-owner view: Buy Now, Add to Cart, Make Offer
+    return (
+      <div className="flex flex-col sm:flex-row gap-2">
+        <Button
+          variant="default"
+          size="default"
+          onClick={() => {
+            handleCloseDetailModal();
+            setPurchasingListing(listing);
+            setPurchaseConfirmOpen(true);
+          }}
+          disabled={!listing.active}
+          className="w-full sm:w-auto font-semibold tracking-wide bg-lsGold/20 text-lsGold border border-lsGold hover:bg-lsGold/30 cursor-pointer"
+        >
+          Buy Now - {formatPriceLabel(listing)}
+        </Button>
+        <Button
+          variant="outline"
+          size="default"
+          onClick={() => {
+            handleCloseDetailModal();
+            cartsHook.handleAddToPurchaseCart(listing);
+          }}
+          disabled={!listing.active}
+          className="w-full sm:w-auto font-semibold tracking-wide cursor-pointer"
+        >
+          {cartsHook.isInPurchaseCart(listing.listingId) ? "In Cart" : "Add to Cart"}
+        </Button>
+        <Button
+          variant="outline"
+          size="default"
+          onClick={() => {
+            handleCloseDetailModal();
+            setOfferBeast(listing.beast ?? null);
+            setOfferTokenId(listing.tokenId);
+            setMakeOfferOpen(true);
+          }}
+          className="w-full sm:w-auto font-semibold tracking-wide cursor-pointer"
+        >
+          Make Offer
+        </Button>
+      </div>
+    );
+  }, [detailModalListing, address, formatPriceLabel, cartsHook, handleCloseDetailModal, handleCancelListing]);
+
   return (
     <AppLayout topBar={<TopBar />}>
       <div className="space-y-4">
@@ -641,10 +783,12 @@ export default function MarketplacePage() {
                         tokenId={listing.tokenId}
                         priceLabel={formatPriceLabel(listing)}
                         subtitlePriceLabel={formatSubtitlePrice(listing)}
+                        tokenLogoUrl={getTokenLogoUrl(listing)}
                         status={listing.status}
                         buyDisabled={!listing.active}
                         inCart={cartsHook.isInPurchaseCart(listing.listingId)}
                         primaryActionLabel={cartsHook.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
+                        onCardClick={() => handleCardClick(listing)}
                         onBuyNow={() => {
                           setPurchasingListing(listing);
                           setPurchaseConfirmOpen(true);
@@ -687,10 +831,12 @@ export default function MarketplacePage() {
                         tokenId={listing.tokenId}
                         priceLabel={formatPriceLabel(listing)}
                         subtitlePriceLabel={formatSubtitlePrice(listing)}
+                        tokenLogoUrl={getTokenLogoUrl(listing)}
                         status={listing.status}
                         buyDisabled={!listing.active}
                         inCart={cartsHook.isInPurchaseCart(listing.listingId)}
                         primaryActionLabel={cartsHook.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
+                        onCardClick={() => handleCardClick(listing)}
                         onBuyNow={() => {
                           setPurchasingListing(listing);
                           setPurchaseConfirmOpen(true);
@@ -825,8 +971,10 @@ export default function MarketplacePage() {
                         tokenId={listing.tokenId}
                         priceLabel={formatPriceLabel(listing)}
                         subtitlePriceLabel={formatSubtitlePrice(listing)}
+                        tokenLogoUrl={getTokenLogoUrl(listing)}
                         status={listing.status}
                         ownedByUser={true}
+                        onCardClick={() => handleCardClick(listing)}
                         onEdit={() => {
                           setEditingListing(listing);
                           setEditDialogOpen(true);
@@ -1294,6 +1442,14 @@ export default function MarketplacePage() {
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Beast Detail Modal */}
+        <BeastModal
+          beast={detailModalBeast}
+          ownerUsernames={ownerUsernames}
+          onClose={handleCloseDetailModal}
+          customActionSlot={detailModalActionSlot}
+        />
 
         <FiltersDrawer
           open={filtersOpen}

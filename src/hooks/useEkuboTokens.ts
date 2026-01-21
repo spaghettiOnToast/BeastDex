@@ -229,7 +229,22 @@ export function tokenAmountToUsd(
   decimals: number,
   usdPrice: number
 ): number {
-  const amountBigInt = typeof amount === "bigint" ? amount : BigInt(amount);
+  let amountBigInt: bigint;
+
+  if (typeof amount === "bigint") {
+    amountBigInt = amount;
+  } else if (typeof amount === "number") {
+    // Handle numbers (including scientific notation) by converting to fixed string
+    amountBigInt = BigInt(amount.toLocaleString("fullwide", { useGrouping: false }));
+  } else {
+    // String - try direct conversion, fall back to parsing as number first
+    try {
+      amountBigInt = BigInt(amount);
+    } catch {
+      amountBigInt = BigInt(Number(amount).toLocaleString("fullwide", { useGrouping: false }));
+    }
+  }
+
   const divisor = 10n ** BigInt(decimals);
   const integerPart = Number(amountBigInt / divisor);
   const fractionalPart = Number(amountBigInt % divisor) / Number(divisor);

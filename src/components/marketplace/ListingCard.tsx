@@ -10,6 +10,7 @@ type Props = {
   tokenId?: string;
   priceLabel?: string;
   subtitlePriceLabel?: string;
+  tokenLogoUrl?: string | null;
   onBuy?: () => void; // Kept for backwards compatibility - maps to Buy Now
   onBuyNow?: () => void; // Immediate purchase
   onAddToCart?: () => void; // Add to cart
@@ -17,6 +18,7 @@ type Props = {
   onViewOffers?: () => void;
   onEdit?: () => void;
   onCancel?: () => void;
+  onCardClick?: () => void; // Click on card image to show details
   ownedByUser?: boolean;
   compact?: boolean;
   primaryActionLabel?: string;
@@ -34,6 +36,7 @@ export default function ListingCard({
   tokenId,
   priceLabel,
   subtitlePriceLabel,
+  tokenLogoUrl,
   onBuy,
   onBuyNow,
   onAddToCart,
@@ -41,6 +44,7 @@ export default function ListingCard({
   onViewOffers,
   onEdit,
   onCancel,
+  onCardClick,
   ownedByUser = false,
   compact = false,
   primaryActionLabel,
@@ -89,7 +93,12 @@ export default function ListingCard({
           className={[
             "relative bg-gradient-to-br from-gray-900/50 to-black/50 rounded-t-lg overflow-hidden",
             compact ? "aspect-[4/5]" : "aspect-square",
+            onCardClick ? "cursor-pointer hover:opacity-90 transition-opacity" : "",
           ].join(" ")}
+          onClick={onCardClick}
+          onKeyDown={onCardClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onCardClick(); } } : undefined}
+          role={onCardClick ? "button" : undefined}
+          tabIndex={onCardClick ? 0 : undefined}
         >
           {imageSrc ? (
             <LazyImage
@@ -126,6 +135,7 @@ export default function ListingCard({
                 <TokenIcon
                   symbol={priceLabel.split(' ').slice(1).join(' ')}
                   size="sm"
+                  logoUrl={tokenLogoUrl}
                 />
               </div>
             )}

@@ -87,9 +87,10 @@ export function useMarketplaceFilters({
       );
 
     // Group listings by tokenId to deduplicate
+    // Normalize tokenId to handle potential inconsistencies (trim, lowercase not needed for numbers)
     const listingsByTokenId = new Map<string, Array<Listing & { beast: Beast }>>();
     for (const listing of baseListings) {
-      const tokenId = listing.tokenId;
+      const tokenId = String(listing.tokenId).trim();
       if (!listingsByTokenId.has(tokenId)) {
         listingsByTokenId.set(tokenId, []);
       }

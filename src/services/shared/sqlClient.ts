@@ -61,7 +61,7 @@ export type SqlClientConfig = {
 async function fetchWithRetry(
   url: string,
   init: RequestInit,
-  label: string,
+  _label: string,
   {
     retries = 3,
     baseDelayMs = 500,
@@ -138,11 +138,11 @@ async function fetchWithRetry(
  * Creates a SQL client function for a specific Torii endpoint
  */
 export function createSqlClient(config: SqlClientConfig) {
-  const { endpoint, label, defaultOptions = {} } = config;
+  const { endpoint, label: _label, defaultOptions = {} } = config;
 
   return async function runSql<T = unknown>(
     query: string,
-    debugLabel: string,
+    _debugLabel: string,
     options?: SqlClientOptions
   ): Promise<T> {
     const url = `${endpoint}?query=${encodeURIComponent(query)}`;
@@ -164,7 +164,7 @@ export function createSqlClient(config: SqlClientConfig) {
             method: "GET",
             headers: { Accept: "application/json" },
           },
-          label,
+          _label,
           mergedOptions
         );
 
