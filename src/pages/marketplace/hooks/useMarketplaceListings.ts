@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import type { OrderModel } from "@cartridge/marketplace";
+import { useState, useEffect, useRef, useCallback } from "react";
+import type { OrderModel } from "@cartridge/arcade";
 import type { Listing } from "../../../services/marketplace/types";
 import { hydrateOrders } from "../../../services/marketplace";
 import { BEASTS_COLLECTION_ADDRESS } from "../../../services/marketplace/constants";
@@ -14,6 +14,8 @@ export interface UseMarketplaceListingsResult {
   ordersFetching: boolean;
   ordersError: unknown;
   refetchOrders: () => Promise<any>;
+  /** Optimistically mark a listing as sold (removes from UI immediately) */
+  markListingAsSold: (listingId: string) => void;
 }
 
 /**
@@ -24,6 +26,8 @@ export function useMarketplaceListings(): UseMarketplaceListingsResult {
   const [listings, setListings] = useState<Listing[]>([]);
   const [hydratingListings, setHydratingListings] = useState(false);
   const [listingsError, setListingsError] = useState<string | null>(null);
+  // Track listings that have been sold (optimistic update)
+  const [soldListingIds, setSoldListingIds] = useState<Set<string>>(new Set());
 
   const prevOrdersRef = useRef<string>("");
 
@@ -94,6 +98,20 @@ export function useMarketplaceListings(): UseMarketplaceListingsResult {
 
         setListings(listingsData);
         setListingsError(null);
+        // Clear optimistic sold IDs when we get fresh data from indexer
+        // Only clear IDs that are no longer in the listings (indexer caught up)
+        setSoldListingIds((prev) => {
+          const currentIds = new Set(listingsData.map((l) => l.listingId));
+          const stillPending = new Set<string>();
+          prev.forEach((id) => {
+            if (currentIds.has(id)) {
+              // Listing still in response - indexer hasn't caught up yet
+              stillPending.add(id);
+            }
+            // If not in currentIds, indexer has caught up, don't add to stillPending
+          });
+          return stillPending;
+        });
       } catch (error) {
         if (!cancelled) {
           setListings([]);
@@ -126,8 +144,18 @@ export function useMarketplaceListings(): UseMarketplaceListingsResult {
     };
   }, [listedOrders, ordersLoading, ordersFetching]);
 
+  // Optimistically mark a listing as sold
+  const markListingAsSold = useCallback((listingId: string) => {
+    setSoldListingIds((prev) => new Set([...prev, listingId]));
+  }, []);
+
+  // Filter out optimistically sold listings
+  const filteredListings = listings.filter(
+    (listing) => !soldListingIds.has(listing.listingId)
+  );
+
   return {
-    listings,
+    listings: filteredListings,
     hydratingListings,
     listingsError,
     listedOrders,
@@ -135,5 +163,6 @@ export function useMarketplaceListings(): UseMarketplaceListingsResult {
     ordersFetching,
     ordersError,
     refetchOrders,
+    markListingAsSold,
   };
 }

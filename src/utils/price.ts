@@ -42,12 +42,14 @@ export function fromWei(weiAmount: BigNumberish, decimals: number = 18): string 
       return `0.${displayFractional}`;
     }
 
-    // For amounts >= 1, round to nearest whole number
-    // If fractional part is >= 0.5, round up
-    const halfDivisor = divisor / 2n;
-    const roundedWhole = fractionalPart >= halfDivisor ? wholePart + 1n : wholePart;
+    // For amounts >= 1, show up to 2 decimal places
+    const fractionalStr = fractionalPart.toString().padStart(decimals, '0');
+    const trimmedFractional = fractionalStr.slice(0, 2).replace(/0+$/, '');
 
-    return roundedWhole.toString();
+    if (trimmedFractional) {
+      return `${wholePart}.${trimmedFractional}`;
+    }
+    return wholePart.toString();
   } catch (error) {
     console.error('Error converting from wei:', error);
     return '0';

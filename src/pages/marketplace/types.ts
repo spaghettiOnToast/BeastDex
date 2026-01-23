@@ -26,7 +26,7 @@ export type TxEntry = {
   txHash?: string;
   timestamp: number;
   note?: string;
-  status?: "active" | "expired" | "canceled" | "completed"; // For offers/listings status
+  status?: "active" | "expired" | "cancelled" | "completed"; // For offers/listings status
 };
 
 /**

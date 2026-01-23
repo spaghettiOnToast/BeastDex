@@ -11,7 +11,7 @@ import { useBeastFilters } from "../../../hooks/useBeastFilters";
  * - useUserBeasts: Handles user's owned beasts
  * - useBeastFilters: Handles available filter options
  */
-export function useMarketplaceData(address: string | undefined, _marketplace: any) {
+export function useMarketplaceData(address: string | undefined) {
   // Marketplace listings (orders + hydration)
   const listingsHook = useMarketplaceListings();
 
@@ -43,6 +43,7 @@ export function useMarketplaceData(address: string | undefined, _marketplace: an
     ordersFetching: listingsHook.ordersFetching,
     refetchOrders: listingsHook.refetchOrders,
     ordersError: listingsHook.ordersError,
+    markListingAsSold: listingsHook.markListingAsSold,
 
     // Recent data (auto-updates when listings change)
     recentListings,

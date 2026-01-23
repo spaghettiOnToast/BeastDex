@@ -7,8 +7,8 @@ import {
   DialogDescription,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
-import type { OrderModel } from "@cartridge/marketplace";
-import { CategoryType, StatusType } from "@cartridge/marketplace";
+import type { OrderModel } from "@cartridge/arcade";
+import { CategoryType, StatusType } from "@cartridge/arcade";
 import { formatPrice } from "../../utils/price";
 import { toBigIntSafe } from "../../utils/bigint";
 import { getPaymentTokenByAddress } from "../../services/marketplace/constants";

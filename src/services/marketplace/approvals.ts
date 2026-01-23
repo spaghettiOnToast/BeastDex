@@ -6,21 +6,10 @@ import type {
 } from "starknet";
 import { BEASTS_COLLECTION_ADDRESS, MARKETPLACE_ADDRESS } from "./constants";
 import { compareStarknetAddresses } from "../../utils/address";
-
-type Uint256 = [string, string];
-
-const UINT128_MASK = (1n << 128n) - 1n;
-
-function toHex(value: bigint): string {
-  const hex = value.toString(16);
-  return hex.startsWith("0x") ? hex : `0x${hex}`;
-}
-
-function toUint256(value: bigint): Uint256 {
-  const low = value & UINT128_MASK;
-  const high = value >> 128n;
-  return [toHex(low), toHex(high)];
-}
+import {
+  toUint256Hex,
+  fromUint256Raw,
+} from "../../utils/uint256";
 
 export function getProvider(account: AccountInterface): ProviderInterface {
   // Try multiple ways to get the provider for different account types
@@ -63,9 +52,7 @@ async function callAllowance(
     return 0n;
   }
   const [low, high] = rawResult;
-  const lowBig = BigInt(low);
-  const highBig = BigInt(high);
-  return highBig * (1n << 128n) + lowBig;
+  return fromUint256Raw(low, high);
 }
 
 async function callIsApprovedForAll(
@@ -86,6 +73,74 @@ async function callIsApprovedForAll(
     : (response as any).result;
   const value = Array.isArray(rawResult) ? rawResult[0] : undefined;
   return value === "0x1" || value === "1" || value === "0x01";
+}
+
+/**
+ * Query ERC-2981 royalty info from the collection contract
+ * Returns the royalty receiver address and royalty amount for a given sale price
+ */
+export async function queryRoyaltyInfo(
+  provider: ProviderInterface,
+  collectionAddress: string,
+  tokenId: bigint,
+  salePrice: bigint
+): Promise<{ receiver: string; royaltyAmount: bigint } | null> {
+  try {
+    // Build token_id and sale_price as Uint256
+    const tokenIdU256 = toUint256Hex(tokenId);
+    const salePriceU256 = toUint256Hex(salePrice);
+
+    const response = await provider.callContract(
+      {
+        contractAddress: collectionAddress,
+        entrypoint: "royalty_info",
+        calldata: [...tokenIdU256, ...salePriceU256],
+      },
+      "latest"
+    );
+
+    const rawResult = Array.isArray(response)
+      ? response
+      : (response as any).result;
+
+    if (!Array.isArray(rawResult) || rawResult.length < 3) {
+      return null;
+    }
+
+    // Result is: receiver (felt), royalty_amount (u256 = low, high)
+    const receiver = rawResult[0];
+    const royaltyAmount = fromUint256Raw(rawResult[1], rawResult[2]);
+
+    return { receiver, royaltyAmount };
+  } catch (error) {
+    // Contract may not support ERC-2981
+    console.warn("Failed to query royalty info (contract may not support ERC-2981):", error);
+    return null;
+  }
+}
+
+/**
+ * Calculate royalty percentage from a sample query
+ * Uses a reference price to determine the percentage
+ */
+export async function getRoyaltyPercentage(
+  provider: ProviderInterface,
+  collectionAddress: string,
+  tokenId: bigint = 1n
+): Promise<number | null> {
+  try {
+    // Use a reference sale price of 10000 to easily calculate percentage
+    const referenceSalePrice = 10000n;
+    const info = await queryRoyaltyInfo(provider, collectionAddress, tokenId, referenceSalePrice);
+
+    if (!info) return null;
+
+    // Calculate percentage: (royaltyAmount / salePrice) * 100
+    const percentage = Number(info.royaltyAmount) / Number(referenceSalePrice) * 100;
+    return percentage;
+  } catch {
+    return null;
+  }
 }
 
 export async function ensureCollectionApproval(account: AccountInterface) {
@@ -141,7 +196,7 @@ export async function ensureErc20Allowance(
   if (allowance >= needed) {
     return;
   }
-  const calldata = toUint256(needed);
+  const calldata = toUint256Hex(needed);
 
   // Execute approval transaction
   const result = await account.execute([
@@ -186,7 +241,7 @@ export async function getErc20ApprovalCallIfNeeded(
   if (allowance >= needed) {
     return null;
   }
-  const calldata = toUint256(needed);
+  const calldata = toUint256Hex(needed);
 
   return {
     contractAddress: tokenAddress,
@@ -215,9 +270,7 @@ export async function getErc20Balance(
     return 0n;
   }
   const [low, high] = rawResult;
-  const lowBig = BigInt(low);
-  const highBig = BigInt(high);
-  return highBig * (1n << 128n) + lowBig;
+  return fromUint256Raw(low, high);
 }
 
 export async function checkSufficientBalance(
@@ -255,7 +308,7 @@ async function getTokenOwner(
   try {
     // Convert tokenId to Uint256 format
     const tokenIdBigInt = typeof tokenId === 'bigint' ? tokenId : BigInt(tokenId.toString());
-    const tokenIdU256 = toUint256(tokenIdBigInt);
+    const tokenIdU256 = toUint256Hex(tokenIdBigInt);
 
     const response = await provider.callContract(
       {
@@ -351,7 +404,7 @@ export function buildMarketplaceExecuteCall(
   // Convert tokenId to Uint256 format
   const tokenIdBigInt =
     typeof tokenId === "bigint" ? tokenId : BigInt(tokenId.toString());
-  const tokenIdU256 = toUint256(tokenIdBigInt);
+  const tokenIdU256 = toUint256Hex(tokenIdBigInt);
 
   return {
     contractAddress: MARKETPLACE_ADDRESS,
@@ -434,3 +487,4 @@ export async function executePurchaseWithApproval(
     transaction_hash: result.transaction_hash || "",
   };
 }
+

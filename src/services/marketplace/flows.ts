@@ -45,7 +45,7 @@ export type EditListingParams<TAccount> = CancelListingParams<TAccount> & {
   expiration?: BigNumberishInput;
 };
 
-export class EditListingError extends Error {
+class EditListingError extends Error {
   public step: "cancel" | "list";
   public cancelSucceeded: boolean;
 
@@ -126,5 +126,3 @@ export async function editListingFlow<TAccount>(
     );
   }
 }
-
-export { toBigInt };

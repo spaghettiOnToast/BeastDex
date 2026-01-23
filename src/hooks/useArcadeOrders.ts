@@ -1,7 +1,7 @@
 import { useMemo, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getChecksumAddress } from "starknet";
-import { CategoryType, StatusType } from "@cartridge/marketplace";
+import { CategoryType, StatusType } from "@cartridge/arcade";
 import { compareStarknetAddresses } from "../utils/address";
 
 // GraphQL endpoint for arcade-main
@@ -588,7 +588,9 @@ async function fetchAllOffersForCollectionGraphQL(
 
   // Filter out expired offers
   const now = Math.floor(Date.now() / 1000);
-  return offers.filter(offer => offer.expiration > now);
+  const nonExpiredOffers = offers.filter(offer => offer.expiration > now);
+
+  return nonExpiredOffers;
 }
 
 export type OfferWithBeastInfo = ArcadeOrderModelCompat & {

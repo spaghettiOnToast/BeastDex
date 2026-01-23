@@ -62,7 +62,7 @@ export default function UnifiedCartDialog({
     try {
       const provider = getProvider(account);
 
-      // Validate each listing in parallel
+      // Validate each listing in parallel via ownerOf calls
       const validationPromises = buyItems.map(async (listing) => {
         try {
           const tokenIdBigInt = BigInt(listing.tokenId);
@@ -74,7 +74,6 @@ export default function UnifiedCartDialog({
           );
           return { listingId: listing.listingId, isValid };
         } catch {
-          // If validation fails, assume invalid to be safe
           return { listingId: listing.listingId, isValid: false };
         }
       });

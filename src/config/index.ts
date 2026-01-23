@@ -34,7 +34,3 @@ export const config = {
 } as const;
 
 export type Config = typeof config;
-
-// SDK and fetch configuration utilities
-export { installFetchPatch } from "./fetchPatch";
-export { patchSdkConfig, getMarketplaceAddress, logSdkConfig } from "./sdkConfig";

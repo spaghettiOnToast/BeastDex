@@ -20,28 +20,20 @@ import {
 import {
   DEFAULT_PAYMENT_TOKEN,
   BEASTS_COLLECTION_ADDRESS,
-  DEFAULT_LISTING_DURATION_SECONDS,
-  LISTING_DURATION_OPTIONS,
   CLIENT_FEE_BP,
+  MARKETPLACE_ADDRESS,
 } from "../../services/marketplace/constants";
-import { useMarketplace, useMarketplaceActions } from "@cartridge/marketplace";
+import { ensureErc20Allowance, getProvider } from "../../services/marketplace/approvals";
 import { toWei, fromWei } from "../../utils/price";
 import { toast } from "sonner";
-import { cairo, CallData } from "starknet";
 import TokenSelect from "./TokenSelect";
 import { useSelectedToken } from "../../hooks/useEkuboTokens";
-
-const CUSTOM_DURATION_VALUE = "custom";
-
-const DURATION_SELECT_OPTIONS = [
-  ...LISTING_DURATION_OPTIONS.map((option) => ({
-    label: option.label,
-    value: String(option.value),
-  })),
-  { label: "Custom date…", value: CUSTOM_DURATION_VALUE },
-] as const;
-
-const DEFAULT_DURATION_VALUE = String(DEFAULT_LISTING_DURATION_SECONDS);
+import { isUserRejection } from "../../utils/transaction";
+import { toUint256Hex } from "../../utils/uint256";
+import {
+  useExpirationDetails,
+  DURATION_SELECT_OPTIONS,
+} from "../../hooks/useExpirationDetails";
 
 type Props = {
   open: boolean;
@@ -68,29 +60,30 @@ export default function MakeOfferDialog({
   const [currencyAddress, setCurrencyAddress] = useState<string>(
     DEFAULT_PAYMENT_TOKEN.address
   );
-  const [duration, setDuration] = useState<string>(DEFAULT_DURATION_VALUE);
-  const [customExpiration, setCustomExpiration] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const marketplace = useMarketplace();
-  const { buildOfferCalls } = useMarketplaceActions();
 
   // Get token info from Ekubo
   const { decimals: tokenDecimals, symbol: tokenSymbol } = useSelectedToken(currencyAddress);
 
-  useEffect(() => {
-    if (open) {
-      setDuration(DEFAULT_DURATION_VALUE);
-      setCustomExpiration("");
-      setError(null);
-    }
-  }, [open]);
+  // Use shared expiration hook (no max enforcement for offers)
+  const {
+    duration,
+    setDuration,
+    customExpiration,
+    setCustomExpiration,
+    minCustomExpiration,
+    expirationDetails,
+    isCustomDuration,
+    reset: resetExpiration,
+  } = useExpirationDetails();
 
   useEffect(() => {
-    if (duration !== CUSTOM_DURATION_VALUE) {
-      setCustomExpiration("");
+    if (open) {
+      resetExpiration();
+      setError(null);
     }
-  }, [duration]);
+  }, [open, resetExpiration]);
 
   const toBigInt = (value: string) => {
     const trimmed = value.trim();
@@ -126,65 +119,6 @@ export default function MakeOfferDialog({
       totalFormatted: fromWei(totalAmount, tokenDecimals),
     };
   }, [priceBigInt, tokenDecimals]);
-
-  const toLocalInputValue = (date: Date) => {
-    const timezoneOffset = date.getTimezoneOffset() * 60000;
-    return new Date(date.getTime() - timezoneOffset).toISOString().slice(0, 16);
-  };
-
-  const minCustomExpiration = useMemo(() => {
-    return toLocalInputValue(new Date(Date.now() + 60 * 1000));
-  }, [open]);
-
-  const expirationDetails = useMemo(() => {
-    const nowSeconds = Math.floor(Date.now() / 1000);
-
-    if (duration === CUSTOM_DURATION_VALUE) {
-      if (!customExpiration) {
-        return {
-          expirationSeconds: null,
-          error: "Select an expiration date and time.",
-          preview: null,
-        };
-      }
-      const parsed = Date.parse(customExpiration);
-      if (Number.isNaN(parsed)) {
-        return {
-          expirationSeconds: null,
-          error: "Unable to parse the chosen date.",
-          preview: null,
-        };
-      }
-      const seconds = Math.floor(parsed / 1000);
-      if (seconds <= nowSeconds) {
-        return {
-          expirationSeconds: null,
-          error: "Expiration must be in the future.",
-          preview: null,
-        };
-      }
-      return {
-        expirationSeconds: seconds,
-        error: null,
-        preview: new Date(seconds * 1000).toLocaleString(),
-      };
-    }
-
-    const parsedDuration = Number.parseInt(duration, 10);
-    if (!Number.isFinite(parsedDuration) || parsedDuration <= 0) {
-      return {
-        expirationSeconds: null,
-        error: "Choose a valid offer duration.",
-        preview: null,
-      };
-    }
-    const seconds = nowSeconds + parsedDuration;
-    return {
-      expirationSeconds: seconds,
-      error: null,
-      preview: new Date(seconds * 1000).toLocaleString(),
-    };
-  }, [customExpiration, duration]);
 
   const canSubmit = useMemo(() => {
     return (
@@ -223,35 +157,39 @@ export default function MakeOfferDialog({
       if (!expirationSeconds) {
         throw new Error("Invalid expiration selected");
       }
-      const expirationBigInt = BigInt(expirationSeconds);
 
-      // Use SDK's buildOfferCalls to get properly configured calls
-      // Then modify the approval amount to include the fee
-      const calls = buildOfferCalls(
-        BEASTS_COLLECTION_ADDRESS,
-        tokenIdBigInt,
-        0n, // quantity - must be 0n for ERC721 offers (same as original SDK call)
-        priceBigInt,
-        currencyAddress,
-        expirationBigInt
-      );
+      // Build token ID as Uint256
+      const tokenIdU256 = toUint256Hex(tokenIdBigInt);
 
-      // Modify the first call (approval) to use totalAmount (price + fee)
-      if (calls[0] && calls[0].entrypoint === "approve") {
-        const existingCalldata = calls[0].calldata as string[];
-        calls[0].calldata = CallData.compile({
-          spender: existingCalldata[0], // Keep the same spender from SDK
-          amount: cairo.uint256(feeDetails.totalAmount), // Use price + fee
+      // Ensure ERC20 approval for total amount (price + fee)
+      toast.loading("Checking token approval...", { id: toastId });
+      await ensureErc20Allowance(account, currencyAddress, feeDetails.totalAmount.toString());
+
+      // Build offer call
+      // Contract signature: offer(collection, token_id: u256, quantity: u128, price: u128, currency, expiration: u64)
+      // Note: offer does NOT have a royalties parameter
+      const offerCall = {
+        contractAddress: MARKETPLACE_ADDRESS,
+        entrypoint: "offer",
+        calldata: [
+          BEASTS_COLLECTION_ADDRESS,
+          ...tokenIdU256, // token_id as Uint256
+          "0", // quantity: u128 = 0 for ERC721 (non-fungible)
+          priceBigInt.toString(), // price: u128 (single felt, not u256!)
+          currencyAddress,
+          expirationSeconds.toString(), // expiration: u64
+        ],
+      };
+
+      toast.loading("Making offer...", { id: toastId });
+      const result = await account.execute([offerCall]);
+
+      if (result?.transaction_hash) {
+        const provider = getProvider(account);
+        await provider.waitForTransaction(result.transaction_hash, {
+          retryInterval: 2000,
         });
       }
-
-      // Execute the modified calls
-      toast.loading("Making offer...", { id: toastId });
-      await marketplace.provider.execute(
-        account as any,
-        calls,
-        "MARKETPLACE"
-      );
 
       toast.success("Offer made successfully!", { id: toastId });
       onOpenChange(false);
@@ -266,32 +204,26 @@ export default function MakeOfferDialog({
         currency: tokenSymbol,
       });
     } catch (e) {
-      const errorMessage = (e as Error).message || "Failed to make offer";
-      const lowerError = errorMessage.toLowerCase();
-
-      // Check if user cancelled the transaction
-      if (
-        lowerError.includes("user") &&
-        (lowerError.includes("reject") ||
-          lowerError.includes("cancel") ||
-          lowerError.includes("abort"))
-      ) {
+      if (isUserRejection(e)) {
         toast.info("Offer cancelled", { id: toastId });
-      } else if (
-        lowerError.includes("insufficient") ||
-        lowerError.includes("balance") ||
-        lowerError.includes("invalid balance")
-      ) {
-        // Insufficient balance error
-        toast.error("Insufficient balance to make this offer", { id: toastId });
-        setError("Insufficient balance");
-      } else if (lowerError.includes("invalid value")) {
-        // Contract validation error
-        toast.error("Offer rejected: The marketplace contract rejected this offer. The currency may not be supported.", { id: toastId });
-        setError("Currency may not be supported for offers");
       } else {
-        setError(errorMessage);
-        toast.error(errorMessage, { id: toastId });
+        const errorMessage = (e as Error).message || "Failed to make offer";
+        const lowerError = errorMessage.toLowerCase();
+
+        if (
+          lowerError.includes("insufficient") ||
+          lowerError.includes("balance") ||
+          lowerError.includes("invalid balance")
+        ) {
+          toast.error("Insufficient balance to make this offer", { id: toastId });
+          setError("Insufficient balance");
+        } else if (lowerError.includes("invalid value")) {
+          toast.error("Offer rejected: The marketplace contract rejected this offer. The currency may not be supported.", { id: toastId });
+          setError("Currency may not be supported for offers");
+        } else {
+          setError(errorMessage);
+          toast.error(errorMessage, { id: toastId });
+        }
       }
     } finally {
       setSubmitting(false);
@@ -353,18 +285,15 @@ export default function MakeOfferDialog({
                 ))}
               </SelectContent>
             </Select>
-            {duration === CUSTOM_DURATION_VALUE ? (
-              <div className="mt-3 space-y-1">
+            {isCustomDuration ? (
+              <div className="mt-3">
                 <Input
-                  type="datetime-local"
+                  type="date"
                   value={customExpiration}
                   onChange={(event) => setCustomExpiration(event.target.value)}
                   min={minCustomExpiration}
                   className="w-full"
                 />
-                <p className="text-[11px] text-gray-500">
-                  Times are interpreted in your local timezone.
-                </p>
               </div>
             ) : null}
             {expirationDetails.preview ? (
@@ -378,7 +307,6 @@ export default function MakeOfferDialog({
               </p>
             ) : null}
           </div>
-          {/* Fee breakdown */}
           {feeDetails && priceBigInt && (
             <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-3 space-y-2">
               <div className="flex justify-between text-sm">
@@ -390,9 +318,12 @@ export default function MakeOfferDialog({
                 <span className="text-gray-300">{feeDetails.feeFormatted} {tokenSymbol}</span>
               </div>
               <div className="border-t border-gray-700 pt-2 flex justify-between text-sm font-semibold">
-                <span className="text-gray-300">Total Cost</span>
+                <span className="text-gray-300">Total if Accepted</span>
                 <span className="text-lsGold">{feeDetails.totalFormatted} {tokenSymbol}</span>
               </div>
+              <p className="text-xs text-gray-500 mt-1">
+                The platform fee is only charged if your offer is accepted.
+              </p>
             </div>
           )}
           {error && <p className="text-sm text-red-400">{error}</p>}

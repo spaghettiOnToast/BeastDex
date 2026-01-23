@@ -3,18 +3,14 @@ import { toast } from "sonner";
 import type { AccountInterface, BigNumberish } from "starknet";
 import type { Beast } from "../../../services/beast";
 import type { Listing } from "../../../services/marketplace/types";
-import type { OrderModel } from "@cartridge/marketplace";
-import {
-  useMarketplaceActions as useCartridgeMarketplaceActions,
-  useMarketplace,
-} from "@cartridge/marketplace";
+import type { OrderModel } from "@cartridge/arcade";
 import {
   checkSufficientBalance,
-  ensureErc20Allowance,
   ensureCollectionApproval,
   executePurchaseWithApproval,
   validateListingOwnership,
   getProvider,
+  buildMarketplaceExecuteCall,
 } from "../../../services/marketplace/approvals";
 import {
   BEASTS_COLLECTION_ADDRESS,
@@ -22,9 +18,12 @@ import {
   CLIENT_FEE_RECEIVER,
   DEFAULT_PAYMENT_TOKEN,
   getPaymentTokenByAddress,
+  MARKETPLACE_ADDRESS,
 } from "../../../services/marketplace/constants";
 import { fromWei, TOKEN_DECIMALS } from "../../../utils/price";
 import { toBigIntSafe } from "../../../utils/bigint";
+import { isUserRejection } from "../../../utils/transaction";
+import { toUint256Hex } from "../../../utils/uint256";
 import { VOYAGER_BASE } from "../types";
 
 const toBigInt = toBigIntSafe;
@@ -34,23 +33,22 @@ export interface UseMarketplaceActionsProps {
   refetchOrders: () => Promise<any>;
   reloadUserBeasts: () => Promise<void>;
   invalidateSales?: () => Promise<void>;
+  /** Optimistically mark a listing as sold */
+  markListingAsSold?: (listingId: string) => void;
 }
 
 /**
  * Hook for managing marketplace actions (buy, sell, list, cancel, offers)
+ * Uses direct contract calls without SDK context
  */
 export function useMarketplaceActions({
   account,
   refetchOrders,
   reloadUserBeasts,
   invalidateSales,
+  markListingAsSold,
 }: UseMarketplaceActionsProps) {
-  const { executeListing, cancel, list, executeOffer, buildListCalls } =
-    useCartridgeMarketplaceActions();
-  const marketplaceCtx = useMarketplace();
-
   // Helper to poll for sales updates after a transaction
-  // The indexer takes time to process transactions, so we poll a few times
   const pollForSalesUpdates = useCallback(async (attempts = 3, delayMs = 3000) => {
     if (!invalidateSales) return;
     for (let i = 0; i < attempts; i++) {
@@ -66,61 +64,9 @@ export function useMarketplaceActions({
   const [listingBatch, setListingBatch] = useState(false);
 
   /**
-   * Edit a listing atomically (cancel + relist in single transaction)
-   * This ensures the user only needs to approve one transaction.
-   */
-  const editListing = useCallback(
-    async (
-      snAccount: AccountInterface,
-      orderId: BigNumberish,
-      collection: string,
-      tokenId: BigNumberish,
-      quantity: BigNumberish,
-      newPrice: BigNumberish,
-      currency: string,
-      expiration: BigNumberish
-    ) => {
-      try {
-        // Build cancel call using the marketplace provider
-        const cancelCall = marketplaceCtx.provider.marketplace.buildCancelCalldata(
-          orderId,
-          collection,
-          tokenId
-        );
-
-        // Build list calls (includes approval + list)
-        const listCalls = buildListCalls(
-          collection,
-          tokenId,
-          quantity,
-          newPrice,
-          currency,
-          expiration
-        );
-
-        // Combine all calls into a single multicall
-        const allCalls = [cancelCall, ...listCalls];
-
-        // Execute as a single transaction
-        // Cast to any to handle starknet.js Account vs AccountInterface typing
-        return await marketplaceCtx.provider.execute(
-          snAccount as any,
-          allCalls,
-          "MARKETPLACE"
-        );
-      } catch (error) {
-        console.error("Edit listing error:", error);
-        throw error;
-      }
-    },
-    [marketplaceCtx, buildListCalls]
-  );
-
-  /**
    * Handle successful listing
    */
   const handleListed = useCallback(async () => {
-    // Poll for new listings since indexer takes time to sync
     const pollForUpdates = async (attempts = 3, delay = 2000) => {
       for (let i = 0; i < attempts; i++) {
         await new Promise((resolve) => setTimeout(resolve, delay));
@@ -130,7 +76,6 @@ export function useMarketplaceActions({
 
     await refetchOrders();
     await reloadUserBeasts();
-    // Start polling in background
     void pollForUpdates();
   }, [refetchOrders, reloadUserBeasts]);
 
@@ -143,11 +88,11 @@ export function useMarketplaceActions({
         toast.error("Please connect your wallet");
         return;
       }
-      if (buyingListingId) return; // Prevent double-click
+      if (buyingListingId) return;
 
       const listingId = listing.listingId;
       setBuyingListingId(listingId);
-      const toastId = toast.loading("Checking balance...");
+      const toastId = toast.loading("Validating listing...");
 
       try {
         if (!listing.active) {
@@ -155,13 +100,13 @@ export function useMarketplaceActions({
           setBuyingListingId(null);
           return;
         }
+
         const tokenIdBigInt = toBigInt(listing.tokenId);
         const priceBigInt = toBigInt(listing.price);
         const currency = listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
-        const orderId = toBigInt(listing.orderId ?? 0);
+        const orderId = toBigInt(listing.orderId);
 
         // Validate listing ownership
-        toast.loading("Validating listing...", { id: toastId });
         const provider = getProvider(account);
         const isValidListing = await validateListingOwnership(
           provider,
@@ -176,19 +121,23 @@ export function useMarketplaceActions({
           return;
         }
 
+        // Calculate total amount including platform fee
+        const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
+        const totalAmount = priceBigInt + feeAmount;
+
         // Check balance
         toast.loading("Checking balance...", { id: toastId });
         const { sufficient, balance } = await checkSufficientBalance(
           account,
           currency,
-          priceBigInt
+          totalAmount
         );
 
         if (!sufficient) {
           const token = getPaymentTokenByAddress(currency);
           const symbol = token?.symbol ?? "tokens";
           const decimals = TOKEN_DECIMALS[symbol] ?? 18;
-          const requiredFormatted = fromWei(priceBigInt, decimals);
+          const requiredFormatted = fromWei(totalAmount, decimals);
           const balanceFormatted = fromWei(balance, decimals);
           toast.error(
             `Insufficient balance. Required: ${requiredFormatted} ${symbol}, Available: ${balanceFormatted} ${symbol}`,
@@ -198,7 +147,7 @@ export function useMarketplaceActions({
           return;
         }
 
-        // Close confirmation dialog and execute purchase with approval in one transaction
+        // Execute purchase with approval in one transaction
         toast.loading("Processing purchase...", { id: toastId });
 
         const result = await executePurchaseWithApproval(
@@ -207,19 +156,14 @@ export function useMarketplaceActions({
           BEASTS_COLLECTION_ADDRESS,
           tokenIdBigInt,
           BigInt(listing.quantity ?? 1),
-          true,
+          false, // royalties disabled
           currency,
           priceBigInt,
           BigInt(CLIENT_FEE_BP),
           CLIENT_FEE_RECEIVER
         );
 
-        const extractTxHash = (res: any): string | undefined =>
-          res?.transaction_hash ||
-          res?.hash ||
-          res?.txHash ||
-          res?.transactionHash;
-        const txHash = extractTxHash(result);
+        const txHash = result?.transaction_hash;
 
         if (txHash) {
           toast.success(
@@ -236,18 +180,24 @@ export function useMarketplaceActions({
           toast.success("Purchase successful!", { id: toastId });
         }
 
+        // Optimistically remove listing from UI before indexer catches up
+        markListingAsSold?.(listingId);
+
         await refetchOrders();
         await reloadUserBeasts();
-        // Poll for sales updates in background (indexer takes time to process)
         void pollForSalesUpdates();
       } catch (error) {
-        const errorMessage = (error as Error).message || "Purchase failed";
-        toast.error(errorMessage, { id: toastId });
+        if (isUserRejection(error)) {
+          toast.info("Purchase cancelled", { id: toastId });
+        } else {
+          const errorMessage = (error as Error).message || "Purchase failed";
+          toast.error(errorMessage, { id: toastId });
+        }
       } finally {
         setBuyingListingId(null);
       }
     },
-    [account, buyingListingId, executeListing, refetchOrders, reloadUserBeasts]
+    [account, buyingListingId, refetchOrders, reloadUserBeasts, pollForSalesUpdates, markListingAsSold]
   );
 
   /**
@@ -279,9 +229,8 @@ export function useMarketplaceActions({
 
             const tokenIdBigInt = toBigInt(listing.tokenId);
             const priceBigInt = toBigInt(listing.price);
-            const currency =
-              listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
-            const orderId = toBigInt(listing.orderId ?? 0);
+            const currency = listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
+            const orderId = toBigInt(listing.orderId);
 
             // Validate listing ownership
             const isValidListing = await validateListingOwnership(
@@ -300,7 +249,7 @@ export function useMarketplaceActions({
             const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
             const totalAmount = priceBigInt + feeAmount;
 
-            // Check balance (including fee)
+            // Check balance
             const { sufficient } = await checkSufficientBalance(
               account,
               currency,
@@ -311,21 +260,14 @@ export function useMarketplaceActions({
               continue;
             }
 
-            // Ensure approval for total amount (price + fee)
-            await ensureErc20Allowance(
+            // Execute purchase with approval
+            await executePurchaseWithApproval(
               account,
-              currency,
-              totalAmount.toString()
-            );
-
-            // Execute purchase
-            await executeListing(
-              account as any,
               orderId,
               BEASTS_COLLECTION_ADDRESS,
               tokenIdBigInt,
               BigInt(listing.quantity ?? 1),
-              true,
+              false, // royalties disabled
               currency,
               priceBigInt,
               BigInt(CLIENT_FEE_BP),
@@ -334,17 +276,14 @@ export function useMarketplaceActions({
 
             successCount++;
             handleRemoveFromPurchaseCart(listing.listingId);
-          } catch (error) {
+          } catch {
             failCount++;
           }
         }
 
-        // Show results
         if (successCount > 0) {
           toast.success(
-            `Successfully purchased ${successCount} beast${
-              successCount > 1 ? "s" : ""
-            }!`,
+            `Successfully purchased ${successCount} beast${successCount > 1 ? "s" : ""}!`,
             { id: toastId }
           );
           await refetchOrders();
@@ -359,26 +298,24 @@ export function useMarketplaceActions({
           );
         }
 
-        // Return success status for cart dialog to close
         return successCount > 0 && failCount === 0;
       } catch (error) {
-        const errorMessage =
-          (error as Error).message || "Batch purchase failed";
-        toast.error(errorMessage, { id: toastId });
+        if (isUserRejection(error)) {
+          toast.info("Batch purchase cancelled", { id: toastId });
+        } else {
+          const errorMessage = (error as Error).message || "Batch purchase failed";
+          toast.error(errorMessage, { id: toastId });
+        }
         return false;
       } finally {
         setPurchasingBatch(false);
       }
     },
-    [account, purchasingBatch, executeListing, refetchOrders, reloadUserBeasts]
+    [account, purchasingBatch, refetchOrders, reloadUserBeasts]
   );
 
   /**
    * Handle accepting an offer
-   * When a seller accepts a buyer's offer:
-   * 1. Validate seller still owns the NFT (prevents wasted gas)
-   * 2. Seller must approve marketplace to transfer their NFT
-   * 3. Execute the offer (transfers NFT to buyer, payment to seller)
    */
   const handleAcceptOffer = useCallback(
     async (order: OrderModel) => {
@@ -386,7 +323,7 @@ export function useMarketplaceActions({
         toast.error("Please connect your wallet");
         return;
       }
-      if (acceptingOfferId) return; // Prevent double-click
+      if (acceptingOfferId) return;
 
       const offerId = order.id?.toString() || "";
       setAcceptingOfferId(offerId);
@@ -394,12 +331,9 @@ export function useMarketplaceActions({
 
       try {
         const tokenIdBigInt = toBigInt(order.tokenId);
-        const priceBigInt = toBigInt(order.price);
-        const currency = order.currency;
         const orderId = toBigInt(order.id);
 
-        // Step 1: Validate that the current user (seller) still owns the NFT
-        // This prevents wasted gas fees if they no longer own it
+        // Validate that the seller still owns the NFT
         const provider = getProvider(account);
         const isOwner = await validateListingOwnership(
           provider,
@@ -414,31 +348,34 @@ export function useMarketplaceActions({
           return false;
         }
 
-        // Step 2: Ensure the seller has approved the marketplace to transfer their NFT
+        // Ensure collection approval
         toast.loading("Approving NFT transfer...", { id: toastId });
         await ensureCollectionApproval(account);
 
-        // Step 3: Execute the offer (seller accepts buyer's offer)
+        // Execute the offer
         toast.loading("Accepting offer...", { id: toastId });
-        const result = await executeOffer(
-          account as any,
+
+        const executeCall = buildMarketplaceExecuteCall(
           orderId,
           BEASTS_COLLECTION_ADDRESS,
           tokenIdBigInt,
           BigInt(order.quantity ?? 1),
-          true, // royalties enabled
-          currency,
-          priceBigInt,
+          false, // royalties disabled
+          order.currency,
+          toBigInt(order.price),
           BigInt(CLIENT_FEE_BP),
           CLIENT_FEE_RECEIVER
         );
 
-        const extractTxHash = (res: any): string | undefined =>
-          res?.transaction_hash ||
-          res?.hash ||
-          res?.txHash ||
-          res?.transactionHash;
-        const txHash = extractTxHash(result);
+        const result = await account.execute([executeCall]);
+
+        if (result?.transaction_hash) {
+          await provider.waitForTransaction(result.transaction_hash, {
+            retryInterval: 2000,
+          });
+        }
+
+        const txHash = result?.transaction_hash;
 
         if (txHash) {
           toast.success(
@@ -455,53 +392,178 @@ export function useMarketplaceActions({
           toast.success("Offer accepted successfully!", { id: toastId });
         }
 
-        // Refresh data
         await refetchOrders();
         await reloadUserBeasts();
-        // Poll for sales updates in background (indexer takes time to process)
         void pollForSalesUpdates();
         return true;
       } catch (error) {
-        const errorMessage =
-          (error as Error).message || "Failed to accept offer";
-        const lowerError = errorMessage.toLowerCase();
-
-        // Check for user rejection - cover multiple patterns
-        const isUserRejection =
-          (lowerError.includes("user") && (
-            lowerError.includes("reject") ||
-            lowerError.includes("cancel") ||
-            lowerError.includes("abort") ||
-            lowerError.includes("denied")
-          )) ||
-          lowerError.includes("user rejected") ||
-          lowerError.includes("user cancelled") ||
-          lowerError.includes("user denied") ||
-          lowerError.includes("rejected by user") ||
-          lowerError.includes("cancelled by user") ||
-          lowerError.includes("transaction was rejected");
-
-        if (isUserRejection) {
-          toast.info("Transaction cancelled", { id: toastId });
-        } else if (lowerError.includes("invalid value")) {
-          toast.error("Offer rejected by marketplace contract", { id: toastId });
+        if (isUserRejection(error)) {
+          toast.info("Offer acceptance cancelled", { id: toastId });
         } else {
-          toast.error(errorMessage, { id: toastId });
+          const errorMessage = (error as Error).message || "Failed to accept offer";
+          const lowerError = errorMessage.toLowerCase();
+
+          if (lowerError.includes("invalid value")) {
+            toast.error("Offer rejected by marketplace contract", { id: toastId });
+          } else {
+            toast.error(errorMessage, { id: toastId });
+          }
         }
         return false;
       } finally {
         setAcceptingOfferId(null);
       }
     },
-    [account, acceptingOfferId, executeOffer, refetchOrders, reloadUserBeasts]
+    [account, acceptingOfferId, refetchOrders, reloadUserBeasts, pollForSalesUpdates]
   );
 
   /**
-   * Execute unified cart (listings + purchases)
-   * @param cartBeasts - Beasts to list
-   * @param purchaseCart - All listings in cart
-   * @param beastPrices - Prices for beasts to list
-   * @param validBuyItems - Optional: only valid buy items (if validation found invalid items)
+   * Cancel a listing
+   */
+  const cancel = useCallback(
+    async (
+      snAccount: AccountInterface,
+      orderId: BigNumberish,
+      collection: string,
+      tokenId: BigNumberish
+    ) => {
+      const tokenIdBigInt = typeof tokenId === 'bigint' ? tokenId : BigInt(tokenId.toString());
+      const tokenIdU256 = toUint256Hex(tokenIdBigInt);
+
+      const call = {
+        contractAddress: MARKETPLACE_ADDRESS,
+        entrypoint: "cancel",
+        calldata: [
+          orderId.toString(),
+          collection,
+          ...tokenIdU256,
+        ],
+      };
+
+      const result = await snAccount.execute([call]);
+
+      if (result?.transaction_hash) {
+        const provider = getProvider(snAccount);
+        await provider.waitForTransaction(result.transaction_hash, {
+          retryInterval: 2000,
+        });
+      }
+
+      return result;
+    },
+    []
+  );
+
+  /**
+   * List a beast for sale
+   */
+  const list = useCallback(
+    async (
+      snAccount: AccountInterface,
+      collection: string,
+      tokenId: BigNumberish,
+      _quantity: BigNumberish, // Unused - ERC721 always uses 0
+      price: BigNumberish,
+      currency: string,
+      expiration: BigNumberish
+    ) => {
+      // First ensure collection approval
+      await ensureCollectionApproval(snAccount);
+
+      const tokenIdBigInt = typeof tokenId === 'bigint' ? tokenId : BigInt(tokenId.toString());
+      const tokenIdU256 = toUint256Hex(tokenIdBigInt);
+
+      // Contract signature: list(collection, token_id: u256, quantity: u128, price: u128, currency, expiration: u64, royalties: bool)
+      // Note: For ERC721, quantity must be 0 (non-fungible)
+      const call = {
+        contractAddress: MARKETPLACE_ADDRESS,
+        entrypoint: "list",
+        calldata: [
+          collection,
+          ...tokenIdU256, // token_id as Uint256
+          "0", // quantity: u128 = 0 for ERC721 (non-fungible)
+          price.toString(), // price: u128 (single felt!)
+          currency,
+          expiration.toString(), // expiration: u64
+          "0", // royalties: bool = false
+        ],
+      };
+
+      const result = await snAccount.execute([call]);
+
+      if (result?.transaction_hash) {
+        const provider = getProvider(snAccount);
+        await provider.waitForTransaction(result.transaction_hash, {
+          retryInterval: 2000,
+        });
+      }
+
+      return result;
+    },
+    []
+  );
+
+  /**
+   * Edit a listing (cancel + relist)
+   */
+  const editListing = useCallback(
+    async (
+      snAccount: AccountInterface,
+      orderId: BigNumberish,
+      collection: string,
+      tokenId: BigNumberish,
+      _quantity: BigNumberish, // Unused - ERC721 always uses 0
+      newPrice: BigNumberish,
+      currency: string,
+      expiration: BigNumberish
+    ) => {
+      const tokenIdBigInt = typeof tokenId === 'bigint' ? tokenId : BigInt(tokenId.toString());
+      const tokenIdU256 = toUint256Hex(tokenIdBigInt);
+
+      // Build cancel call
+      const cancelCall = {
+        contractAddress: MARKETPLACE_ADDRESS,
+        entrypoint: "cancel",
+        calldata: [
+          orderId.toString(),
+          collection,
+          ...tokenIdU256,
+        ],
+      };
+
+      // Contract signature: list(collection, token_id: u256, quantity: u128, price: u128, currency, expiration: u64, royalties: bool)
+      // Note: For ERC721, quantity must be 0 (non-fungible)
+      const listCall = {
+        contractAddress: MARKETPLACE_ADDRESS,
+        entrypoint: "list",
+        calldata: [
+          collection,
+          ...tokenIdU256, // token_id as Uint256
+          "0", // quantity: u128 = 0 for ERC721 (non-fungible)
+          newPrice.toString(), // price: u128 (single felt!)
+          currency,
+          expiration.toString(), // expiration: u64
+          "0", // royalties: bool = false
+        ],
+      };
+
+      // Execute both in a single transaction
+      const result = await snAccount.execute([cancelCall, listCall]);
+
+      if (result?.transaction_hash) {
+        const provider = getProvider(snAccount);
+        await provider.waitForTransaction(result.transaction_hash, {
+          retryInterval: 2000,
+        });
+      }
+
+      return result;
+    },
+    []
+  );
+
+  /**
+   * Execute unified cart (purchases only for now)
    */
   const handleExecuteUnifiedCart = useCallback(
     async (
@@ -515,10 +577,7 @@ export function useMarketplaceActions({
         return;
       }
 
-      // Use validBuyItems if provided (from cart validation), otherwise use all purchaseCart items
       const itemsToPurchase = validBuyItems ?? purchaseCart;
-
-      // Check if we have items to process
       const hasListings = cartBeasts.length > 0;
       const hasPurchases = itemsToPurchase.length > 0;
 
@@ -530,11 +589,8 @@ export function useMarketplaceActions({
       const toastId = toast.loading("Processing cart...");
 
       try {
-        // Process listings first if any
         if (hasListings) {
           setListingBatch(true);
-
-          // Filter beasts with valid prices
           const beastsWithPrices = cartBeasts.filter((beast) => {
             const priceStr = beastPrices.get(beast.id);
             return priceStr && priceStr.trim() !== "" && Number(priceStr) > 0;
@@ -546,8 +602,6 @@ export function useMarketplaceActions({
             return;
           }
 
-          // TODO: Implement unified cart listing
-          // This feature is currently disabled as buildListCalls is not available in the current marketplace package
           toast.error(
             "Unified cart listing is not yet implemented. Please use the List dialog for each beast.",
             { id: toastId }
@@ -556,25 +610,20 @@ export function useMarketplaceActions({
           return;
         }
 
-        // Process purchases if any
         if (hasPurchases) {
           setPurchasingBatch(true);
           const provider = getProvider(account);
-
           let successCount = 0;
+
           for (const listing of itemsToPurchase) {
             try {
-              if (!listing.active) {
-                continue;
-              }
+              if (!listing.active) continue;
 
               const tokenIdBigInt = toBigInt(listing.tokenId);
               const priceBigInt = toBigInt(listing.price);
-              const currency =
-                listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
-              const orderId = toBigInt(listing.orderId ?? 0);
+              const currency = listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
+              const orderId = toBigInt(listing.orderId);
 
-              // Validate listing ownership
               const isValidListing = await validateListingOwnership(
                 provider,
                 BEASTS_COLLECTION_ADDRESS,
@@ -582,39 +631,21 @@ export function useMarketplaceActions({
                 listing.seller
               );
 
-              if (!isValidListing) {
-                continue;
-              }
+              if (!isValidListing) continue;
 
-              // Calculate total amount including platform fee
               const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
               const totalAmount = priceBigInt + feeAmount;
 
-              // Check balance (including fee)
-              const { sufficient } = await checkSufficientBalance(
-                account,
-                currency,
-                totalAmount
-              );
-              if (!sufficient) {
-                continue;
-              }
+              const { sufficient } = await checkSufficientBalance(account, currency, totalAmount);
+              if (!sufficient) continue;
 
-              // Ensure approval for total amount (price + fee)
-              await ensureErc20Allowance(
+              await executePurchaseWithApproval(
                 account,
-                currency,
-                totalAmount.toString()
-              );
-
-              // Execute purchase
-              await executeListing(
-                account as any,
                 orderId,
                 BEASTS_COLLECTION_ADDRESS,
                 tokenIdBigInt,
                 BigInt(listing.quantity ?? 1),
-                true,
+                false, // royalties disabled
                 currency,
                 priceBigInt,
                 BigInt(CLIENT_FEE_BP),
@@ -622,31 +653,33 @@ export function useMarketplaceActions({
               );
 
               successCount++;
-            } catch (error) {
+            } catch {
               // Continue with next purchase
             }
           }
 
           if (successCount > 0) {
-            toast.success(`Purchased ${successCount} beast(s)!`, {
-              id: toastId,
-            });
+            toast.success(`Purchased ${successCount} beast(s)!`, { id: toastId });
           }
         }
 
-        // Refresh data
         await refetchOrders();
         await reloadUserBeasts();
         return true;
       } catch (error) {
-        toast.error("Failed to execute cart operations", { id: toastId });
+        if (isUserRejection(error)) {
+          toast.info("Cart operations cancelled", { id: toastId });
+        } else {
+          const errorMessage = (error as Error).message || "Failed to execute cart operations";
+          toast.error(errorMessage, { id: toastId });
+        }
         return false;
       } finally {
         setListingBatch(false);
         setPurchasingBatch(false);
       }
     },
-    [account, executeListing, refetchOrders, reloadUserBeasts]
+    [account, refetchOrders, reloadUserBeasts]
   );
 
   return {
@@ -663,11 +696,9 @@ export function useMarketplaceActions({
     handleAcceptOffer,
     handleExecuteUnifiedCart,
 
-    // Cartridge marketplace actions
-    executeListing,
+    // Direct marketplace actions
     cancel,
     list,
-    executeOffer,
     editListing,
   };
 }

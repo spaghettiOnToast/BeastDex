@@ -12,6 +12,20 @@ import {
 import { useEkuboTokens } from "../../hooks/useEkuboTokens";
 import type { Token } from "../../services/tokens/ekubo";
 
+// Priority order for tokens (lowercase symbols)
+const TOKEN_PRIORITY_ORDER = [
+  "lords",
+  "survivor",
+  "strk",
+  "eth",
+  "ekubo",
+  "usdc",
+  "usdt",
+  "cash",
+  "dai",
+  "dticket",
+];
+
 interface TokenSelectProps {
   value: string; // Token address
   onValueChange: (address: string) => void;
@@ -45,8 +59,23 @@ export default function TokenSelect({
       filtered = tokens.filter((t) => allowedSet.has(t.address.toLowerCase()));
     }
 
-    // Sort by sort_order (already sorted from API, but ensure)
-    return filtered.sort((a, b) => a.sortOrder - b.sortOrder);
+    // Sort by priority order, then by symbol alphabetically
+    return filtered.sort((a, b) => {
+      const aSymbol = a.symbol.toLowerCase();
+      const bSymbol = b.symbol.toLowerCase();
+      const aIndex = TOKEN_PRIORITY_ORDER.indexOf(aSymbol);
+      const bIndex = TOKEN_PRIORITY_ORDER.indexOf(bSymbol);
+
+      // If both are in priority list, sort by priority
+      if (aIndex !== -1 && bIndex !== -1) {
+        return aIndex - bIndex;
+      }
+      // Priority tokens come first
+      if (aIndex !== -1) return -1;
+      if (bIndex !== -1) return 1;
+      // Otherwise sort alphabetically
+      return aSymbol.localeCompare(bSymbol);
+    });
   }, [tokens, allowedTokens]);
 
   // Find currently selected token

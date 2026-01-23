@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -13,37 +13,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import {
   DEFAULT_PAYMENT_TOKEN,
   BEASTS_COLLECTION_ADDRESS,
-  DEFAULT_LISTING_DURATION_SECONDS,
-  LISTING_DURATION_OPTIONS,
 } from "../../services/marketplace/constants";
 import { toWei, fromWei } from "../../utils/price";
 import { toast } from "sonner";
 import type { AccountInterface, BigNumberish } from "starknet";
 import TokenSelect from "./TokenSelect";
 import { useSelectedToken } from "../../hooks/useEkuboTokens";
-
-// Error messages that indicate user rejection
-const USER_REJECTION_PATTERNS = [
-  "user abort",
-  "user rejected",
-  "user denied",
-  "user cancelled",
-  "rejected by user",
-  "transaction was rejected",
-  "cancel",
-];
-
-const CUSTOM_DURATION_VALUE = "custom";
-
-const DURATION_SELECT_OPTIONS = [
-  ...LISTING_DURATION_OPTIONS.map((option) => ({
-    label: option.label,
-    value: String(option.value),
-  })),
-  { label: "Custom date…", value: CUSTOM_DURATION_VALUE },
-] as const;
-
-const DEFAULT_DURATION_VALUE = String(DEFAULT_LISTING_DURATION_SECONDS);
+import { isUserRejection } from "../../utils/transaction";
+import {
+  useExpirationDetails,
+  DURATION_SELECT_OPTIONS,
+} from "../../hooks/useExpirationDetails";
 
 type EditListingFn = (
   account: AccountInterface,
@@ -75,8 +55,6 @@ export default function EditListingDialog({
 }: Props) {
   const [price, setPrice] = useState("");
   const [currencyAddress, setCurrencyAddress] = useState<string>(DEFAULT_PAYMENT_TOKEN.address);
-  const [duration, setDuration] = useState<string>(DEFAULT_DURATION_VALUE);
-  const [customExpiration, setCustomExpiration] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const toastIdRef = useRef<string | number | null>(null);
@@ -84,6 +62,18 @@ export default function EditListingDialog({
 
   // Get token info from Ekubo
   const { decimals: tokenDecimals, symbol: tokenSymbol } = useSelectedToken(currencyAddress);
+
+  // Use shared expiration hook
+  const {
+    duration,
+    setDuration,
+    customExpiration,
+    setCustomExpiration,
+    minCustomExpiration,
+    expirationDetails,
+    isCustomDuration,
+    reset: resetExpiration,
+  } = useExpirationDetails();
 
   useEffect(() => {
     if (open && listing) {
@@ -94,17 +84,10 @@ export default function EditListingDialog({
       // Format price using the listing's token decimals (will update when tokenDecimals loads)
       const priceFormatted = fromWei(listing.price, tokenDecimals);
       setPrice(priceFormatted);
-      setDuration(DEFAULT_DURATION_VALUE);
-      setCustomExpiration("");
+      resetExpiration();
       setError(null);
     }
-  }, [open, listing, tokenDecimals]);
-
-  useEffect(() => {
-    if (duration !== CUSTOM_DURATION_VALUE) {
-      setCustomExpiration("");
-    }
-  }, [duration]);
+  }, [open, listing, tokenDecimals, resetExpiration]);
 
   const priceBigInt = useMemo(() => {
     const trimmed = price.trim();
@@ -123,65 +106,6 @@ export default function EditListingDialog({
     }
   }, [price, tokenDecimals]);
 
-  const toLocalInputValue = (date: Date) => {
-    const timezoneOffset = date.getTimezoneOffset() * 60000;
-    return new Date(date.getTime() - timezoneOffset).toISOString().slice(0, 16);
-  };
-
-  const minCustomExpiration = useMemo(() => {
-    return toLocalInputValue(new Date(Date.now() + 60 * 1000));
-  }, [open]);
-
-  const expirationDetails = useMemo(() => {
-    const nowSeconds = Math.floor(Date.now() / 1000);
-
-    if (duration === CUSTOM_DURATION_VALUE) {
-      if (!customExpiration) {
-        return {
-          expirationSeconds: null,
-          error: "Select an expiration date and time.",
-          preview: null,
-        };
-      }
-      const parsed = Date.parse(customExpiration);
-      if (Number.isNaN(parsed)) {
-        return {
-          expirationSeconds: null,
-          error: "Unable to parse the chosen date.",
-          preview: null,
-        };
-      }
-      const seconds = Math.floor(parsed / 1000);
-      if (seconds <= nowSeconds) {
-        return {
-          expirationSeconds: null,
-          error: "Expiration must be in the future.",
-          preview: null,
-        };
-      }
-      return {
-        expirationSeconds: seconds,
-        error: null,
-        preview: new Date(seconds * 1000).toLocaleString(),
-      };
-    }
-
-    const parsedDuration = Number.parseInt(duration, 10);
-    if (!Number.isFinite(parsedDuration) || parsedDuration <= 0) {
-      return {
-        expirationSeconds: null,
-        error: "Choose a valid listing duration.",
-        preview: null,
-      };
-    }
-    const seconds = nowSeconds + parsedDuration;
-    return {
-      expirationSeconds: seconds,
-      error: null,
-      preview: new Date(seconds * 1000).toLocaleString(),
-    };
-  }, [customExpiration, duration]);
-
   const canSubmit = useMemo(() => {
     return (
       !!account &&
@@ -191,11 +115,6 @@ export default function EditListingDialog({
       expirationDetails.expirationSeconds != null
     );
   }, [account, listing, priceBigInt, expirationDetails.error, expirationDetails.expirationSeconds]);
-
-  const isUserRejection = useCallback((error: Error): boolean => {
-    const message = error.message?.toLowerCase() || "";
-    return USER_REJECTION_PATTERNS.some(pattern => message.includes(pattern));
-  }, []);
 
   const handleOpenChange = useCallback((newOpen: boolean) => {
     // If closing while submitting, dismiss toast and show cancelled
@@ -332,18 +251,15 @@ export default function EditListingDialog({
                   ))}
                 </SelectContent>
               </Select>
-              {duration === CUSTOM_DURATION_VALUE ? (
-                <div className="mt-3 space-y-1">
+              {isCustomDuration ? (
+                <div className="mt-3">
                   <Input
-                    type="datetime-local"
+                    type="date"
                     value={customExpiration}
                     onChange={(event) => setCustomExpiration(event.target.value)}
                     min={minCustomExpiration}
                     className="w-full"
                   />
-                  <p className="text-[11px] text-gray-500">
-                    Times are interpreted in your local timezone.
-                  </p>
                 </div>
               ) : null}
               {expirationDetails.preview ? (

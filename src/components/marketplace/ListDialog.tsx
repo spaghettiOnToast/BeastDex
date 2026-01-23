@@ -13,30 +13,23 @@ import type { Beast } from "../../services/beast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import {
   BEASTS_COLLECTION_ADDRESS,
-  DEFAULT_LISTING_DURATION_SECONDS,
-  LISTING_DURATION_OPTIONS,
   CLIENT_FEE_BP,
   CLIENT_FEE_RECEIVER,
   DEFAULT_PAYMENT_TOKEN,
+  MARKETPLACE_ADDRESS,
 } from "../../services/marketplace/constants";
-import { NAMESPACE, useMarketplace, useMarketplaceActions } from "@cartridge/marketplace";
-import { getContractByName, parseDojoCall } from "@dojoengine/core";
 import { toWei, fromWei } from "../../utils/price";
 import { toast } from "sonner";
 import TokenSelect from "./TokenSelect";
 import { useSelectedToken } from "../../hooks/useEkuboTokens";
-
-const CUSTOM_DURATION_VALUE = "custom";
-
-const DURATION_SELECT_OPTIONS = [
-  ...LISTING_DURATION_OPTIONS.map((option) => ({
-    label: option.label,
-    value: String(option.value),
-  })),
-  { label: "Custom date…", value: CUSTOM_DURATION_VALUE },
-] as const;
-
-const DEFAULT_DURATION_VALUE = String(DEFAULT_LISTING_DURATION_SECONDS);
+import { useRoyaltyInfo } from "../../hooks/useRoyaltyInfo";
+import { ensureCollectionApproval, getProvider } from "../../services/marketplace/approvals";
+import { isUserRejection } from "../../utils/transaction";
+import { toUint256Hex, UINT128_MASK } from "../../utils/uint256";
+import {
+  useExpirationDetails,
+  DURATION_SELECT_OPTIONS,
+} from "../../hooks/useExpirationDetails";
 
 type Props = {
   open: boolean;
@@ -47,34 +40,35 @@ type Props = {
 
 export default function ListDialog({ open, onOpenChange, beast, onListed }: Props) {
   const { account } = useAccount();
-  const { provider } = useMarketplace();
   const [price, setPrice] = useState("");
-  const [duration, setDuration] = useState<string>(DEFAULT_DURATION_VALUE);
-  const [customExpiration, setCustomExpiration] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { buildListCalls } = useMarketplaceActions();
-  const [estimatedFee, setEstimatedFee] = useState<bigint | null>(null);
-  const [estimatingFee, setEstimatingFee] = useState(false);
-  const [feeError, setFeeError] = useState<string | null>(null);
 
   // Token selection - default to LORDS
   const [currencyAddress, setCurrencyAddress] = useState(DEFAULT_PAYMENT_TOKEN.address);
   const { decimals: tokenDecimals, symbol: tokenSymbol } = useSelectedToken(currencyAddress);
 
-  useEffect(() => {
-    if (open) {
-      setDuration(DEFAULT_DURATION_VALUE);
-      setCustomExpiration("");
-      setError(null);
-    }
-  }, [open]);
+  // Royalty info
+  const { percentage: royaltyPercentage, loading: royaltyLoading, calculateRoyalty } = useRoyaltyInfo();
+
+  // Use shared expiration hook with max expiration enforcement
+  const {
+    duration,
+    setDuration,
+    customExpiration,
+    setCustomExpiration,
+    minCustomExpiration,
+    expirationDetails,
+    isCustomDuration,
+    reset: resetExpiration,
+  } = useExpirationDetails({ enforceMaxExpiration: true });
 
   useEffect(() => {
-    if (duration !== CUSTOM_DURATION_VALUE) {
-      setCustomExpiration("");
+    if (open) {
+      resetExpiration();
+      setError(null);
     }
-  }, [duration]);
+  }, [open, resetExpiration]);
 
   const toBigInt = (value: string) => {
     const trimmed = value.trim();
@@ -94,199 +88,6 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
       return null;
     }
   }, [price, tokenDecimals]);
-
-  const formatFee = (feeWei: bigint) => {
-    return fromWei(feeWei, 18);
-  };
-
-  const toLocalInputValue = (date: Date) => {
-    const timezoneOffset = date.getTimezoneOffset() * 60000;
-    return new Date(date.getTime() - timezoneOffset).toISOString().slice(0, 16);
-  };
-
-  const minCustomExpiration = useMemo(() => {
-    return toLocalInputValue(new Date(Date.now() + 60 * 1000));
-  }, [open]);
-
-  const expirationDetails = useMemo(() => {
-    const nowSeconds = Math.floor(Date.now() / 1000);
-
-    if (duration === CUSTOM_DURATION_VALUE) {
-      if (!customExpiration) {
-        return {
-          expirationSeconds: null,
-          error: "Select an expiration date and time.",
-          preview: null,
-        };
-      }
-      const parsed = Date.parse(customExpiration);
-      if (Number.isNaN(parsed)) {
-        return {
-          expirationSeconds: null,
-          error: "Unable to parse the chosen date.",
-          preview: null,
-        };
-      }
-      const seconds = Math.floor(parsed / 1000);
-      if (seconds <= nowSeconds) {
-        return {
-          expirationSeconds: null,
-          error: "Expiration must be in the future.",
-          preview: null,
-        };
-      }
-      // Enforce a maximum listing horizon (aligns with marketplace policies)
-      const maxSeconds = nowSeconds + DEFAULT_LISTING_DURATION_SECONDS;
-      if (seconds > maxSeconds) {
-        return {
-          expirationSeconds: null,
-          error: `Max expiration is ${Math.floor(
-            DEFAULT_LISTING_DURATION_SECONDS / (60 * 60 * 24)
-          )} days from now.`,
-          preview: null,
-        };
-      }
-      return {
-        expirationSeconds: seconds,
-        error: null,
-        preview: new Date(seconds * 1000).toLocaleString(),
-      };
-    }
-
-    const parsedDuration = Number.parseInt(duration, 10);
-    if (!Number.isFinite(parsedDuration) || parsedDuration <= 0) {
-      return {
-        expirationSeconds: null,
-        error: "Choose a valid listing duration.",
-        preview: null,
-      };
-    }
-    const seconds = nowSeconds + parsedDuration;
-    return {
-      expirationSeconds: seconds,
-      error: null,
-      preview: new Date(seconds * 1000).toLocaleString(),
-    };
-  }, [customExpiration, duration]);
-
-  useEffect(() => {
-    if (!open) {
-      setEstimatedFee(null);
-      setFeeError(null);
-      return;
-    }
-    if (
-      !account?.address ||
-      !beast ||
-      priceBigInt === null ||
-      !expirationDetails.expirationSeconds
-    ) {
-      setEstimatedFee(null);
-      setFeeError(null);
-      return;
-    }
-
-    let cancelled = false;
-    setEstimatingFee(true);
-    setFeeError(null);
-
-    const timeoutId = window.setTimeout(async () => {
-      try {
-        const rawTokenId = (beast.id.split(":").pop() || beast.id).trim();
-        const tokenIdBigInt = toBigInt(rawTokenId);
-        const expirationBigInt = BigInt(expirationDetails.expirationSeconds!);
-
-        // Use Cartridge SDK's buildListCalls with quantity=0 for ERC721
-        const [approvalCall, dojoCall] = buildListCalls(
-          BEASTS_COLLECTION_ADDRESS,
-          tokenIdBigInt,
-          0n, // quantity = 0 for ERC721 (non-fungible)
-          priceBigInt!,
-          currencyAddress,
-          expirationBigInt
-        );
-        const parsedListCall = (parseDojoCall as any)(provider.manifest, NAMESPACE, dojoCall);
-        const calls = [approvalCall, parsedListCall];
-
-        const accountWithEstimate = account as any;
-        if (typeof accountWithEstimate?.estimateInvokeFee !== "function") {
-          throw new Error("Connected wallet cannot estimate fees");
-        }
-
-        let fee: any = null;
-        let lastError: unknown = null;
-        const estimationOptions = [
-          { blockIdentifier: "latest" } as const,
-          undefined,
-        ];
-        for (const options of estimationOptions) {
-          try {
-            fee = await accountWithEstimate.estimateInvokeFee(
-              calls,
-              options
-            );
-            lastError = null;
-            break;
-          } catch (estimateErr) {
-            const message = String(
-              (estimateErr as Error)?.message ?? estimateErr ?? ""
-            ).toLowerCase();
-            if (
-              message.includes("invalid block id") ||
-              message.includes("invalid params")
-            ) {
-              lastError = estimateErr;
-              continue;
-            }
-            throw estimateErr;
-          }
-        }
-
-        if (!fee) {
-          const fallbackError =
-            lastError instanceof Error
-              ? lastError
-              : new Error("Unable to estimate fee");
-          throw fallbackError;
-        }
-        if (!cancelled) {
-          const value =
-            fee?.suggestedMaxFee ??
-            fee?.overall_fee ??
-            (typeof fee === "bigint" ? fee : null);
-          setEstimatedFee(value ?? null);
-        }
-      } catch (estimateError) {
-        console.error("Failed to estimate listing fee", estimateError);
-        if (!cancelled) {
-          setEstimatedFee(null);
-          setFeeError(
-            estimateError instanceof Error
-              ? estimateError.message
-              : "Unable to estimate fee"
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setEstimatingFee(false);
-        }
-      }
-    }, 400);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeoutId);
-    };
-  }, [
-    open,
-    account?.address,
-    beast,
-    priceBigInt,
-    currencyAddress,
-    expirationDetails.expirationSeconds,
-    buildListCalls,
-    provider,
-  ]);
 
   const canSubmit = useMemo(() => {
     return (
@@ -316,39 +117,34 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
       if (!expirationSeconds) {
         throw new Error("Invalid expiration selected");
       }
-      const expirationBigInt = BigInt(expirationSeconds);
-      const nowSeconds = Math.floor(Date.now() / 1000);
-      const maxSeconds = nowSeconds + DEFAULT_LISTING_DURATION_SECONDS;
-      if (expirationSeconds > maxSeconds) {
-        throw new Error(
-          `Max expiration is ${Math.floor(
-            DEFAULT_LISTING_DURATION_SECONDS / (60 * 60 * 24)
-          )} days from now.`
-        );
-      }
 
-      // Use buildListCalls with quantity=0 for ERC721 (Cartridge mentioned "value" needs to be 0 for ERC721)
-      const [approvalCall, listCall] = buildListCalls(
-        BEASTS_COLLECTION_ADDRESS,
-        tokenIdBigInt,
-        0n, // quantity = 0 for ERC721 (non-fungible)
-        priceBigInt,
-        currencyAddress,
-        expirationBigInt
-      );
+      // Ensure collection approval first
+      toast.loading("Checking NFT approval...", { id: toastId });
+      await ensureCollectionApproval(account);
 
-      // Parse the list call through Dojo
-      const parsedListCall = (parseDojoCall as any)(provider.manifest, NAMESPACE, listCall);
-
-      console.log('List calldata (quantity=0):', parsedListCall.calldata);
+      // Build token ID as Uint256
+      const tokenIdU256 = toUint256Hex(tokenIdBigInt);
 
       // Calculate platform fee (2% of listing price)
       const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
-
-      // Convert fee amount to Uint256 format (low, high)
-      const UINT128_MASK = (1n << 128n) - 1n;
       const feeLow = feeAmount & UINT128_MASK;
       const feeHigh = feeAmount >> 128n;
+
+      // Build list call
+      // Contract signature: list(collection, token_id: u256, quantity: u128, price: u128, currency, expiration: u64, royalties: bool)
+      const listCall = {
+        contractAddress: MARKETPLACE_ADDRESS,
+        entrypoint: "list",
+        calldata: [
+          BEASTS_COLLECTION_ADDRESS,
+          ...tokenIdU256, // token_id as Uint256
+          "0", // quantity: u128 = 0 for ERC721 (non-fungible)
+          priceBigInt.toString(), // price: u128 (single felt, not u256!)
+          currencyAddress,
+          expirationSeconds.toString(), // expiration: u64
+          "0", // royalties: bool = false
+        ],
+      };
 
       // Build ERC20 transfer call for platform fee
       const feeTransferCall = {
@@ -361,26 +157,28 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
         ],
       };
 
-      // Execute: approve NFT, transfer fee, list
-      await (account as any).execute([approvalCall, feeTransferCall, parsedListCall]);
+      toast.loading("Submitting listing...", { id: toastId });
+
+      // Execute: transfer fee + list
+      const result = await account.execute([feeTransferCall, listCall]);
+
+      if (result?.transaction_hash) {
+        const provider = getProvider(account);
+        await provider.waitForTransaction(result.transaction_hash, {
+          retryInterval: 2000,
+        });
+      }
 
       toast.success("Beast listed successfully!", { id: toastId });
       toast.info("Your listing will appear in the marketplace shortly...", { duration: 5000 });
       onOpenChange(false);
       setPrice("");
-      setEstimatedFee(null);
-      setFeeError(null);
       onListed?.();
     } catch (e) {
-      const errorMessage = (e as Error).message || "Failed to list beast";
-
-      // Check if user cancelled the transaction
-      if (errorMessage.toLowerCase().includes("user") &&
-          (errorMessage.toLowerCase().includes("reject") ||
-           errorMessage.toLowerCase().includes("cancel") ||
-           errorMessage.toLowerCase().includes("abort"))) {
+      if (isUserRejection(e)) {
         toast.info("Listing cancelled", { id: toastId });
       } else {
+        const errorMessage = (e as Error).message || "Failed to list beast";
         setError(errorMessage);
         toast.error(errorMessage, { id: toastId });
       }
@@ -418,16 +216,46 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
                 className="mt-1"
               />
               {priceBigInt && priceBigInt > 0n && (
-                <div className="mt-2 space-y-1">
-                  {/* Listing Fee (Seller Pays) */}
+                <div className="mt-2 space-y-2">
+                  {/* Seller's fees */}
                   <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2 space-y-1">
                     <p className="text-xs text-amber-200 font-medium">Listing fee (paid by you):</p>
                     <div className="flex justify-between text-xs">
                       <span className="text-gray-400">Platform fee (2%):</span>
                       <span className="text-white">{fromWei((priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n, tokenDecimals)} {tokenSymbol}</span>
                     </div>
-                    <div className="border-t border-amber-500/20 pt-1">
-                      <p className="text-[10px] text-amber-200/80">Buyer will pay exactly your listing price ({fromWei(priceBigInt, tokenDecimals)} {tokenSymbol}) - no additional fees.</p>
+                  </div>
+
+                  {/* Buyer's fees info */}
+                  <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-2 space-y-1">
+                    <p className="text-xs text-blue-200 font-medium">Buyer pays on purchase:</p>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">Your listing price:</span>
+                      <span className="text-white">{fromWei(priceBigInt, tokenDecimals)} {tokenSymbol}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">Platform fee (2%):</span>
+                      <span className="text-gray-300">{fromWei((priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n, tokenDecimals)} {tokenSymbol}</span>
+                    </div>
+                    {royaltyPercentage !== null && royaltyPercentage > 0 && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-400">Creator royalty ({royaltyPercentage}%):</span>
+                        <span className="text-gray-300">{fromWei(calculateRoyalty(priceBigInt), tokenDecimals)} {tokenSymbol}</span>
+                      </div>
+                    )}
+                    {royaltyLoading && (
+                      <div className="text-xs text-gray-500">Loading royalty info...</div>
+                    )}
+                    <div className="border-t border-blue-500/20 pt-1 flex justify-between text-xs font-medium">
+                      <span className="text-blue-200">Buyer total:</span>
+                      <span className="text-blue-100">
+                        {fromWei(
+                          priceBigInt +
+                          (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n +
+                          (royaltyPercentage ? calculateRoyalty(priceBigInt) : 0n),
+                          tokenDecimals
+                        )} {tokenSymbol}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -456,18 +284,15 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
                   ))}
                 </SelectContent>
               </Select>
-              {duration === CUSTOM_DURATION_VALUE ? (
-                <div className="mt-3 space-y-1">
+              {isCustomDuration ? (
+                <div className="mt-3">
                   <Input
-                    type="datetime-local"
+                    type="date"
                     value={customExpiration}
                     onChange={(event) => setCustomExpiration(event.target.value)}
                     min={minCustomExpiration}
                     className="w-full"
                   />
-                  <p className="text-[11px] text-gray-500">
-                    Times are interpreted in your local timezone.
-                  </p>
                 </div>
               ) : null}
               {expirationDetails.preview ? (
@@ -479,21 +304,8 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
                 <p className="mt-2 text-xs text-red-400">{expirationDetails.error}</p>
               ) : null}
             </div>
-            <div className="rounded-md border border-gray-800 bg-black/30 px-3 py-2 text-xs text-gray-300">
-              {estimatingFee ? (
-                <span>Estimating network fee…</span>
-              ) : estimatedFee != null ? (
-                <span>
-                  Estimated network fee: ~{formatFee(estimatedFee)} STRK
-                </span>
-              ) : feeError ? (
-                <span className="text-red-400">Fee unavailable: {feeError}</span>
-              ) : (
-                <span>Enter a price to view the estimated network fee.</span>
-              )}
-            </div>
             <div className="text-[10px] text-gray-500 break-all">
-              Marketplace: {getContractByName(provider.manifest, NAMESPACE, "Marketplace").address}
+              Marketplace: {MARKETPLACE_ADDRESS}
             </div>
             {error && <p className="text-sm text-red-400">{error}</p>}
             <div className="flex justify-end gap-2">

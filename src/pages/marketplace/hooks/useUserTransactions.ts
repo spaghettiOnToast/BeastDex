@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { TxEntry } from "../types";
 import type { Listing } from "../../../services/marketplace/types";
-import { CategoryType } from "@cartridge/marketplace";
+import { CategoryType } from "@cartridge/arcade";
 import { BEASTS_COLLECTION_ADDRESS } from "../../../services/marketplace/constants";
 import { compareStarknetAddresses, normaliseStarknetAddress } from "../../../utils/address";
 import { useUserOffers, useUserSales, type ArcadeOrderModelCompat } from "../../../hooks/useArcadeOrders";

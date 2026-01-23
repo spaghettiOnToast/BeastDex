@@ -1,13 +1,7 @@
-import { configs } from "@cartridge/marketplace";
-import { constants as starknetConstants } from "starknet";
-
-const MAINNET_CONFIG = configs[starknetConstants.StarknetChainId.SN_MAIN];
-
-// Prefer Cartridge manifest address; fall back to env only if manifest missing
+// Marketplace contract address from environment
 export const MARKETPLACE_ADDRESS =
   (import.meta.env.VITE_MARKETPLACE_ADDRESS as string) ||
-  MAINNET_CONFIG?.manifest?.contracts?.Marketplace?.address ||
-  "";
+  "0x06bbf16b6c67b1bef27a187b499b2f3a14af31646c2c90d64f11b9087c3f527c";
 
 // ERC20 address used for payment (optional; depends on marketplace config)
 export type PaymentToken = {
@@ -57,18 +51,6 @@ const DEFAULT_LORDS_ADDRESS =
   (import.meta.env.VITE_TOKEN_LORDS as string) ||
   "0x0124aeb495b947201f5fac96fd1138e326ad86195b98df6dec9009158a533b49";
 
-export function getPaymentTokenBySymbol(symbol: string | undefined): PaymentToken | null {
-  if (!symbol) return null;
-  const sym = symbol.trim().toUpperCase();
-
-  // Check Ekubo cache
-  const ekuboTokens = getEkuboTokensFromCache();
-  const ekuboMatch = ekuboTokens.find((t) => t.symbol.toUpperCase() === sym);
-  if (ekuboMatch) return ekuboMatch;
-
-  return null;
-}
-
 export function getPaymentTokenByAddress(address?: string | null): PaymentToken | null {
   if (!address) return null;
   const normalizedInput = normalizeStarknetAddress(address.trim());
@@ -93,7 +75,6 @@ export const DEFAULT_PAYMENT_TOKEN: PaymentToken = {
 export const DEFAULT_LISTING_DURATION_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 export const LISTING_DURATION_OPTIONS = [
-  { label: "5 Minutes (Test)", value: 60 * 5 },
   { label: "1 Day", value: 60 * 60 * 24 },
   { label: "3 Days", value: 60 * 60 * 24 * 3 },
   { label: "7 Days", value: 60 * 60 * 24 * 7 },
@@ -109,16 +90,13 @@ export function getDefaultListingExpiration(): bigint {
 // Collection address (re-use beasts contract)
 export { CONTRACT_ADDRESS as BEASTS_COLLECTION_ADDRESS } from "../beast/constants";
 
-// Cairo entrypoint names (confirm against deployed contract)
-export const ENTRYPOINTS = {
-  list: "list",
-  edit: "edit",
-  cancel: "cancel",
-  buy: "buy",
-} as const;
-
 // Client fee configuration
 // Fee is in basis points where 10000 = 100%, so 200 = 2%
 // Applied only on listing creation, not on buying
 export const CLIENT_FEE_BP = 200; // 2% fee in basis points
 export const CLIENT_FEE_RECEIVER = "0x0495fc00f87ab20ae908dd24c763c9553b67955e6301113809320da20e8ecb5b";
+
+// Royalties configuration
+// Set to true to enable creator royalties on listings/purchases
+// The marketplace contract may enforce this - test with false to see if it's optional
+export const ROYALTIES_ENABLED = false; // Set to true to enable creator royalties

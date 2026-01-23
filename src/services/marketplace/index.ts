@@ -1,5 +1,5 @@
-import type { OrderModel } from "@cartridge/marketplace";
-import { CategoryType, StatusType } from "@cartridge/marketplace";
+import type { OrderModel } from "@cartridge/arcade";
+import { CategoryType, StatusType } from "@cartridge/arcade";
 import { deriveTokenHex, fetchBeastsByIds } from "../beast";
 import type { Beast } from "../beast";
 import type { Listing, ListingStatus } from "./types";
@@ -14,7 +14,7 @@ function getListingStatus(order: OrderModel): ListingStatus {
     return "sold";
   }
   if (order.status.value === StatusType.Canceled) {
-    return "canceled";
+    return "cancelled";
   }
 
   // For Placed orders, check expiration

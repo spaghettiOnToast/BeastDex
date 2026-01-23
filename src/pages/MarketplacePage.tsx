@@ -14,11 +14,10 @@ import {
 } from "../services/marketplace/constants";
 import { cancelListingFlow } from "../services/marketplace/flows";
 import {
-  useMarketplace,
   type OrderModel,
   CategoryType,
   StatusType,
-} from "@cartridge/marketplace";
+} from "@cartridge/arcade";
 import type { Beast } from "../services/beast";
 import FiltersButton from "../components/filters/FiltersButton";
 import { FiltersDrawer } from "../components/filters/FiltersDrawer";
@@ -44,6 +43,7 @@ import {
 } from "../components/ui/dialog";
 import { ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
+import { isUserRejection } from "../utils/transaction";
 
 // Import custom hooks and utilities
 import { useMarketplaceData } from "./marketplace/hooks/useMarketplaceData";
@@ -71,7 +71,6 @@ const HIDDEN_OFFERS_KEY = "beastdex-hidden-offers";
  */
 export default function MarketplacePage() {
   const { address, account } = useAccount();
-  const marketplace = useMarketplace();
   const { getToken } = useTokenMap();
 
   // Dialog states
@@ -135,7 +134,7 @@ export default function MarketplacePage() {
   }, []);
 
   // Data fetching hook
-  const dataHook = useMarketplaceData(address, marketplace);
+  const dataHook = useMarketplaceData(address);
 
   // Filters hook
   const filtersHook = useMarketplaceFilters({
@@ -177,6 +176,7 @@ export default function MarketplacePage() {
     refetchOrders: dataHook.refetchOrders,
     reloadUserBeasts: dataHook.reloadUserBeasts,
     invalidateSales: invalidateAllSales,
+    markListingAsSold: dataHook.markListingAsSold,
   });
 
   // Defer username lookups to allow listings to render first
@@ -208,34 +208,72 @@ export default function MarketplacePage() {
     })) as unknown as OrderModel[];
   }, [arcadeOffers]);
 
-  // Get user's listed token IDs for offers received query
-  const userListedTokenIds = useMemo(() => {
-    return filtersHook.myActiveListings
-      .filter(l => l.status === "active")
-      .map(l => l.tokenId);
-  }, [filtersHook.myActiveListings]);
+  // Get all user's owned token IDs for offers received query
+  // Offers can be made on any beast the user owns, not just listed ones
+  const userOwnedTokenIds = useMemo(() => {
+    const tokenIds = new Set<string>();
 
-  // Fetch offers received on user's listings
+    // Add token IDs from owned beasts
+    for (const beast of dataHook.userBeasts) {
+      const rawTokenId = beast.id.split(":").pop() || beast.id;
+      // Convert hex to decimal if needed
+      const tokenId = rawTokenId.startsWith("0x")
+        ? BigInt(rawTokenId).toString()
+        : rawTokenId;
+      tokenIds.add(tokenId);
+    }
+
+    // Also add from active listings (in case of any edge cases)
+    for (const listing of filtersHook.myActiveListings) {
+      tokenIds.add(listing.tokenId);
+    }
+
+    return Array.from(tokenIds);
+  }, [dataHook.userBeasts, filtersHook.myActiveListings]);
+
+  // Fetch offers received on user's owned beasts (not just listed ones)
   const { data: offersReceived, isLoading: offersReceivedLoading, refetch: refetchOffersReceived } = useOffersReceivedForListings(
     BEASTS_COLLECTION_ADDRESS,
-    userListedTokenIds,
+    userOwnedTokenIds,
     filtersHook.activeTab === "my" && myActivitySubTab === "offers-received"
   );
 
-  // Enrich offers with beast names from listings and hidden state
+  // Enrich offers with beast names from listings or owned beasts, and hidden state
+  // Also filter out offers made by the current user (you can't accept your own offers)
   const enrichedOffersReceived = useMemo(() => {
     if (!offersReceived || offersReceived.length === 0) return [];
 
-    return offersReceived.map(offer => {
+    // Filter out offers made by the current user
+    const filteredOffers = address
+      ? offersReceived.filter(offer => offer.owner.toLowerCase() !== address.toLowerCase())
+      : offersReceived;
+
+    return filteredOffers.map(offer => {
       const tokenId = String(offer.tokenId);
+
+      // First try to find beast name from active listings
       const matchingListing = filtersHook.myActiveListings.find(l => l.tokenId === tokenId);
+      let beastName = matchingListing?.beast?.name;
+
+      // If not found in listings, try to find from owned beasts
+      if (!beastName) {
+        const matchingBeast = dataHook.userBeasts.find(beast => {
+          const rawTokenId = beast.id.split(":").pop() || beast.id;
+          const beastTokenId = rawTokenId.startsWith("0x")
+            ? BigInt(rawTokenId).toString()
+            : rawTokenId;
+          return beastTokenId === tokenId;
+        });
+        beastName = matchingBeast?.name;
+      }
+
       return {
         ...offer,
-        beastName: matchingListing?.beast?.name,
+        beastName,
         isHidden: hiddenOfferIds.has(offer.id.toString()),
       };
     });
-  }, [offersReceived, filtersHook.myActiveListings, hiddenOfferIds]);
+  }, [offersReceived, filtersHook.myActiveListings, dataHook.userBeasts, hiddenOfferIds, address]);
 
   // Filter offers based on visibility
   const visibleOffersReceived = useMemo(() => {
@@ -488,7 +526,7 @@ export default function MarketplacePage() {
     async (listing: Listing) => {
       if (!account) return;
 
-      const toastId = toast.loading("Canceling listing...");
+      const toastId = toast.loading("Cancelling listing...");
 
       try {
         await cancelListingFlow(
@@ -501,14 +539,21 @@ export default function MarketplacePage() {
           }
         );
 
-        toast.success("Listing canceled successfully!", { id: toastId });
+        toast.success("Listing cancelled successfully!", { id: toastId });
+
+        // Optimistically remove listing from UI before indexer catches up
+        dataHook.markListingAsSold(listing.listingId);
 
         // Transaction is tracked automatically by the indexer
         await dataHook.refetchOrders();
         await dataHook.reloadUserBeasts();
       } catch (error) {
-        const errorMessage = (error as Error).message || "Failed to cancel listing";
-        toast.error(errorMessage, { id: toastId });
+        if (isUserRejection(error)) {
+          toast.info("Listing cancellation cancelled", { id: toastId });
+        } else {
+          const errorMessage = (error as Error).message || "Failed to cancel listing";
+          toast.error(errorMessage, { id: toastId });
+        }
       }
     },
     [account, actionsHook, dataHook]
@@ -1069,13 +1114,13 @@ export default function MarketplacePage() {
               <>
                 {offersReceivedLoading ? (
                   <p className="text-xs text-gray-400">Loading offers...</p>
-                ) : userListedTokenIds.length === 0 ? (
+                ) : userOwnedTokenIds.length === 0 ? (
                   <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
-                    You don't have any active listings. List a beast to receive offers!
+                    You don't own any beasts yet.
                   </p>
                 ) : enrichedOffersReceived.length === 0 ? (
                   <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
-                    No offers received on your listings yet.
+                    No offers received on your beasts yet.
                   </p>
                 ) : (
                   <div className="space-y-3">
@@ -1289,7 +1334,7 @@ export default function MarketplacePage() {
                             ? "bg-gray-500/20 text-gray-400"
                             : tx.status === "completed"
                             ? "bg-blue-500/20 text-blue-400"
-                            : tx.status === "canceled"
+                            : tx.status === "cancelled"
                             ? "bg-red-500/20 text-red-400"
                             : "";
 

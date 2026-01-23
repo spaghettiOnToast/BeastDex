@@ -14,31 +14,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import {
   DEFAULT_PAYMENT_TOKEN,
   BEASTS_COLLECTION_ADDRESS,
-  DEFAULT_LISTING_DURATION_SECONDS,
-  LISTING_DURATION_OPTIONS,
   CLIENT_FEE_BP,
   CLIENT_FEE_RECEIVER,
+  MARKETPLACE_ADDRESS,
 } from "../../services/marketplace/constants";
-import { NAMESPACE, useMarketplace, useMarketplaceActions } from "@cartridge/marketplace";
-import { parseDojoCall } from "@dojoengine/core";
+import { ensureCollectionApproval, getProvider } from "../../services/marketplace/approvals";
 import { toWei, fromWei } from "../../utils/price";
 import { X, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import type { Listing } from "../../services/marketplace/types";
 import TokenSelect from "./TokenSelect";
 import { useSelectedToken } from "../../hooks/useEkuboTokens";
-
-const CUSTOM_DURATION_VALUE = "custom";
-
-const DURATION_SELECT_OPTIONS = [
-  ...LISTING_DURATION_OPTIONS.map((option) => ({
-    label: option.label,
-    value: String(option.value),
-  })),
-  { label: "Custom date…", value: CUSTOM_DURATION_VALUE },
-] as const;
-
-const DEFAULT_DURATION_VALUE = String(DEFAULT_LISTING_DURATION_SECONDS);
+import { isUserRejection } from "../../utils/transaction";
+import { toUint256Hex, UINT128_MASK } from "../../utils/uint256";
+import {
+  useExpirationDetails,
+  DURATION_SELECT_OPTIONS,
+} from "../../hooks/useExpirationDetails";
 
 type ListingResult = {
   tokenId: string;
@@ -70,15 +62,23 @@ export default function CartListDialog({
   const { account } = useAccount();
   const [beastPrices, setBeastPrices] = useState<Map<string, string>>(new Map());
   const [currencyAddress, setCurrencyAddress] = useState<string>(DEFAULT_PAYMENT_TOKEN.address);
-  const [duration, setDuration] = useState<string>(DEFAULT_DURATION_VALUE);
-  const [customExpiration, setCustomExpiration] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const marketplace = useMarketplace();
-  const { buildListCalls } = useMarketplaceActions();
 
   // Get token info from Ekubo
   const { decimals: tokenDecimals, symbol: tokenSymbol } = useSelectedToken(currencyAddress);
+
+  // Use shared expiration hook with max expiration enforcement
+  const {
+    duration,
+    setDuration,
+    customExpiration,
+    setCustomExpiration,
+    minCustomExpiration,
+    expirationDetails,
+    isCustomDuration,
+    reset: resetExpiration,
+  } = useExpirationDetails({ enforceMaxExpiration: true });
 
   // Check which beasts are already listed
   const alreadyListedTokenIds = useMemo(() => {
@@ -105,8 +105,7 @@ export default function CartListDialog({
 
   useEffect(() => {
     if (open) {
-      setDuration(DEFAULT_DURATION_VALUE);
-      setCustomExpiration("");
+      resetExpiration();
       // Default to the primary currency
       setCurrencyAddress(DEFAULT_PAYMENT_TOKEN.address);
       setError(null);
@@ -121,87 +120,12 @@ export default function CartListDialog({
       });
       setBeastPrices(initialPrices);
     }
-  }, [open, beasts]);
-
-  useEffect(() => {
-    if (duration !== CUSTOM_DURATION_VALUE) {
-      setCustomExpiration("");
-    }
-  }, [duration]);
+  }, [open, beasts, resetExpiration]);
 
   const toBigInt = (value: string) => {
     const trimmed = value.trim();
     return BigInt(trimmed.startsWith("0x") ? trimmed : trimmed);
   };
-
-  const toLocalInputValue = (date: Date) => {
-    const timezoneOffset = date.getTimezoneOffset() * 60000;
-    return new Date(date.getTime() - timezoneOffset).toISOString().slice(0, 16);
-  };
-
-  const minCustomExpiration = useMemo(() => {
-    return toLocalInputValue(new Date(Date.now() + 60 * 1000));
-  }, [open]);
-
-  const expirationDetails = useMemo(() => {
-    const nowSeconds = Math.floor(Date.now() / 1000);
-
-    if (duration === CUSTOM_DURATION_VALUE) {
-      if (!customExpiration) {
-        return {
-          expirationSeconds: null,
-          error: "Select an expiration date and time.",
-          preview: null,
-        };
-      }
-      const parsed = Date.parse(customExpiration);
-      if (Number.isNaN(parsed)) {
-        return {
-          expirationSeconds: null,
-          error: "Unable to parse the chosen date.",
-          preview: null,
-        };
-      }
-      const seconds = Math.floor(parsed / 1000);
-      if (seconds <= nowSeconds) {
-        return {
-          expirationSeconds: null,
-          error: "Expiration must be in the future.",
-          preview: null,
-        };
-      }
-      const maxSeconds = nowSeconds + DEFAULT_LISTING_DURATION_SECONDS;
-      if (seconds > maxSeconds) {
-        return {
-          expirationSeconds: null,
-          error: `Max expiration is ${Math.floor(
-            DEFAULT_LISTING_DURATION_SECONDS / (60 * 60 * 24)
-          )} days from now.`,
-          preview: null,
-        };
-      }
-      return {
-        expirationSeconds: seconds,
-        error: null,
-        preview: new Date(seconds * 1000).toLocaleString(),
-      };
-    }
-
-    const parsedDuration = Number.parseInt(duration, 10);
-    if (!Number.isFinite(parsedDuration) || parsedDuration <= 0) {
-      return {
-        expirationSeconds: null,
-        error: "Choose a valid listing duration.",
-        preview: null,
-      };
-    }
-    const seconds = nowSeconds + parsedDuration;
-    return {
-      expirationSeconds: seconds,
-      error: null,
-      preview: new Date(seconds * 1000).toLocaleString(),
-    };
-  }, [customExpiration, duration]);
 
   const handlePriceChange = (beastId: string, price: string) => {
     setBeastPrices((prev) => new Map(prev).set(beastId, price));
@@ -240,20 +164,17 @@ export default function CartListDialog({
       if (!expirationSeconds) {
         throw new Error("Invalid expiration selected");
       }
-      const expirationBigInt = BigInt(expirationSeconds);
-      const nowSeconds = Math.floor(Date.now() / 1000);
-      const maxSeconds = nowSeconds + DEFAULT_LISTING_DURATION_SECONDS;
-      if (expirationSeconds > maxSeconds) {
-        throw new Error(
-          `Max expiration is ${Math.floor(
-            DEFAULT_LISTING_DURATION_SECONDS / (60 * 60 * 24)
-          )} days from now.`
-        );
-      }
+
+      // Ensure collection approval first (once for all beasts)
+      toast.loading("Checking NFT approval...", { id: toastId });
+      await ensureCollectionApproval(account);
 
       // Build all calls for batching into a single multicall transaction
-      const allCalls: any[] = [];
-      const beastCallMap: Map<number, Beast> = new Map(); // Track which calls belong to which beast
+      const allCalls: Array<{
+        contractAddress: string;
+        entrypoint: string;
+        calldata: string[];
+      }> = [];
 
       for (let i = 0; i < availableToList.length; i++) {
         const beast = availableToList[i];
@@ -267,10 +188,12 @@ export default function CartListDialog({
           if (!Number.isFinite(numeric) || numeric <= 0) {
             throw new Error(`Invalid price for ${beast.name}`);
           }
-          const decimals = tokenDecimals;
-          const priceBigInt = toWei(priceStr, decimals);
+          const priceBigInt = toWei(priceStr, tokenDecimals);
           const rawTokenId = (beast.id.split(":").pop() || beast.id).trim();
           const tokenIdBigInt = toBigInt(rawTokenId);
+
+          // Build token ID as Uint256
+          const tokenIdU256 = toUint256Hex(tokenIdBigInt);
 
           console.log('📝 Preparing to list beast:', {
             name: beast.name,
@@ -279,27 +202,13 @@ export default function CartListDialog({
             priceFormatted: priceStr,
             currency: tokenSymbol,
             currencyAddress,
-            expiration: expirationBigInt.toString(),
-            expirationDate: new Date(Number(expirationBigInt) * 1000).toLocaleString(),
+            expiration: expirationSeconds.toString(),
+            expirationDate: new Date(expirationSeconds * 1000).toLocaleString(),
             collection: BEASTS_COLLECTION_ADDRESS,
           });
 
-          // Use buildListCalls with quantity=0 for ERC721
-          const [approvalCall, listCall] = buildListCalls(
-            BEASTS_COLLECTION_ADDRESS,
-            tokenIdBigInt,
-            0n, // quantity = 0 for ERC721 (non-fungible)
-            priceBigInt,
-            currencyAddress,
-            expirationBigInt
-          );
-
-          // Parse the list call through Dojo
-          const parsedListCall = (parseDojoCall as any)(marketplace.provider.manifest, NAMESPACE, listCall);
-
           // Calculate platform fee (2% of listing price)
           const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
-          const UINT128_MASK = (1n << 128n) - 1n;
           const feeLow = feeAmount & UINT128_MASK;
           const feeHigh = feeAmount >> 128n;
 
@@ -314,15 +223,26 @@ export default function CartListDialog({
             ],
           };
 
-          console.log(`Adding calls for ${beast.name} (${i}):`, { approvalCall, feeTransferCall, parsedListCall });
+          // Build list call (direct contract call)
+          // Contract signature: list(collection, token_id: u256, quantity: u128, price: u128, currency, expiration: u64, royalties: bool)
+          const listCall = {
+            contractAddress: MARKETPLACE_ADDRESS,
+            entrypoint: "list",
+            calldata: [
+              BEASTS_COLLECTION_ADDRESS,
+              ...tokenIdU256, // token_id as Uint256
+              "0", // quantity: u128 = 0 for ERC721 (non-fungible)
+              priceBigInt.toString(), // price: u128 (single felt, not u256!)
+              currencyAddress,
+              expirationSeconds.toString(), // expiration: u64
+              "0", // royalties: bool = false
+            ],
+          };
 
-          // Add to batch - track the index for this beast's calls (3 calls per beast: approve, fee, list)
-          const callIndex = allCalls.length;
-          beastCallMap.set(callIndex, beast);
-          beastCallMap.set(callIndex + 1, beast);
-          beastCallMap.set(callIndex + 2, beast);
+          console.log(`Adding calls for ${beast.name} (${i}):`, { feeTransferCall, listCall });
 
-          allCalls.push(approvalCall, feeTransferCall, parsedListCall);
+          // Add to batch - fee transfer then list (2 calls per beast)
+          allCalls.push(feeTransferCall, listCall);
 
           // Pre-populate success for validation
           successfulBeasts.push(beast);
@@ -344,13 +264,19 @@ export default function CartListDialog({
       // Execute all listings in a single multicall transaction
       if (allCalls.length > 0) {
         try {
+          toast.loading("Submitting listings...", { id: toastId });
           console.log(`🚀 Executing multicall with ${allCalls.length} calls for ${successfulBeasts.length} beasts...`);
-          const result = await (account as any).execute(allCalls);
+          const result = await account.execute(allCalls);
 
           // Extract transaction hash
-          const extractTxHash = (res: any): string | undefined =>
-            res?.transaction_hash || res?.hash || res?.txHash || res?.transactionHash;
-          const txHash = extractTxHash(result);
+          const txHash = result?.transaction_hash;
+
+          if (txHash) {
+            const provider = getProvider(account);
+            await provider.waitForTransaction(txHash, {
+              retryInterval: 2000,
+            });
+          }
 
           console.log('✅ Successfully executed multicall! TX:', txHash);
 
@@ -397,9 +323,13 @@ export default function CartListDialog({
         onListed?.(listingResults);
       }
     } catch (e) {
-      const errorMessage = (e as Error).message || "Failed to list beasts";
-      setError(errorMessage);
-      toast.error(errorMessage, { id: toastId });
+      if (isUserRejection(e)) {
+        toast.info("Listing cancelled", { id: toastId });
+      } else {
+        const errorMessage = (e as Error).message || "Failed to list beasts";
+        setError(errorMessage);
+        toast.error(errorMessage, { id: toastId });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -535,9 +465,9 @@ export default function CartListDialog({
                   ))}
                 </SelectContent>
               </Select>
-              {duration === CUSTOM_DURATION_VALUE && (
+              {isCustomDuration && (
                 <Input
-                  type="datetime-local"
+                  type="date"
                   min={minCustomExpiration}
                   value={customExpiration}
                   onChange={(e) => setCustomExpiration(e.target.value)}

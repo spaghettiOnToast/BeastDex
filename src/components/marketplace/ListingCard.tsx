@@ -67,7 +67,7 @@ export default function ListingCard({
 
     const configs = {
       expired: { bg: 'bg-orange-500/20', border: 'border-orange-400/50', text: 'EXPIRED', textColor: 'text-orange-300' },
-      canceled: { bg: 'bg-gray-500/20', border: 'border-gray-400/50', text: 'CANCELED', textColor: 'text-gray-300' },
+      cancelled: { bg: 'bg-gray-500/20', border: 'border-gray-400/50', text: 'CANCELLED', textColor: 'text-gray-300' },
       sold: { bg: 'bg-green-500/20', border: 'border-green-400/50', text: 'SOLD', textColor: 'text-green-300' },
     };
 

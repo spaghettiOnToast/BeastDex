@@ -50,7 +50,7 @@ export default function PurchaseCartDialog({
     try {
       const provider = getProvider(account);
 
-      // Validate each listing in parallel
+      // Validate each listing in parallel via ownerOf calls
       const validationPromises = listings.map(async (listing) => {
         try {
           const tokenIdBigInt = BigInt(listing.tokenId);
@@ -62,7 +62,6 @@ export default function PurchaseCartDialog({
           );
           return { listingId: listing.listingId, isValid };
         } catch {
-          // If validation fails, assume invalid to be safe
           return { listingId: listing.listingId, isValid: false };
         }
       });
@@ -104,7 +103,6 @@ export default function PurchaseCartDialog({
 
   const handlePurchaseClick = () => {
     if (hasInvalidListings) {
-      // Pass only valid listings to purchase
       onPurchaseAll(validListings);
     } else {
       onPurchaseAll();
@@ -117,7 +115,7 @@ export default function PurchaseCartDialog({
     }
   };
 
-  // Group VALID listings by payment token (exclude invalid ones from totals)
+  // Group VALID listings by payment token
   const listingsByToken = validListings.reduce((acc, listing) => {
     const tokenAddress = listing.paymentToken ?? 'default';
     if (!acc[tokenAddress]) {
@@ -127,7 +125,7 @@ export default function PurchaseCartDialog({
     return acc;
   }, {} as Record<string, Listing[]>);
 
-  // Calculate totals per token (only valid listings) with fee breakdown
+  // Calculate totals per token with fee breakdown
   const tokenTotals = Object.entries(listingsByToken).map(([tokenAddress, tokenListings]) => {
     const subtotal = tokenListings.reduce((sum, listing) => {
       try {
@@ -231,7 +229,6 @@ export default function PurchaseCartDialog({
         ) : (
           <>
             <div className="border-t border-gray-800 pt-4 space-y-2">
-              {/* Invalid listings warning */}
               {hasInvalidListings && hasValidated && (
                 <div className="rounded-md bg-red-500/10 border border-red-500/20 p-3 mb-3">
                   <div className="flex items-start gap-2">

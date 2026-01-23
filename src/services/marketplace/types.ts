@@ -1,6 +1,6 @@
 import type { Beast } from "../beast";
 
-export type ListingStatus = 'active' | 'expired' | 'canceled' | 'sold';
+export type ListingStatus = 'active' | 'expired' | 'cancelled' | 'sold';
 
 export type Listing = {
   listingId: string;
@@ -14,5 +14,5 @@ export type Listing = {
   quantity?: number;
   expiration?: number;
   beast?: Beast | null;
-  orderId?: number;
+  orderId: number;
 };

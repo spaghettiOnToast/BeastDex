@@ -265,13 +265,35 @@ export function useMarketplaceFilters({
 
   /**
    * Get user's active listings
+   * Also filters out listings for NFTs the user no longer owns
+   * (e.g., if they accepted an offer, the NFT transferred but the listing wasn't cancelled)
    */
   const myActiveListings = useMemo(() => {
     if (!address) return [] as Listing[];
     const lower = address.toLowerCase();
     const base = showAllMyListings ? listings : sortedListings;
-    return base.filter((listing) => listing.seller.toLowerCase() === lower);
-  }, [sortedListings, listings, address, showAllMyListings]);
+
+    // Build a set of token IDs the user currently owns
+    const ownedTokenIds = new Set<string>();
+    for (const beast of userBeasts) {
+      const rawTokenId = beast.id.split(":").pop() || beast.id;
+      // Normalize: convert hex to decimal string for comparison
+      const tokenId = rawTokenId.startsWith("0x")
+        ? BigInt(rawTokenId).toString()
+        : rawTokenId;
+      ownedTokenIds.add(tokenId);
+    }
+
+    // Filter to listings where:
+    // 1. The seller is the current user
+    // 2. The user still owns the NFT (prevents stale listings from showing)
+    return base.filter((listing) => {
+      if (listing.seller.toLowerCase() !== lower) return false;
+      // Check if user still owns this NFT
+      const normalizedTokenId = String(listing.tokenId).trim();
+      return ownedTokenIds.has(normalizedTokenId);
+    });
+  }, [sortedListings, listings, address, showAllMyListings, userBeasts]);
 
   /**
    * Track which token IDs are already actively listed
