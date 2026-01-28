@@ -9,7 +9,7 @@ import {
 import { Button } from "../ui/button";
 import type { Listing } from "../../services/marketplace/types";
 import { formatPrice } from "../../utils/price";
-import { getPaymentTokenByAddress } from "../../services/marketplace/constants";
+import { getPaymentTokenByAddress, CLIENT_FEE_BP } from "../../services/marketplace/constants";
 import { toBigIntSafe } from "../../utils/bigint";
 import TokenIcon from "../ui/TokenIcon";
 
@@ -33,9 +33,8 @@ export default function PurchaseConfirmDialog({
   if (!listing) return null;
 
   const priceBigInt = toBigIntSafe(listing.price);
-  // Buyer pays 2% platform fee (200 basis points out of 10000)
-  const BUYER_FEE_BP = 200; // 2%
-  const buyerFeeBigInt = (priceBigInt * BigInt(BUYER_FEE_BP)) / 10000n;
+  // Buyer pays platform fee (basis points out of 10000)
+  const buyerFeeBigInt = CLIENT_FEE_BP > 0 ? (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n : 0n;
   const totalBigInt = priceBigInt + buyerFeeBigInt;
 
   const token = getPaymentTokenByAddress(listing.paymentToken);
@@ -77,12 +76,14 @@ export default function PurchaseConfirmDialog({
               <span className="text-sm font-medium">{priceLabel}</span>
             </div>
 
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-400">Platform Fee (2%):</span>
-              <span className="text-sm font-medium text-gray-400">
-                {buyerFeeLabel}
-              </span>
-            </div>
+            {CLIENT_FEE_BP > 0 && (
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-400">Platform Fee ({CLIENT_FEE_BP / 100}%):</span>
+                <span className="text-sm font-medium text-gray-400">
+                  {buyerFeeLabel}
+                </span>
+              </div>
+            )}
 
             <div className="flex justify-between border-t border-gray-700 pt-2 mt-2">
               <span className="text-sm font-semibold text-white">
@@ -124,14 +125,14 @@ export default function PurchaseConfirmDialog({
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isProcessing}
-            className="flex-1"
+            className="flex-1 border-gray-600 hover:border-gray-500"
           >
             Cancel
           </Button>
           <Button
             onClick={onConfirm}
             disabled={isProcessing}
-            className="flex-1 font-bold"
+            className="flex-1 font-bold bg-lsGold/20 text-lsGold border border-lsGold hover:bg-lsGold/30"
           >
             {isProcessing ? "Processing..." : "Confirm Purchase"}
           </Button>

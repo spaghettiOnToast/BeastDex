@@ -222,14 +222,16 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
               )}
               {priceBigInt && priceBigInt > 0n && (
                 <div className="mt-2 space-y-2">
-                  {/* Seller's fees */}
-                  <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2 space-y-1">
-                    <p className="text-xs text-amber-200 font-medium">Listing fee (paid by you):</p>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-400">Platform fee (2%):</span>
-                      <span className="text-white">{fromWei((priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n, tokenDecimals)} {tokenSymbol}</span>
+                  {/* Seller's fees - only show if fees are enabled */}
+                  {CLIENT_FEE_BP > 0 && (
+                    <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2 space-y-1">
+                      <p className="text-xs text-amber-200 font-medium">Listing fee (paid by you):</p>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-400">Platform fee ({CLIENT_FEE_BP / 100}%):</span>
+                        <span className="text-white">{fromWei((priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n, tokenDecimals)} {tokenSymbol}</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Buyer's fees info */}
                   <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-2 space-y-1">
@@ -238,10 +240,12 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
                       <span className="text-gray-400">Your listing price:</span>
                       <span className="text-white">{fromWei(priceBigInt, tokenDecimals)} {tokenSymbol}</span>
                     </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-400">Platform fee (2%):</span>
-                      <span className="text-gray-300">{fromWei((priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n, tokenDecimals)} {tokenSymbol}</span>
-                    </div>
+                    {CLIENT_FEE_BP > 0 && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-400">Platform fee ({CLIENT_FEE_BP / 100}%):</span>
+                        <span className="text-gray-300">{fromWei((priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n, tokenDecimals)} {tokenSymbol}</span>
+                      </div>
+                    )}
                     {royaltyPercentage !== null && royaltyPercentage > 0 && (
                       <div className="flex justify-between text-xs">
                         <span className="text-gray-400">Creator royalty ({royaltyPercentage}%):</span>
@@ -256,7 +260,7 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
                       <span className="text-blue-100">
                         {fromWei(
                           priceBigInt +
-                          (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n +
+                          (CLIENT_FEE_BP > 0 ? (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n : 0n) +
                           (royaltyPercentage ? calculateRoyalty(priceBigInt) : 0n),
                           tokenDecimals
                         )} {tokenSymbol}
