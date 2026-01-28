@@ -93,7 +93,8 @@ export { CONTRACT_ADDRESS as BEASTS_COLLECTION_ADDRESS } from "../beast/constant
 // Client fee configuration
 // Fee is in basis points where 10000 = 100%, so 200 = 2%
 // Applied only on listing creation, not on buying
-export const CLIENT_FEE_BP = 200; // 2% fee in basis points
+// TODO: Set back to 200 (2%) after testing period
+export const CLIENT_FEE_BP = 0; // Temporarily disabled for testing
 export const CLIENT_FEE_RECEIVER = "0x0495fc00f87ab20ae908dd24c763c9553b67955e6301113809320da20e8ecb5b";
 
 // Royalties configuration

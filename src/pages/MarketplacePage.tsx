@@ -55,7 +55,6 @@ import { useUserTransactions } from "./marketplace/hooks/useUserTransactions";
 import { useRecentSales } from "./marketplace/hooks/useRecentSales";
 import { useTokenMap, tokenAmountToUsd } from "../hooks/useEkuboTokens";
 import { ViewToggle } from "./marketplace/components/ViewToggle";
-import { toBigInt } from "./marketplace/utils";
 import type { ExploreSubTab, MyActivitySubTab } from "./marketplace/types";
 
 // Storage key for hidden offers
@@ -401,59 +400,47 @@ export default function MarketplacePage() {
   }, [detailModalListing]);
 
   /**
-   * Calculate floor price listing - only compare listings in the same currency
-   * Shows floor for the most common currency
+   * Calculate floor price in USD - finds the absolute lowest price across all currencies
    */
-  const floorListing = useMemo(() => {
+  const floorPriceUsd = useMemo(() => {
     const activeListings = filtersHook.sortedListings.filter(
       (listing) => listing.active && listing.status === "active"
     );
 
     if (activeListings.length === 0) return null;
 
-    // Group listings by currency
-    const listingsByCurrency = new Map<string, Listing[]>();
+    let lowestUsd: number | null = null;
+    let lowestListing: Listing | null = null;
+
     for (const listing of activeListings) {
-      const currencyKey = listing.paymentToken?.toLowerCase() || "default";
-      if (!listingsByCurrency.has(currencyKey)) {
-        listingsByCurrency.set(currencyKey, []);
-      }
-      listingsByCurrency.get(currencyKey)!.push(listing);
-    }
+      if (!listing.paymentToken) continue;
 
-    // Find the currency with most listings
-    let mostCommonCurrency = "";
-    let maxCount = 0;
-    for (const [currency, listings] of listingsByCurrency.entries()) {
-      if (listings.length > maxCount) {
-        maxCount = listings.length;
-        mostCommonCurrency = currency;
-      }
-    }
+      const token = getToken(listing.paymentToken);
+      if (!token?.usdPrice) continue;
 
-    // Find floor price within that currency
-    const currencyListings = listingsByCurrency.get(mostCommonCurrency) || [];
-    let lowest: Listing | null = null;
-    let lowestPrice: bigint | null = null;
-
-    for (const listing of currencyListings) {
       try {
-        const price = toBigInt(listing.price);
-        if (lowestPrice === null || price < lowestPrice) {
-          lowestPrice = price;
-          lowest = listing;
+        const usdValue = tokenAmountToUsd(
+          listing.price,
+          token.decimals,
+          token.usdPrice
+        );
+
+        if (lowestUsd === null || usdValue < lowestUsd) {
+          lowestUsd = usdValue;
+          lowestListing = listing;
         }
       } catch {
         continue;
       }
     }
 
-    return lowest;
-  }, [filtersHook.sortedListings]);
+    if (lowestUsd === null) return null;
 
-  const floorPriceLabel = useMemo(() => {
-    return floorListing ? formatPriceLabel(floorListing) : "—";
-  }, [floorListing, formatPriceLabel]);
+    return {
+      usdValue: lowestUsd,
+      listing: lowestListing,
+    };
+  }, [filtersHook.sortedListings, getToken]);
 
   const uniqueSellers = useMemo(() => {
     return new Set(
@@ -465,39 +452,23 @@ export default function MarketplacePage() {
 
   const totalListingsCount = filtersHook.sortedListings.length;
 
-  // Split floor price into value and currency for better display
+  // Format floor price for display - just show USD
   const floorPriceParts = useMemo(() => {
-    if (!floorPriceLabel || floorPriceLabel === "—") {
+    if (!floorPriceUsd) {
       return { value: "—", currency: "", usdValue: null };
     }
-    const parts = floorPriceLabel.trim().split(/\s+/);
-    let value = floorPriceLabel;
-    let currency = "";
 
-    if (parts.length >= 2) {
-      currency = parts[parts.length - 1];
-      value = parts.slice(0, -1).join(" ");
-    }
+    const formattedUsd = floorPriceUsd.usdValue.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
 
-    // Calculate USD value if we have the floor listing
-    let usdValue: string | null = null;
-    if (floorListing?.paymentToken) {
-      const token = getToken(floorListing.paymentToken);
-      if (token?.usdPrice) {
-        const usd = tokenAmountToUsd(
-          floorListing.price,
-          token.decimals,
-          token.usdPrice
-        );
-        usdValue = usd.toLocaleString("en-US", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        });
-      }
-    }
-
-    return { value, currency, usdValue };
-  }, [floorPriceLabel, floorListing, getToken]);
+    return {
+      value: `$${formattedUsd}`,
+      currency: "",
+      usdValue: null, // Already showing USD as main value
+    };
+  }, [floorPriceUsd]);
 
   /**
    * Hero stats for the header
@@ -508,7 +479,6 @@ export default function MarketplacePage() {
         label: "Floor Price",
         value: floorPriceParts.value,
         currency: floorPriceParts.currency,
-        usdValue: floorPriceParts.usdValue,
         icon: "💰",
         color: "rgb(253, 224, 71)",
         bgGradient: "bg-gradient-to-br from-yellow-500/15 to-yellow-500/5",
@@ -732,9 +702,6 @@ export default function MarketplacePage() {
                         </p>
                         {stat.currency && (
                           <p className="text-[10px] text-gray-400 mt-0.5">{stat.currency}</p>
-                        )}
-                        {stat.usdValue && (
-                          <p className="text-[10px] text-gray-500 mt-0.5">${stat.usdValue}</p>
                         )}
                       </>
                     ) : (
@@ -1462,6 +1429,19 @@ export default function MarketplacePage() {
                           const token = tx.paymentToken ? getPaymentTokenByAddress(tx.paymentToken) : null;
                           const symbol = token?.symbol ?? 'LORDS';
 
+                          // Calculate USD value for price
+                          let usdPriceStr: string | null = null;
+                          if (tx.price && tx.paymentToken) {
+                            const tokenInfo = getToken(tx.paymentToken);
+                            if (tokenInfo?.usdPrice) {
+                              const usdValue = tokenAmountToUsd(tx.price, tokenInfo.decimals, tokenInfo.usdPrice);
+                              usdPriceStr = usdValue.toLocaleString("en-US", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              });
+                            }
+                          }
+
                           // Determine type badge styling and label
                           const typeConfig: Record<string, { class: string; label: string }> = {
                             offer: { class: "bg-purple-500/20 text-purple-400", label: "Offer" },
@@ -1500,8 +1480,15 @@ export default function MarketplacePage() {
                               <td className="px-4 py-3 text-gray-300">
                                 {tx.beastName || `Beast #${tx.tokenId}`}
                               </td>
-                              <td className="px-4 py-3 text-gray-400">
-                                {tx.price ? formatPrice(tx.price, symbol) : '-'}
+                              <td className="px-4 py-3">
+                                {tx.price ? (
+                                  <div>
+                                    <span className="text-gray-300">{formatPrice(tx.price, symbol)}</span>
+                                    {usdPriceStr && (
+                                      <span className="text-gray-500 text-[10px] ml-1">(${usdPriceStr})</span>
+                                    )}
+                                  </div>
+                                ) : '-'}
                               </td>
                               <td className="px-4 py-3">
                                 {tx.status ? (
