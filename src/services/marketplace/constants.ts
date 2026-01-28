@@ -100,3 +100,17 @@ export const CLIENT_FEE_RECEIVER = "0x0495fc00f87ab20ae908dd24c763c9553b67955e63
 // Set to true to enable creator royalties on listings/purchases
 // The marketplace contract may enforce this - test with false to see if it's optional
 export const ROYALTIES_ENABLED = false; // Set to true to enable creator royalties
+
+// Whitelisted payment tokens for marketplace transactions
+export const WHITELISTED_PAYMENT_TOKENS = [
+  "lords",
+  "survivor",
+  "eth",
+  "strk",
+  "ekubo",
+  "usdc",
+  "usdt",
+  "cash",
+  "dai",
+  "dticket",
+] as const;

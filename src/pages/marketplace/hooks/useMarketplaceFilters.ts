@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import type { Beast, BeastAttributeFilters } from "../../../services/beast";
 import type { Listing } from "../../../services/marketplace/types";
 import type { SortOption } from "../../../components/sort/SortDropdown";
@@ -33,7 +33,10 @@ export function useMarketplaceFilters({
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
   const [showAllMyListings, setShowAllMyListings] = useState(false);
   const [activeTab, setActiveTab] = useState<MarketplaceView>("explore");
-  const [visibleListingCount, setVisibleListingCount] = useState(120);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Pagination constants
+  const ITEMS_PER_PAGE = 60;
 
   /**
    * Load hidden listings from localStorage on mount
@@ -145,67 +148,11 @@ export function useMarketplaceFilters({
   );
 
   /**
-   * Progressively load listings for performance
+   * Reset to page 1 when filters change
    */
-  const progressiveLoadRef = useRef<{ cancelled: boolean; timer: number | null }>({
-    cancelled: false,
-    timer: null,
-  });
-
   useEffect(() => {
-    const target = sortedListings.length;
-    const INITIAL = 120;
-    const STEP = 60;
-    const ref = progressiveLoadRef.current;
-
-    // Clean up any previous progressive load
-    ref.cancelled = true;
-    if (ref.timer !== null) {
-      window.clearTimeout(ref.timer);
-      ref.timer = null;
-    }
-
-    if (activeTab !== "explore") {
-      setVisibleListingCount(target);
-      return;
-    }
-
-    setVisibleListingCount(Math.min(INITIAL, target));
-
-    if (target <= INITIAL) {
-      return;
-    }
-
-    // Start new progressive load
-    ref.cancelled = false;
-
-    const schedule = () => {
-      if (ref.cancelled || typeof window === "undefined") return;
-      ref.timer = window.setTimeout(() => {
-        if (ref.cancelled) return;
-        setVisibleListingCount((prev) => {
-          const next = Math.min(prev + STEP, target);
-          if (next >= target) {
-            ref.cancelled = true;
-          }
-          return next;
-        });
-        if (!ref.cancelled) {
-          schedule();
-        }
-      }, 90);
-    };
-
-    schedule();
-
-    return () => {
-      ref.cancelled = true;
-      if (ref.timer !== null && typeof window !== "undefined") {
-        window.clearTimeout(ref.timer);
-        ref.timer = null;
-      }
-    };
-  }, [sortedListings.length, activeTab]);
+    setCurrentPage(1);
+  }, [attributeFilters, sortOption, hideExpired, activeTab]);
 
   /**
    * Filter user beasts based on current filters
@@ -253,15 +200,23 @@ export function useMarketplaceFilters({
   }, [filteredUserBeasts, sortOption, showDuplicatesOnly]);
 
   /**
-   * Get listings to render based on visible count
+   * Get listings to render based on pagination
    */
   const listingsToRender = useMemo(() => {
     if (activeTab !== "explore") {
       return sortedListings;
     }
-    const count = Math.min(visibleListingCount, sortedListings.length);
-    return sortedListings.slice(0, count);
-  }, [activeTab, sortedListings, visibleListingCount]);
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    return sortedListings.slice(startIndex, endIndex);
+  }, [activeTab, sortedListings, currentPage, ITEMS_PER_PAGE]);
+
+  /**
+   * Calculate total pages for pagination
+   */
+  const totalPages = useMemo(() => {
+    return Math.ceil(sortedListings.length / ITEMS_PER_PAGE);
+  }, [sortedListings.length, ITEMS_PER_PAGE]);
 
   /**
    * Get user's active listings
@@ -368,7 +323,7 @@ export function useMarketplaceFilters({
     showDuplicatesOnly,
     showAllMyListings,
     activeTab,
-    visibleListingCount,
+    currentPage,
 
     // Setters
     setAttributeFilters,
@@ -378,6 +333,7 @@ export function useMarketplaceFilters({
     setShowDuplicatesOnly,
     setShowAllMyListings,
     setActiveTab,
+    setCurrentPage,
 
     // Computed values
     filteredListings,
@@ -389,6 +345,8 @@ export function useMarketplaceFilters({
     myActiveListings,
     alreadyListedTokenIds,
     ownerAddresses,
+    totalPages,
+    itemsPerPage: ITEMS_PER_PAGE,
 
     // Handlers
     handleFilterChange,

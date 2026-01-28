@@ -24,7 +24,7 @@ import { X, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import type { Listing } from "../../services/marketplace/types";
 import TokenSelect from "./TokenSelect";
-import { useSelectedToken } from "../../hooks/useEkuboTokens";
+import { useSelectedToken, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
 import { isUserRejection } from "../../utils/transaction";
 import { toUint256Hex, UINT128_MASK } from "../../utils/uint256";
 import {
@@ -66,7 +66,7 @@ export default function CartListDialog({
   const [error, setError] = useState<string | null>(null);
 
   // Get token info from Ekubo
-  const { decimals: tokenDecimals, symbol: tokenSymbol } = useSelectedToken(currencyAddress);
+  const { decimals: tokenDecimals, symbol: tokenSymbol, usdPrice } = useSelectedToken(currencyAddress);
 
   // Use shared expiration hook with max expiration enforcement
   const {
@@ -404,6 +404,11 @@ export default function CartListDialog({
                           const platformFeeBigInt = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
                           return (
                             <div className="text-[10px] space-y-0.5">
+                              {usdPrice && (
+                                <div className="text-gray-400">
+                                  ≈ ${tokenAmountToUsd(priceBigInt, tokenDecimals, usdPrice).toFixed(2)} USD
+                                </div>
+                              )}
                               <div className="text-amber-300">
                                 You pay 2% fee: {fromWei(platformFeeBigInt, tokenDecimals)} {tokenSymbol}
                               </div>
@@ -491,7 +496,7 @@ export default function CartListDialog({
               <Button
                 onClick={onSubmit}
                 disabled={!canSubmit || submitting || alreadyListed.length > 0}
-                className="flex-1"
+                className="flex-1 bg-lsGold/20 text-lsGold border border-lsGold hover:bg-lsGold/30"
               >
                 {submitting
                   ? "Listing..."
@@ -500,10 +505,21 @@ export default function CartListDialog({
                     : `List ${availableToList.length} Beast${availableToList.length !== 1 ? "s" : ""}`
                 }
               </Button>
+              {beasts.length > 1 && onClearCart && (
+                <Button
+                  variant="outline"
+                  onClick={onClearCart}
+                  disabled={submitting}
+                  className="border-gray-600 hover:border-gray-500"
+                >
+                  Clear All
+                </Button>
+              )}
               <Button
                 variant="outline"
                 onClick={() => onOpenChange(false)}
                 disabled={submitting}
+                className="border-gray-600 hover:border-gray-500"
               >
                 Cancel
               </Button>

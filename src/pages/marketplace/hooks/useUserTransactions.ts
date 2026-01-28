@@ -53,17 +53,19 @@ export function useUserTransactions({ address, listings }: UseUserTransactionsPr
     const result: TxEntry[] = [];
     const normalizedUserAddress = normaliseStarknetAddress(address);
 
-    // Add user's active listings
+    // Add user's listings (both active and cancelled)
     for (const listing of listings) {
       if (compareStarknetAddresses(listing.seller, normalizedUserAddress)) {
+        const type = listing.status === 'cancelled' ? 'cancel' : 'list';
         result.push({
-          type: "list",
+          type,
           tokenId: listing.tokenId,
           beastName: listing.beast?.name,
           price: listing.price,
           paymentToken: listing.paymentToken ?? undefined,
           expiration: listing.expiration,
           timestamp: listing.createdAt ? listing.createdAt * 1000 : 0,
+          status: listing.status,
         });
       }
     }

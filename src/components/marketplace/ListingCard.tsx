@@ -140,7 +140,7 @@ export default function ListingCard({
               </div>
             )}
             {subtitlePriceLabel && (
-              <span className="text-[9px] text-gray-500">
+              <span className="text-xs text-gray-400">
                 ${subtitlePriceLabel.split(' ')[0]}
               </span>
             )}

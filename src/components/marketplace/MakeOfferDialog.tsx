@@ -27,7 +27,7 @@ import { ensureErc20Allowance, getProvider } from "../../services/marketplace/ap
 import { toWei, fromWei } from "../../utils/price";
 import { toast } from "sonner";
 import TokenSelect from "./TokenSelect";
-import { useSelectedToken } from "../../hooks/useEkuboTokens";
+import { useSelectedToken, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
 import { isUserRejection } from "../../utils/transaction";
 import { toUint256Hex } from "../../utils/uint256";
 import {
@@ -64,7 +64,7 @@ export default function MakeOfferDialog({
   const [error, setError] = useState<string | null>(null);
 
   // Get token info from Ekubo
-  const { decimals: tokenDecimals, symbol: tokenSymbol } = useSelectedToken(currencyAddress);
+  const { decimals: tokenDecimals, symbol: tokenSymbol, usdPrice } = useSelectedToken(currencyAddress);
 
   // Use shared expiration hook (no max enforcement for offers)
   const {
@@ -258,6 +258,11 @@ export default function MakeOfferDialog({
               placeholder={`e.g., 1.5 ${tokenSymbol}`}
               className="mt-1"
             />
+            {priceBigInt && priceBigInt > 0n && usdPrice && (
+              <p className="text-xs text-gray-400 mt-1">
+                ≈ ${tokenAmountToUsd(priceBigInt, tokenDecimals, usdPrice).toFixed(2)} USD
+              </p>
+            )}
           </div>
           <div>
             <label className="text-sm text-gray-400">Currency</label>
@@ -332,10 +337,15 @@ export default function MakeOfferDialog({
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={submitting}
+              className="border-gray-600 hover:border-gray-500"
             >
               Cancel
             </Button>
-            <Button onClick={onSubmit} disabled={!canSubmit || submitting}>
+            <Button
+              onClick={onSubmit}
+              disabled={!canSubmit || submitting}
+              className="bg-lsGold/20 text-lsGold border border-lsGold hover:bg-lsGold/30"
+            >
               {submitting ? "Submitting..." : "Make Offer"}
             </Button>
           </div>

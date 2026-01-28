@@ -11,6 +11,7 @@ import {
 } from "../ui/select";
 import { useEkuboTokens } from "../../hooks/useEkuboTokens";
 import type { Token } from "../../services/tokens/ekubo";
+import { WHITELISTED_PAYMENT_TOKENS } from "../../services/marketplace/constants";
 
 // Priority order for tokens (lowercase symbols)
 const TOKEN_PRIORITY_ORDER = [
@@ -53,10 +54,14 @@ export default function TokenSelect({
   const displayTokens = useMemo(() => {
     let filtered = tokens;
 
+    // Filter by whitelist first
+    const whitelistSet = new Set(WHITELISTED_PAYMENT_TOKENS.map(s => s.toLowerCase()));
+    filtered = filtered.filter((t) => whitelistSet.has(t.symbol.toLowerCase()));
+
     // Filter by allowed tokens if specified
     if (allowedTokens && allowedTokens.length > 0) {
       const allowedSet = new Set(allowedTokens.map((a) => a.toLowerCase()));
-      filtered = tokens.filter((t) => allowedSet.has(t.address.toLowerCase()));
+      filtered = filtered.filter((t) => allowedSet.has(t.address.toLowerCase()));
     }
 
     // Sort by priority order, then by symbol alphabetically

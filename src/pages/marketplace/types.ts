@@ -11,7 +11,7 @@ export type ExploreSubTab = "browse" | "recent-listed" | "recent-sold";
 /**
  * My Activity sub-tab types
  */
-export type MyActivitySubTab = "listings" | "beasts" | "offers-received" | "transactions";
+export type MyActivitySubTab = "listings" | "beasts" | "offers" | "transactions";
 
 /**
  * Transaction entry for user activity tracking
@@ -26,7 +26,7 @@ export type TxEntry = {
   txHash?: string;
   timestamp: number;
   note?: string;
-  status?: "active" | "expired" | "cancelled" | "completed"; // For offers/listings status
+  status?: "active" | "expired" | "cancelled" | "completed" | "sold"; // For offers/listings status
 };
 
 /**

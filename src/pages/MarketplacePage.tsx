@@ -5,7 +5,7 @@ import { AppLayout } from "../components/layout/AppLayout";
 import { Button } from "../components/ui/button";
 import ListingCard from "../components/marketplace/ListingCard";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
-import { useOffersForToken, useOffersReceivedForListings } from "../hooks/useArcadeOrders";
+import { useOffersForToken, useOffersReceivedForListings, useUserOffers } from "../hooks/useArcadeOrders";
 import type { Listing } from "../services/marketplace/types";
 import {
   getPaymentTokenByAddress,
@@ -33,6 +33,7 @@ import PurchaseCartDialog from "../components/marketplace/PurchaseCartDialog";
 import MakeOfferDialog from "../components/marketplace/MakeOfferDialog";
 import OffersDialog from "../components/marketplace/OffersDialog";
 import UnifiedCartDialog from "../components/marketplace/UnifiedCartDialog";
+import Pagination from "../components/marketplace/Pagination";
 import BeastModal from "../components/beast/BeastModal";
 import {
   Dialog,
@@ -232,10 +233,17 @@ export default function MarketplacePage() {
   }, [dataHook.userBeasts, filtersHook.myActiveListings]);
 
   // Fetch offers received on user's owned beasts (not just listed ones)
+  // Always enabled when user has tokens - this allows the badge to show count regardless of active tab
   const { data: offersReceived, isLoading: offersReceivedLoading, refetch: refetchOffersReceived } = useOffersReceivedForListings(
     BEASTS_COLLECTION_ADDRESS,
     userOwnedTokenIds,
-    filtersHook.activeTab === "my" && myActivitySubTab === "offers-received"
+    !!address && userOwnedTokenIds.length > 0
+  );
+
+  // Fetch user's made offers for display in Offers tab
+  const { data: userMadeOffers, isLoading: userMadeOffersLoading, refetch: refetchUserMadeOffers } = useUserOffers(
+    address,
+    BEASTS_COLLECTION_ADDRESS
   );
 
   // Enrich offers with beast names from listings or owned beasts, and hidden state
@@ -358,6 +366,23 @@ export default function MarketplacePage() {
   }, []);
 
   /**
+   * Handle clicking on a beast in My Beasts to open detail modal
+   */
+  const handleBeastClick = useCallback((beast: Beast) => {
+    setDetailModalListing({
+      listingId: beast.id,
+      tokenId: beast.id.split(':').pop() || beast.id,
+      seller: address || '',
+      price: '0',
+      beast: beast,
+      status: 'active' as const,
+      active: false,
+      paymentToken: null,
+      orderId: 0,
+    });
+  }, [address]);
+
+  /**
    * Handle closing the detail modal
    */
   const handleCloseDetailModal = useCallback(() => {
@@ -443,16 +468,36 @@ export default function MarketplacePage() {
   // Split floor price into value and currency for better display
   const floorPriceParts = useMemo(() => {
     if (!floorPriceLabel || floorPriceLabel === "—") {
-      return { value: "—", currency: "" };
+      return { value: "—", currency: "", usdValue: null };
     }
     const parts = floorPriceLabel.trim().split(/\s+/);
+    let value = floorPriceLabel;
+    let currency = "";
+
     if (parts.length >= 2) {
-      const currency = parts[parts.length - 1];
-      const value = parts.slice(0, -1).join(" ");
-      return { value, currency };
+      currency = parts[parts.length - 1];
+      value = parts.slice(0, -1).join(" ");
     }
-    return { value: floorPriceLabel, currency: "" };
-  }, [floorPriceLabel]);
+
+    // Calculate USD value if we have the floor listing
+    let usdValue: string | null = null;
+    if (floorListing?.paymentToken) {
+      const token = getToken(floorListing.paymentToken);
+      if (token?.usdPrice) {
+        const usd = tokenAmountToUsd(
+          floorListing.price,
+          token.decimals,
+          token.usdPrice
+        );
+        usdValue = usd.toLocaleString("en-US", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+      }
+    }
+
+    return { value, currency, usdValue };
+  }, [floorPriceLabel, floorListing, getToken]);
 
   /**
    * Hero stats for the header
@@ -463,6 +508,7 @@ export default function MarketplacePage() {
         label: "Floor Price",
         value: floorPriceParts.value,
         currency: floorPriceParts.currency,
+        usdValue: floorPriceParts.usdValue,
         icon: "💰",
         color: "rgb(253, 224, 71)",
         bgGradient: "bg-gradient-to-br from-yellow-500/15 to-yellow-500/5",
@@ -687,6 +733,9 @@ export default function MarketplacePage() {
                         {stat.currency && (
                           <p className="text-[10px] text-gray-400 mt-0.5">{stat.currency}</p>
                         )}
+                        {stat.usdValue && (
+                          <p className="text-[10px] text-gray-500 mt-0.5">${stat.usdValue}</p>
+                        )}
                       </>
                     ) : (
                       <p
@@ -731,6 +780,7 @@ export default function MarketplacePage() {
                   dataHook.reloadUserBeasts();
                   refetchOffers();
                   refetchOffersReceived();
+                  refetchUserMadeOffers();
                   // Use invalidation to force refetch even if data is "fresh"
                   await invalidateSales();
                 }}
@@ -815,43 +865,52 @@ export default function MarketplacePage() {
                     No active listings match your filters yet.
                   </p>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                    {filtersHook.listingsToRender.map((listing) => (
-                      <ListingCard
-                        key={`${listing.listingId}-${listing.tokenId}`}
-                        beast={listing.beast}
-                        tokenId={listing.tokenId}
-                        priceLabel={formatPriceLabel(listing)}
-                        subtitlePriceLabel={formatSubtitlePrice(listing)}
-                        tokenLogoUrl={getTokenLogoUrl(listing)}
-                        status={listing.status}
-                        buyDisabled={!listing.active}
-                        inCart={cartsHook.isInPurchaseCart(listing.listingId)}
-                        primaryActionLabel={cartsHook.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
-                        onCardClick={() => handleCardClick(listing)}
-                        onBuyNow={() => {
-                          setPurchasingListing(listing);
-                          setPurchaseConfirmOpen(true);
-                        }}
-                        onAddToCart={() => cartsHook.handleAddToPurchaseCart(listing)}
-                        onMakeOffer={() => {
-                          setOfferBeast(listing.beast ?? null);
-                          setOfferTokenId(listing.tokenId);
-                          setMakeOfferOpen(true);
-                        }}
-                        onViewOffers={() => {
-                          setSelectedListingForOffers(listing);
-                          setOffersDialogOpen(true);
-                        }}
-                        ownedByUser={address?.toLowerCase() === listing.seller?.toLowerCase()}
-                        onEdit={() => {
-                          setEditingListing(listing);
-                          setEditDialogOpen(true);
-                        }}
-                        onCancel={listing.active ? () => handleCancelListing(listing) : undefined}
-                      />
-                    ))}
-                  </div>
+                  <>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                      {filtersHook.listingsToRender.map((listing) => (
+                        <ListingCard
+                          key={`${listing.listingId}-${listing.tokenId}`}
+                          beast={listing.beast}
+                          tokenId={listing.tokenId}
+                          priceLabel={formatPriceLabel(listing)}
+                          subtitlePriceLabel={formatSubtitlePrice(listing)}
+                          tokenLogoUrl={getTokenLogoUrl(listing)}
+                          status={listing.status}
+                          buyDisabled={!listing.active}
+                          inCart={cartsHook.isInPurchaseCart(listing.listingId)}
+                          primaryActionLabel={cartsHook.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
+                          onCardClick={() => handleCardClick(listing)}
+                          onBuyNow={() => {
+                            setPurchasingListing(listing);
+                            setPurchaseConfirmOpen(true);
+                          }}
+                          onAddToCart={() => cartsHook.handleAddToPurchaseCart(listing)}
+                          onMakeOffer={() => {
+                            setOfferBeast(listing.beast ?? null);
+                            setOfferTokenId(listing.tokenId);
+                            setMakeOfferOpen(true);
+                          }}
+                          onViewOffers={() => {
+                            setSelectedListingForOffers(listing);
+                            setOffersDialogOpen(true);
+                          }}
+                          ownedByUser={address?.toLowerCase() === listing.seller?.toLowerCase()}
+                          onEdit={() => {
+                            setEditingListing(listing);
+                            setEditDialogOpen(true);
+                          }}
+                          onCancel={listing.active ? () => handleCancelListing(listing) : undefined}
+                        />
+                      ))}
+                    </div>
+                    <Pagination
+                      currentPage={filtersHook.currentPage}
+                      totalPages={filtersHook.totalPages}
+                      totalItems={filtersHook.sortedListings.length}
+                      itemsPerPage={filtersHook.itemsPerPage}
+                      onPageChange={filtersHook.setCurrentPage}
+                    />
+                  </>
                 )}
               </>
             ) : exploreSubTab === "recent-listed" ? (
@@ -983,15 +1042,15 @@ export default function MarketplacePage() {
               </button>
               <button
                 type="button"
-                onClick={() => setMyActivitySubTab("offers-received")}
+                onClick={() => setMyActivitySubTab("offers")}
                 className={cn(
                   "rounded-md px-4 py-2 text-xs font-semibold uppercase tracking-wider transition",
-                  myActivitySubTab === "offers-received"
+                  myActivitySubTab === "offers"
                     ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
                     : "text-gray-400 hover:text-lsGold"
                 )}
               >
-                Offers Received
+                Offers
                 {visibleOffersReceived.length > 0 && (
                   <span className="ml-1.5 bg-purple-500/30 text-purple-300 text-[10px] px-1.5 py-0.5 rounded-full">
                     {visibleOffersReceived.length}
@@ -1100,6 +1159,7 @@ export default function MarketplacePage() {
                             tokenId={tokenId}
                             inCart={inCart}
                             isAlreadyListed={isListed}
+                            onCardClick={() => handleBeastClick(beast)}
                             onAddToCart={() => cartsHook.handleToggleCart(beast)}
                           />
                         );
@@ -1110,135 +1170,224 @@ export default function MarketplacePage() {
               </>
             )}
 
-            {myActivitySubTab === "offers-received" && (
+            {myActivitySubTab === "offers" && (
               <>
-                {offersReceivedLoading ? (
+                {(offersReceivedLoading || userMadeOffersLoading) ? (
                   <p className="text-xs text-gray-400">Loading offers...</p>
-                ) : userOwnedTokenIds.length === 0 ? (
+                ) : (enrichedOffersReceived.length === 0 && (!userMadeOffers || userMadeOffers.length === 0)) ? (
                   <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
-                    You don't own any beasts yet.
-                  </p>
-                ) : enrichedOffersReceived.length === 0 ? (
-                  <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
-                    No offers received on your beasts yet.
+                    No offers yet. Make an offer on a beast or wait for offers on your beasts.
                   </p>
                 ) : (
-                  <div className="space-y-3">
-                    {/* Toggle for hidden offers */}
-                    {hiddenOffersCount > 0 && (
-                      <div className="flex items-center justify-between">
-                        <label className="flex items-center gap-2 cursor-pointer group">
-                          <input
-                            type="checkbox"
-                            checked={showHiddenOffers}
-                            onChange={(e) => setShowHiddenOffers(e.target.checked)}
-                            className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-lsGold focus:ring-lsGold focus:ring-offset-gray-900"
-                          />
-                          <span className="text-xs font-medium text-gray-400 group-hover:text-lsGold transition-colors">
-                            Show Hidden Offers ({hiddenOffersCount})
-                          </span>
-                        </label>
+                  <div className="space-y-6">
+                    {/* Offers Received Section */}
+                    {enrichedOffersReceived.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                            Offers Received
+                            <span className="bg-green-500/20 text-green-400 text-[10px] px-2 py-0.5 rounded-full">
+                              {visibleOffersReceived.length}
+                            </span>
+                          </h3>
+                          {hiddenOffersCount > 0 && (
+                            <label className="flex items-center gap-2 cursor-pointer group">
+                              <input
+                                type="checkbox"
+                                checked={showHiddenOffers}
+                                onChange={(e) => setShowHiddenOffers(e.target.checked)}
+                                className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-lsGold focus:ring-lsGold focus:ring-offset-gray-900"
+                              />
+                              <span className="text-xs font-medium text-gray-400 group-hover:text-lsGold transition-colors">
+                                Show Hidden ({hiddenOffersCount})
+                              </span>
+                            </label>
+                          )}
+                        </div>
+                        {visibleOffersReceived.length === 0 ? (
+                          <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-4 text-center text-xs text-gray-400">
+                            All offers are hidden. Check "Show Hidden" to view them.
+                          </p>
+                        ) : visibleOffersReceived.map((offer, idx) => {
+                          const token = getPaymentTokenByAddress(offer.currency);
+                          const symbol = token?.symbol ?? 'LORDS';
+                          const priceFormatted = formatPrice(String(offer.price), symbol);
+                          const expirationDate = new Date(offer.expiration * 1000);
+                          const now = new Date();
+                          const hoursRemaining = Math.floor((expirationDate.getTime() - now.getTime()) / (1000 * 60 * 60));
+                          const daysRemaining = Math.floor(hoursRemaining / 24);
+                          const beastName = offer.beastName || `Beast #${offer.tokenId}`;
+
+                          return (
+                            <div
+                              key={`offer-received-${offer.id}-${idx}`}
+                              className={cn(
+                                "rounded-lg border p-4 transition-all",
+                                offer.isHidden
+                                  ? "border-gray-700/50 bg-gray-900/30 opacity-60"
+                                  : "border-green-500/30 bg-green-500/5"
+                              )}
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className="flex-shrink-0 text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded font-semibold">
+                                      Offer Received
+                                    </span>
+                                    <p className="font-semibold text-white truncate">
+                                      {beastName}
+                                    </p>
+                                    {idx === 0 && !offer.isHidden && (
+                                      <span className="flex-shrink-0 text-[10px] bg-lsGold/20 text-lsGold px-2 py-0.5 rounded">
+                                        Highest
+                                      </span>
+                                    )}
+                                    {offer.isHidden && (
+                                      <span className="flex-shrink-0 text-[10px] bg-gray-700/50 text-gray-400 px-2 py-0.5 rounded">
+                                        Hidden
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-xl font-bold text-lsGold mb-2">
+                                    {priceFormatted}
+                                  </p>
+                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
+                                    <span>From: {offer.owner.slice(0, 6)}...{offer.owner.slice(-4)}</span>
+                                    <span className="text-gray-600">•</span>
+                                    <span>
+                                      {daysRemaining > 1
+                                        ? `Expires in ${daysRemaining} days`
+                                        : hoursRemaining > 1
+                                        ? `Expires in ${hoursRemaining} hours`
+                                        : `Expires ${expirationDate.toLocaleString()}`}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex-shrink-0 flex items-center gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleToggleHideOffer(offer.id.toString())}
+                                    className="text-gray-400 hover:text-white text-xs px-3"
+                                  >
+                                    {offer.isHidden ? "Unhide" : "Hide"}
+                                  </Button>
+                                  <Button
+                                    onClick={() => {
+                                      // Convert to OrderModel format and open confirmation dialog
+                                      const orderModel = {
+                                        id: offer.id,
+                                        identifier: offer.identifier,
+                                        category: { value: CategoryType.Buy, into: () => 1 },
+                                        status: { value: StatusType.Placed, into: () => 1 },
+                                        expiration: offer.expiration,
+                                        collection: offer.collection,
+                                        tokenId: BigInt(offer.tokenId),
+                                        quantity: offer.quantity,
+                                        price: BigInt(offer.price),
+                                        currency: offer.currency,
+                                        owner: offer.owner,
+                                      } as unknown as OrderModel;
+                                      setOfferToAccept({
+                                        offer: orderModel,
+                                        beastName,
+                                        priceFormatted,
+                                        buyerAddress: offer.owner,
+                                      });
+                                      setAcceptOfferConfirmOpen(true);
+                                    }}
+                                    disabled={!!actionsHook.acceptingOfferId}
+                                    className="bg-green-600 hover:bg-green-500 text-white font-semibold px-6 py-2"
+                                  >
+                                    Accept Offer
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
-                    {visibleOffersReceived.length === 0 ? (
-                      <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
-                        All offers are hidden. Check "Show Hidden Offers" to view them.
-                      </p>
-                    ) : visibleOffersReceived.map((offer, idx) => {
-                      const token = getPaymentTokenByAddress(offer.currency);
-                      const symbol = token?.symbol ?? 'LORDS';
-                      const priceFormatted = formatPrice(String(offer.price), symbol);
-                      const expirationDate = new Date(offer.expiration * 1000);
-                      const now = new Date();
-                      const hoursRemaining = Math.floor((expirationDate.getTime() - now.getTime()) / (1000 * 60 * 60));
-                      const daysRemaining = Math.floor(hoursRemaining / 24);
-                      const beastName = offer.beastName || `Beast #${offer.tokenId}`;
 
-                      return (
-                        <div
-                          key={`offer-${offer.id}-${idx}`}
-                          className={cn(
-                            "rounded-lg border p-4 transition-all",
-                            offer.isHidden
-                              ? "border-gray-700/50 bg-gray-900/30 opacity-60"
-                              : "border-gray-800 bg-gray-900/50"
-                          )}
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-2">
-                                <p className="font-semibold text-white truncate">
-                                  {beastName}
-                                </p>
-                                {idx === 0 && !offer.isHidden && (
-                                  <span className="flex-shrink-0 text-[10px] bg-lsGold/20 text-lsGold px-2 py-0.5 rounded">
-                                    Highest
+                    {/* Offers Made Section */}
+                    {userMadeOffers && userMadeOffers.length > 0 && (
+                      <div className="space-y-3">
+                        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                          Offers Made
+                          <span className="bg-purple-500/20 text-purple-400 text-[10px] px-2 py-0.5 rounded-full">
+                            {userMadeOffers.length}
+                          </span>
+                        </h3>
+                        {userMadeOffers.map((offer, idx) => {
+                          const token = getPaymentTokenByAddress(offer.currency);
+                          const symbol = token?.symbol ?? 'LORDS';
+                          const priceFormatted = formatPrice(String(offer.price), symbol);
+                          const expirationDate = new Date(offer.expiration * 1000);
+                          const now = new Date();
+                          const hoursRemaining = Math.floor((expirationDate.getTime() - now.getTime()) / (1000 * 60 * 60));
+                          const daysRemaining = Math.floor(hoursRemaining / 24);
+                          const isExpired = expirationDate < now;
+
+                          // Try to find beast name from listings
+                          const matchingListing = dataHook.listings.find(l => l.tokenId === String(offer.tokenId));
+                          const beastName = matchingListing?.beast?.name || `Beast #${offer.tokenId}`;
+
+                          return (
+                            <div
+                              key={`offer-made-${offer.id}-${idx}`}
+                              className={cn(
+                                "rounded-lg border p-4 transition-all",
+                                isExpired
+                                  ? "border-gray-700/50 bg-gray-900/30 opacity-60"
+                                  : "border-purple-500/30 bg-purple-500/5"
+                              )}
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className="flex-shrink-0 text-[10px] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded font-semibold">
+                                      Offer Made
+                                    </span>
+                                    <p className="font-semibold text-white truncate">
+                                      {beastName}
+                                    </p>
+                                    {isExpired && (
+                                      <span className="flex-shrink-0 text-[10px] bg-gray-700/50 text-gray-400 px-2 py-0.5 rounded">
+                                        Expired
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-xl font-bold text-lsGold mb-2">
+                                    {priceFormatted}
+                                  </p>
+                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
+                                    <span>Token #{offer.tokenId}</span>
+                                    <span className="text-gray-600">•</span>
+                                    <span>
+                                      {isExpired
+                                        ? `Expired ${expirationDate.toLocaleDateString()}`
+                                        : daysRemaining > 1
+                                        ? `Expires in ${daysRemaining} days`
+                                        : hoursRemaining > 1
+                                        ? `Expires in ${hoursRemaining} hours`
+                                        : `Expires ${expirationDate.toLocaleString()}`}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex-shrink-0">
+                                  <span className={cn(
+                                    "text-xs px-3 py-1.5 rounded-md font-medium",
+                                    isExpired ? "bg-gray-700/50 text-gray-400" : "bg-purple-500/20 text-purple-300"
+                                  )}>
+                                    {isExpired ? "Expired" : "Pending"}
                                   </span>
-                                )}
-                                {offer.isHidden && (
-                                  <span className="flex-shrink-0 text-[10px] bg-gray-700/50 text-gray-400 px-2 py-0.5 rounded">
-                                    Hidden
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-xl font-bold text-lsGold mb-2">
-                                {priceFormatted}
-                              </p>
-                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
-                                <span>From: {offer.owner.slice(0, 6)}...{offer.owner.slice(-4)}</span>
-                                <span className="text-gray-600">•</span>
-                                <span>
-                                  {daysRemaining > 1
-                                    ? `Expires in ${daysRemaining} days`
-                                    : hoursRemaining > 1
-                                    ? `Expires in ${hoursRemaining} hours`
-                                    : `Expires ${expirationDate.toLocaleString()}`}
-                                </span>
+                                </div>
                               </div>
                             </div>
-                            <div className="flex-shrink-0 flex items-center gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleToggleHideOffer(offer.id.toString())}
-                                className="text-gray-400 hover:text-white text-xs px-3"
-                              >
-                                {offer.isHidden ? "Unhide" : "Hide"}
-                              </Button>
-                              <Button
-                                onClick={() => {
-                                  // Convert to OrderModel format and open confirmation dialog
-                                  const orderModel = {
-                                    id: offer.id,
-                                    identifier: offer.identifier,
-                                    category: { value: CategoryType.Buy, into: () => 1 },
-                                    status: { value: StatusType.Placed, into: () => 1 },
-                                    expiration: offer.expiration,
-                                    collection: offer.collection,
-                                    tokenId: BigInt(offer.tokenId),
-                                    quantity: offer.quantity,
-                                    price: BigInt(offer.price),
-                                    currency: offer.currency,
-                                    owner: offer.owner,
-                                  } as unknown as OrderModel;
-                                  setOfferToAccept({
-                                    offer: orderModel,
-                                    beastName,
-                                    priceFormatted,
-                                    buyerAddress: offer.owner,
-                                  });
-                                  setAcceptOfferConfirmOpen(true);
-                                }}
-                                disabled={!!actionsHook.acceptingOfferId}
-                                className="bg-green-600 hover:bg-green-500 text-white font-semibold px-6 py-2"
-                              >
-                                Accept Offer
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </>

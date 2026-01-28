@@ -21,7 +21,7 @@ import {
 import { toWei, fromWei } from "../../utils/price";
 import { toast } from "sonner";
 import TokenSelect from "./TokenSelect";
-import { useSelectedToken } from "../../hooks/useEkuboTokens";
+import { useSelectedToken, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
 import { useRoyaltyInfo } from "../../hooks/useRoyaltyInfo";
 import { ensureCollectionApproval, getProvider } from "../../services/marketplace/approvals";
 import { isUserRejection } from "../../utils/transaction";
@@ -46,7 +46,7 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
 
   // Token selection - default to LORDS
   const [currencyAddress, setCurrencyAddress] = useState(DEFAULT_PAYMENT_TOKEN.address);
-  const { decimals: tokenDecimals, symbol: tokenSymbol } = useSelectedToken(currencyAddress);
+  const { decimals: tokenDecimals, symbol: tokenSymbol, usdPrice } = useSelectedToken(currencyAddress);
 
   // Royalty info
   const { percentage: royaltyPercentage, loading: royaltyLoading, calculateRoyalty } = useRoyaltyInfo();
@@ -215,6 +215,11 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
                 placeholder={`e.g., 1.5 ${tokenSymbol}`}
                 className="mt-1"
               />
+              {priceBigInt && priceBigInt > 0n && usdPrice && (
+                <p className="text-xs text-gray-400 mt-1">
+                  ≈ ${tokenAmountToUsd(priceBigInt, tokenDecimals, usdPrice).toFixed(2)} USD
+                </p>
+              )}
               {priceBigInt && priceBigInt > 0n && (
                 <div className="mt-2 space-y-2">
                   {/* Seller's fees */}
@@ -309,10 +314,19 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
             </div>
             {error && <p className="text-sm text-red-400">{error}</p>}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+              <Button
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={submitting}
+                className="border-gray-600 hover:border-gray-500"
+              >
                 Cancel
               </Button>
-              <Button onClick={onSubmit} disabled={!canSubmit || submitting}>
+              <Button
+                onClick={onSubmit}
+                disabled={!canSubmit || submitting}
+                className="bg-lsGold/20 text-lsGold border border-lsGold hover:bg-lsGold/30"
+              >
                 {submitting ? "Submitting..." : "List"}
               </Button>
             </div>
