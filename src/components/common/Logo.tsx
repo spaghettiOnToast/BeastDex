@@ -123,7 +123,7 @@ export default function Logo({ scale = "md", onClick }: LogoProps) {
           />
         </svg>
       </div>
-      <span className="text-[10px] sm:text-sm uppercase tracking-[0.6em] text-[#39ff14] font-semibold whitespace-nowrap">
+      <span className="hidden xs:inline text-[10px] sm:text-sm uppercase tracking-[0.6em] text-[#39ff14] font-semibold whitespace-nowrap">
         BeastDex
       </span>
     </Link>

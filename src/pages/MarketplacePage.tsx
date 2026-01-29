@@ -668,28 +668,28 @@ export default function MarketplacePage() {
     <AppLayout topBar={<TopBar />}>
       <div className="space-y-4">
         {/* Header Section with Stats */}
-        <section className="relative overflow-hidden rounded-xl border border-gray-800/50 bg-gradient-to-br from-[#0b0b0f] via-[#0f0f13] to-[#0b0b0f] p-6 shadow-2xl">
+        <section className="relative overflow-hidden rounded-xl border border-gray-800/50 bg-gradient-to-br from-[#0b0b0f] via-[#0f0f13] to-[#0b0b0f] p-3 sm:p-6 shadow-2xl">
           <div className="absolute inset-0 bg-gradient-to-r from-lsGold/5 via-transparent to-[#8bff72]/5 opacity-50" />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(208,201,141,0.1),transparent_50%)]" />
 
-          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="max-w-2xl space-y-2">
-              <h1 className="bg-gradient-to-r from-[#f9e08a] via-[#fbdc5e] to-[#39ff14] bg-clip-text text-3xl font-bold uppercase tracking-wider text-transparent drop-shadow-[0_0_15px_rgba(251,234,160,0.3)]">
+          <div className="relative flex flex-col gap-3 sm:gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-2xl space-y-1 sm:space-y-2">
+              <h1 className="bg-gradient-to-r from-[#f9e08a] via-[#fbdc5e] to-[#39ff14] bg-clip-text text-xl sm:text-3xl font-bold uppercase tracking-wider text-transparent drop-shadow-[0_0_15px_rgba(251,234,160,0.3)]">
                 Beast Marketplace
               </h1>
-              <p className="text-sm text-gray-300 leading-relaxed">
+              <p className="text-xs sm:text-sm text-gray-300 leading-relaxed hidden xs:block">
                 Discover, buy, sell, and make offers on unique NFTs from Loot Survivor.
               </p>
             </div>
-            <div className="grid w-full gap-3 sm:grid-cols-2 lg:w-auto lg:grid-cols-2 xl:grid-cols-4">
+            <div className="grid w-full grid-cols-2 gap-2 sm:gap-3 lg:w-auto lg:grid-cols-2 xl:grid-cols-4">
               {heroStats.map((stat) => (
                 <div
                   key={stat.label}
-                  className={`${stat.bgGradient} ${stat.borderColor} backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-md min-h-[75px] flex flex-col relative overflow-hidden rounded-lg border p-2.5 min-w-[110px]`}
+                  className={`${stat.bgGradient} ${stat.borderColor} backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-md min-h-[55px] sm:min-h-[75px] flex flex-col relative overflow-hidden rounded-lg border p-1.5 sm:p-2.5 min-w-0 sm:min-w-[110px]`}
                 >
-                  <div className="flex flex-col items-center text-center gap-0.5 mb-1 relative z-10">
-                    <span className="text-xs flex-shrink-0">{stat.icon}</span>
-                    <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium truncate">
+                  <div className="flex flex-col items-center text-center gap-0 sm:gap-0.5 mb-0.5 sm:mb-1 relative z-10">
+                    <span className="text-[10px] sm:text-xs flex-shrink-0">{stat.icon}</span>
+                    <p className="text-[8px] sm:text-[9px] uppercase tracking-wider text-muted-foreground font-medium truncate">
                       {stat.label}
                     </p>
                   </div>
@@ -697,18 +697,18 @@ export default function MarketplacePage() {
                     {stat.isFloorPrice ? (
                       <>
                         <p
-                          className="text-base font-bold leading-none whitespace-nowrap overflow-hidden text-ellipsis px-1"
+                          className="text-sm sm:text-base font-bold leading-none whitespace-nowrap overflow-hidden text-ellipsis px-0.5 sm:px-1"
                           style={{ color: stat.color }}
                         >
                           {stat.value}
                         </p>
                         {stat.currency && (
-                          <p className="text-[10px] text-gray-400 mt-0.5">{stat.currency}</p>
+                          <p className="text-[9px] sm:text-[10px] text-gray-400 mt-0.5">{stat.currency}</p>
                         )}
                       </>
                     ) : (
                       <p
-                        className="text-base font-bold leading-none whitespace-nowrap overflow-hidden text-ellipsis px-1"
+                        className="text-sm sm:text-base font-bold leading-none whitespace-nowrap overflow-hidden text-ellipsis px-0.5 sm:px-1"
                         style={{ color: stat.color }}
                       >
                         {stat.value}
@@ -738,13 +738,15 @@ export default function MarketplacePage() {
         {/* Filters toolbar */}
 
         {/* View toggle and controls */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-2 sm:gap-4 lg:flex-row lg:items-center lg:justify-between">
           <ViewToggle value={filtersHook.activeTab} onChange={filtersHook.setActiveTab} />
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {filterControls}
             {filtersHook.activeTab === "my" && (
               <Button
                 variant="outline"
+                size="sm"
+                className="text-[10px] sm:text-xs h-7 sm:h-9 px-2 sm:px-4"
                 onClick={async () => {
                   dataHook.reloadUserBeasts();
                   refetchOffers();
@@ -755,12 +757,14 @@ export default function MarketplacePage() {
                 }}
                 disabled={dataHook.userBeastsLoading}
               >
-                {dataHook.userBeastsLoading ? "Refreshing…" : "Refresh"}
+                {dataHook.userBeastsLoading ? "…" : "Refresh"}
               </Button>
             )}
             {filtersHook.activeTab === "explore" && exploreSubTab === "recent-sold" && (
               <Button
                 variant="outline"
+                size="sm"
+                className="text-[10px] sm:text-xs h-7 sm:h-9 px-2 sm:px-4"
                 onClick={async () => {
                   await invalidateRecentSales();
                 }}
@@ -774,43 +778,45 @@ export default function MarketplacePage() {
         {/* Main content area */}
         {filtersHook.activeTab === "explore" ? (
           <section className="space-y-4">
-            <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-1">
-              <button
-                type="button"
-                onClick={() => setExploreSubTab("browse")}
-                className={cn(
-                  "rounded-md px-4 py-2 text-xs font-semibold uppercase tracking-wider transition",
-                  exploreSubTab === "browse"
-                    ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
-                    : "text-gray-400 hover:text-lsGold"
-                )}
-              >
-                All Listings
-              </button>
-              <button
-                type="button"
-                onClick={() => setExploreSubTab("recent-listed")}
-                className={cn(
-                  "rounded-md px-4 py-2 text-xs font-semibold uppercase tracking-wider transition",
-                  exploreSubTab === "recent-listed"
-                    ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
-                    : "text-gray-400 hover:text-lsGold"
-                )}
-              >
-                Recently Listed
-              </button>
-              <button
-                type="button"
-                onClick={() => setExploreSubTab("recent-sold")}
-                className={cn(
-                  "rounded-md px-4 py-2 text-xs font-semibold uppercase tracking-wider transition",
-                  exploreSubTab === "recent-sold"
-                    ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
-                    : "text-gray-400 hover:text-lsGold"
-                )}
-              >
-                Recently Sold
-              </button>
+            <div className="overflow-x-auto -mx-2 px-2 scrollbar-hide">
+              <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-1 min-w-max">
+                <button
+                  type="button"
+                  onClick={() => setExploreSubTab("browse")}
+                  className={cn(
+                    "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
+                    exploreSubTab === "browse"
+                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
+                      : "text-gray-400 hover:text-lsGold"
+                  )}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExploreSubTab("recent-listed")}
+                  className={cn(
+                    "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
+                    exploreSubTab === "recent-listed"
+                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
+                      : "text-gray-400 hover:text-lsGold"
+                  )}
+                >
+                  Recent
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExploreSubTab("recent-sold")}
+                  className={cn(
+                    "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
+                    exploreSubTab === "recent-sold"
+                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
+                      : "text-gray-400 hover:text-lsGold"
+                  )}
+                >
+                  Sold
+                </button>
+              </div>
             </div>
 
             {exploreSubTab === "browse" ? (
@@ -835,7 +841,7 @@ export default function MarketplacePage() {
                   </p>
                 ) : (
                   <>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                    <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                       {filtersHook.listingsToRender.map((listing) => (
                         <ListingCard
                           key={`${listing.listingId}-${listing.tokenId}`}
@@ -889,7 +895,7 @@ export default function MarketplacePage() {
                     No recent listings available.
                   </p>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                  <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                     {filtersHook.namedRecentListings.map((listing) => (
                       <ListingCard
                         key={`recent-${listing.listingId}`}
@@ -984,60 +990,62 @@ export default function MarketplacePage() {
           </section>
         ) : (
           <section className="space-y-4">
-            <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-1">
-              <button
-                type="button"
-                onClick={() => setMyActivitySubTab("listings")}
-                className={cn(
-                  "rounded-md px-4 py-2 text-xs font-semibold uppercase tracking-wider transition",
-                  myActivitySubTab === "listings"
-                    ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
-                    : "text-gray-400 hover:text-lsGold"
-                )}
-              >
-                My Listings
-              </button>
-              <button
-                type="button"
-                onClick={() => setMyActivitySubTab("beasts")}
-                className={cn(
-                  "rounded-md px-4 py-2 text-xs font-semibold uppercase tracking-wider transition",
-                  myActivitySubTab === "beasts"
-                    ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
-                    : "text-gray-400 hover:text-lsGold"
-                )}
-              >
-                My Beasts
-              </button>
-              <button
-                type="button"
-                onClick={() => setMyActivitySubTab("offers")}
-                className={cn(
-                  "rounded-md px-4 py-2 text-xs font-semibold uppercase tracking-wider transition",
-                  myActivitySubTab === "offers"
-                    ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
-                    : "text-gray-400 hover:text-lsGold"
-                )}
-              >
-                Offers
-                {visibleOffersReceived.length > 0 && (
-                  <span className="ml-1.5 bg-purple-500/30 text-purple-300 text-[10px] px-1.5 py-0.5 rounded-full">
-                    {visibleOffersReceived.length}
-                  </span>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setMyActivitySubTab("transactions")}
-                className={cn(
-                  "rounded-md px-4 py-2 text-xs font-semibold uppercase tracking-wider transition",
-                  myActivitySubTab === "transactions"
-                    ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
-                    : "text-gray-400 hover:text-lsGold"
-                )}
-              >
-                My Transactions
-              </button>
+            <div className="overflow-x-auto -mx-2 px-2 scrollbar-hide">
+              <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-1 min-w-max">
+                <button
+                  type="button"
+                  onClick={() => setMyActivitySubTab("listings")}
+                  className={cn(
+                    "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
+                    myActivitySubTab === "listings"
+                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
+                      : "text-gray-400 hover:text-lsGold"
+                  )}
+                >
+                  Listings
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMyActivitySubTab("beasts")}
+                  className={cn(
+                    "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
+                    myActivitySubTab === "beasts"
+                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
+                      : "text-gray-400 hover:text-lsGold"
+                  )}
+                >
+                  Beasts
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMyActivitySubTab("offers")}
+                  className={cn(
+                    "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
+                    myActivitySubTab === "offers"
+                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
+                      : "text-gray-400 hover:text-lsGold"
+                  )}
+                >
+                  Offers
+                  {visibleOffersReceived.length > 0 && (
+                    <span className="ml-1 sm:ml-1.5 bg-purple-500/30 text-purple-300 text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded-full">
+                      {visibleOffersReceived.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMyActivitySubTab("transactions")}
+                  className={cn(
+                    "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
+                    myActivitySubTab === "transactions"
+                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
+                      : "text-gray-400 hover:text-lsGold"
+                  )}
+                >
+                  History
+                </button>
+              </div>
             </div>
 
             {myActivitySubTab === "listings" && (
@@ -1047,7 +1055,7 @@ export default function MarketplacePage() {
                     You don't have any active listings yet.
                   </p>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                  <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                     {filtersHook.myActiveListings.map((listing) => (
                       <ListingCard
                         key={`my-${listing.listingId}`}
@@ -1111,7 +1119,7 @@ export default function MarketplacePage() {
                         </Button>
                       )}
                     </div>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                    <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                       {filtersHook.sortedUserBeasts.map((beast) => {
                         const rawTokenId = beast.id.split(":").pop() || beast.id;
                         // Convert hex tokenId to decimal string for comparison with listing tokenIds
