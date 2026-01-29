@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Card, CardContent, CardFooter } from "../ui/card";
 import { Button } from "../ui/button";
 import type { Beast } from "../../services/beast";
@@ -31,7 +32,7 @@ type Props = {
   isAlreadyListed?: boolean;
 };
 
-export default function ListingCard({
+function ListingCard({
   beast,
   tokenId,
   priceLabel,
@@ -249,3 +250,6 @@ export default function ListingCard({
     </Card>
   );
 }
+
+// Memoize to prevent unnecessary re-renders when parent updates
+export default memo(ListingCard);

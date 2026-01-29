@@ -35,8 +35,9 @@ export function useMarketplaceFilters({
   const [activeTab, setActiveTab] = useState<MarketplaceView>("explore");
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Pagination constants
-  const ITEMS_PER_PAGE = 60;
+  // Pagination - fewer items on mobile for better performance
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const ITEMS_PER_PAGE = isMobile ? 24 : 48;
 
   /**
    * Load hidden listings from localStorage on mount

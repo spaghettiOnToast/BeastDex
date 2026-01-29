@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { useAccount } from "@starknet-react/core";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
@@ -26,15 +26,17 @@ import { cn } from "../lib/utils";
 import {
   formatPrice,
 } from "../utils/price";
-import CartListDialog from "../components/marketplace/CartListDialog";
-import EditListingDialog from "../components/marketplace/EditListingDialog";
-import PurchaseConfirmDialog from "../components/marketplace/PurchaseConfirmDialog";
-import PurchaseCartDialog from "../components/marketplace/PurchaseCartDialog";
-import MakeOfferDialog from "../components/marketplace/MakeOfferDialog";
-import OffersDialog from "../components/marketplace/OffersDialog";
-import UnifiedCartDialog from "../components/marketplace/UnifiedCartDialog";
 import Pagination from "../components/marketplace/Pagination";
-import BeastModal from "../components/beast/BeastModal";
+
+// Lazy load dialog components to reduce initial bundle size
+const CartListDialog = lazy(() => import("../components/marketplace/CartListDialog"));
+const EditListingDialog = lazy(() => import("../components/marketplace/EditListingDialog"));
+const PurchaseConfirmDialog = lazy(() => import("../components/marketplace/PurchaseConfirmDialog"));
+const PurchaseCartDialog = lazy(() => import("../components/marketplace/PurchaseCartDialog"));
+const MakeOfferDialog = lazy(() => import("../components/marketplace/MakeOfferDialog"));
+const OffersDialog = lazy(() => import("../components/marketplace/OffersDialog"));
+const UnifiedCartDialog = lazy(() => import("../components/marketplace/UnifiedCartDialog"));
+const BeastModal = lazy(() => import("../components/beast/BeastModal"));
 import {
   Dialog,
   DialogContent,
@@ -1531,90 +1533,104 @@ export default function MarketplacePage() {
           </section>
         )}
 
-        {/* Dialogs */}
-        <CartListDialog
-          open={listDialogOpen}
-          onOpenChange={setListDialogOpen}
-          beasts={cartsHook.cartBeasts}
-          onRemoveBeast={cartsHook.handleRemoveFromCart}
-          onListed={actionsHook.handleListed}
-          onClearCart={cartsHook.handleClearCart}
-          existingListings={filtersHook.sortedListings}
-        />
+        {/* Dialogs - Lazy loaded for better initial performance */}
+        <Suspense fallback={null}>
+          {listDialogOpen && (
+            <CartListDialog
+              open={listDialogOpen}
+              onOpenChange={setListDialogOpen}
+              beasts={cartsHook.cartBeasts}
+              onRemoveBeast={cartsHook.handleRemoveFromCart}
+              onListed={actionsHook.handleListed}
+              onClearCart={cartsHook.handleClearCart}
+              existingListings={filtersHook.sortedListings}
+            />
+          )}
 
-        <EditListingDialog
-          open={editDialogOpen}
-          onOpenChange={setEditDialogOpen}
-          listing={editingListing}
-          account={account}
-          editListing={actionsHook.editListing}
-          onEdited={actionsHook.handleListed}
-        />
+          {editDialogOpen && (
+            <EditListingDialog
+              open={editDialogOpen}
+              onOpenChange={setEditDialogOpen}
+              listing={editingListing}
+              account={account}
+              editListing={actionsHook.editListing}
+              onEdited={actionsHook.handleListed}
+            />
+          )}
 
-        <PurchaseConfirmDialog
-          open={purchaseConfirmOpen}
-          onOpenChange={setPurchaseConfirmOpen}
-          listing={purchasingListing}
-          priceLabel={
-            purchasingListing
-              ? formatPrice(
-                  purchasingListing.price,
-                  getPaymentTokenByAddress(purchasingListing.paymentToken)?.symbol || "STRK"
-                )
-              : ""
-          }
-          isProcessing={!!actionsHook.buyingListingId}
-          onConfirm={() => {
-            if (purchasingListing) {
-              actionsHook.handlePurchase(purchasingListing);
-            }
-            setPurchaseConfirmOpen(false);
-          }}
-        />
+          {purchaseConfirmOpen && (
+            <PurchaseConfirmDialog
+              open={purchaseConfirmOpen}
+              onOpenChange={setPurchaseConfirmOpen}
+              listing={purchasingListing}
+              priceLabel={
+                purchasingListing
+                  ? formatPrice(
+                      purchasingListing.price,
+                      getPaymentTokenByAddress(purchasingListing.paymentToken)?.symbol || "STRK"
+                    )
+                  : ""
+              }
+              isProcessing={!!actionsHook.buyingListingId}
+              onConfirm={() => {
+                if (purchasingListing) {
+                  actionsHook.handlePurchase(purchasingListing);
+                }
+                setPurchaseConfirmOpen(false);
+              }}
+            />
+          )}
 
-        <PurchaseCartDialog
-          open={purchaseCartOpen}
-          onOpenChange={setPurchaseCartOpen}
-          listings={cartsHook.purchaseCart}
-          onRemove={cartsHook.handleRemoveFromPurchaseCart}
-          onClearAll={cartsHook.handleClearPurchaseCart}
-          onPurchaseAll={(validListings) =>
-            actionsHook.handlePurchaseAll(
-              validListings ?? cartsHook.purchaseCart,
-              cartsHook.handleRemoveFromPurchaseCart
-            ).then((success) => {
-              if (success) setPurchaseCartOpen(false);
-            })
-          }
-          isProcessing={actionsHook.purchasingBatch}
-        />
+          {purchaseCartOpen && (
+            <PurchaseCartDialog
+              open={purchaseCartOpen}
+              onOpenChange={setPurchaseCartOpen}
+              listings={cartsHook.purchaseCart}
+              onRemove={cartsHook.handleRemoveFromPurchaseCart}
+              onClearAll={cartsHook.handleClearPurchaseCart}
+              onPurchaseAll={(validListings) =>
+                actionsHook.handlePurchaseAll(
+                  validListings ?? cartsHook.purchaseCart,
+                  cartsHook.handleRemoveFromPurchaseCart
+                ).then((success) => {
+                  if (success) setPurchaseCartOpen(false);
+                })
+              }
+              isProcessing={actionsHook.purchasingBatch}
+            />
+          )}
 
-        <MakeOfferDialog
-          open={makeOfferOpen}
-          onOpenChange={setMakeOfferOpen}
-          beast={offerBeast}
-          tokenId={offerTokenId}
-          onOfferMade={() => setMakeOfferOpen(false)}
-        />
+          {makeOfferOpen && (
+            <MakeOfferDialog
+              open={makeOfferOpen}
+              onOpenChange={setMakeOfferOpen}
+              beast={offerBeast}
+              tokenId={offerTokenId}
+              onOfferMade={() => setMakeOfferOpen(false)}
+            />
+          )}
 
-        <OffersDialog
-          open={offersDialogOpen}
-          onOpenChange={setOffersDialogOpen}
-          tokenId={selectedListingForOffers?.tokenId || ""}
-          orders={offersForToken}
-          isOwner={
-            !!address &&
-            !!selectedListingForOffers?.seller &&
-            address.toLowerCase() === selectedListingForOffers.seller.toLowerCase()
-          }
-          isLoading={offersLoading}
-          onAcceptOffer={(order) => {
-            actionsHook.handleAcceptOffer(order).then((success) => {
-              if (success) setOffersDialogOpen(false);
-            });
-          }}
-          isAccepting={!!actionsHook.acceptingOfferId}
-        />
+          {offersDialogOpen && (
+            <OffersDialog
+              open={offersDialogOpen}
+              onOpenChange={setOffersDialogOpen}
+              tokenId={selectedListingForOffers?.tokenId || ""}
+              orders={offersForToken}
+              isOwner={
+                !!address &&
+                !!selectedListingForOffers?.seller &&
+                address.toLowerCase() === selectedListingForOffers.seller.toLowerCase()
+              }
+              isLoading={offersLoading}
+              onAcceptOffer={(order) => {
+                actionsHook.handleAcceptOffer(order).then((success) => {
+                  if (success) setOffersDialogOpen(false);
+                });
+              }}
+              isAccepting={!!actionsHook.acceptingOfferId}
+            />
+          )}
+        </Suspense>
 
         {/* Accept Offer Confirmation Dialog */}
         <Dialog open={acceptOfferConfirmOpen} onOpenChange={setAcceptOfferConfirmOpen}>
@@ -1680,13 +1696,17 @@ export default function MarketplacePage() {
         </Dialog>
 
         {/* Beast Detail Modal */}
-        <BeastModal
-          beast={detailModalBeast}
-          ownerUsernames={ownerUsernames}
-          onClose={handleCloseDetailModal}
-          customActionSlot={detailModalActionSlot}
-          listingExpiration={detailModalListing?.expiration}
-        />
+        <Suspense fallback={null}>
+          {detailModalBeast && (
+            <BeastModal
+              beast={detailModalBeast}
+              ownerUsernames={ownerUsernames}
+              onClose={handleCloseDetailModal}
+              customActionSlot={detailModalActionSlot}
+              listingExpiration={detailModalListing?.expiration}
+            />
+          )}
+        </Suspense>
 
         <FiltersDrawer
           open={filtersOpen}
@@ -1699,33 +1719,37 @@ export default function MarketplacePage() {
           onResetFilters={filtersHook.handleResetFilters}
         />
 
-        <UnifiedCartDialog
-          open={unifiedCartOpen}
-          onOpenChange={setUnifiedCartOpen}
-          buyItems={cartsHook.purchaseCart}
-          listBeasts={cartsHook.cartBeasts}
-          beastPrices={cartsHook.beastPrices}
-          onRemoveBuyItem={cartsHook.handleRemoveFromPurchaseCart}
-          onRemoveListBeast={cartsHook.handleRemoveFromCart}
-          onUpdateBeastPrice={cartsHook.handleUpdateBeastPrice}
-          onClearAll={() => {
-            cartsHook.setCartBeasts([]);
-            cartsHook.setPurchaseCart([]);
-            cartsHook.setBeastPrices(new Map());
-          }}
-          onExecuteAll={(validBuyItems) =>
-            actionsHook.handleExecuteUnifiedCart(
-              cartsHook.cartBeasts,
-              cartsHook.purchaseCart,
-              cartsHook.beastPrices,
-              validBuyItems
-            ).then((success) => {
-              if (success) setUnifiedCartOpen(false);
-            })
-          }
-          isProcessing={actionsHook.purchasingBatch || actionsHook.listingBatch}
-          selectedToken={selectedPaymentToken}
-        />
+        <Suspense fallback={null}>
+          {unifiedCartOpen && (
+            <UnifiedCartDialog
+              open={unifiedCartOpen}
+              onOpenChange={setUnifiedCartOpen}
+              buyItems={cartsHook.purchaseCart}
+              listBeasts={cartsHook.cartBeasts}
+              beastPrices={cartsHook.beastPrices}
+              onRemoveBuyItem={cartsHook.handleRemoveFromPurchaseCart}
+              onRemoveListBeast={cartsHook.handleRemoveFromCart}
+              onUpdateBeastPrice={cartsHook.handleUpdateBeastPrice}
+              onClearAll={() => {
+                cartsHook.setCartBeasts([]);
+                cartsHook.setPurchaseCart([]);
+                cartsHook.setBeastPrices(new Map());
+              }}
+              onExecuteAll={(validBuyItems) =>
+                actionsHook.handleExecuteUnifiedCart(
+                  cartsHook.cartBeasts,
+                  cartsHook.purchaseCart,
+                  cartsHook.beastPrices,
+                  validBuyItems
+                ).then((success) => {
+                  if (success) setUnifiedCartOpen(false);
+                })
+              }
+              isProcessing={actionsHook.purchasingBatch || actionsHook.listingBatch}
+              selectedToken={selectedPaymentToken}
+            />
+          )}
+        </Suspense>
 
         {/* Floating Cart Button */}
         {(cartsHook.cartBeasts.length > 0 || cartsHook.purchaseCart.length > 0) && (
