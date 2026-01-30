@@ -10,6 +10,18 @@ export default defineConfig({
       "@": resolve(import.meta.dirname, "./src"),
     },
   },
+  optimizeDeps: {
+    // Pre-bundle heavy dependencies to avoid 504 timeouts
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      'starknet',
+      '@starknet-react/core',
+      '@cartridge/connector',
+      '@cartridge/controller',
+    ],
+  },
   build: {
     rollupOptions: {
       output: {

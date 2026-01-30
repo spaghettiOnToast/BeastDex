@@ -67,8 +67,8 @@ export async function fetchBeastHighlights(forceRefresh = false): Promise<BeastH
     ${baseCte}
     SELECT
       (SELECT COUNT(*) FROM normalized WHERE is_shiny = 1 AND is_animated = 1) AS animated_shiny_count,
-      (SELECT COUNT(*) FROM normalized WHERE is_shiny = 1) AS shiny_count,
-      (SELECT COUNT(*) FROM normalized WHERE is_animated = 1) AS animated_count,
+      (SELECT COUNT(*) FROM normalized WHERE is_shiny = 1 AND is_animated = 0) AS shiny_count,
+      (SELECT COUNT(*) FROM normalized WHERE is_shiny = 0 AND is_animated = 1) AS animated_count,
       (SELECT COUNT(*) FROM normalized WHERE is_shiny = 0 AND is_animated = 0) AS standard_count;
   `;
 

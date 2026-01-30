@@ -25,7 +25,7 @@ import { fetchBeastStats } from "./stats";
 import { fetchBeastHighlights } from "./highlights";
 import { apiCache } from "../apiCache";
 
-export { TOTAL_BEAST_SUPPLY } from "./constants";
+export { TOTAL_BEAST_SUPPLY, MAX_BEASTS_PER_TYPE, MAX_BEASTS_PER_TIER } from "./constants";
 export { fetchBeastStats, fetchBeastHighlights };
 export type {
   AttributeFilterInput,
@@ -779,7 +779,6 @@ export async function fetchBeastRarityBeastLeaderboard({
             AND json_extract(attr.value, '$.value') IS NOT NULL
             AND b.account_address IS NOT NULL
             AND b.account_address != ''
-            AND LOWER(b.account_address) != '${EXCLUDED_OWNER_ADDRESS.toLowerCase()}'
         ),
         normalized AS (
           SELECT
@@ -841,7 +840,7 @@ export async function fetchMostCollectedBeastLeaderboard({
       WITH beast_counts AS (
         SELECT
           json_extract(attr.value, '$.value') as beast_name,
-          COUNT(*) as beast_count
+          COUNT(DISTINCT t.id) as beast_count
         FROM tokens t
         JOIN token_balances b
           ON t.id = b.token_id
@@ -1141,5 +1140,54 @@ export async function fetchOwnerBeastStats(
       uniqueTiers: Number(row.unique_tiers) || 0,
       maxPower: Number(row.max_power) || 0,
     };
+  });
+}
+
+export type TierCollectionStats = {
+  tier: number;
+  collected: number;
+};
+
+export async function fetchTierCollectionStats(): Promise<TierCollectionStats[]> {
+  return apiCache.get("tier-collection-stats", {}, async () => {
+    const query = `
+      WITH beast_tiers AS (
+        SELECT
+          t.id,
+          MAX(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) = 'tier'
+              THEN CAST(json_extract(attr.value, '$.value') AS INTEGER) END) as tier
+        FROM tokens t
+        JOIN token_balances b
+          ON t.id = b.token_id
+          AND t.contract_address = b.contract_address
+        JOIN json_each(
+          CASE
+            WHEN json_valid(t.metadata) = 1 THEN t.metadata
+            ELSE '{"attributes":[]}'
+          END,
+          '$.attributes'
+        ) attr
+        WHERE t.contract_address = '${CONTRACT_ADDRESS}'
+          AND b.balance > '${ZERO_BALANCE}'
+          AND json_valid(t.metadata) = 1
+        GROUP BY t.id
+      )
+      SELECT tier, COUNT(*) as collected
+      FROM beast_tiers
+      WHERE tier IS NOT NULL
+      GROUP BY tier
+      ORDER BY tier DESC
+    `;
+
+    type TierRow = {
+      tier: number;
+      collected: number;
+    };
+
+    const rows = await runBeastSql<TierRow[]>(query, "fetchTierCollectionStats");
+    return rows.map(row => ({
+      tier: row.tier,
+      collected: row.collected,
+    }));
   });
 }
