@@ -1,15 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { OrderModel } from "@cartridge/arcade";
 import type { Listing } from "../../../services/marketplace/types";
 import { hydrateOrders } from "../../../services/marketplace";
 import { BEASTS_COLLECTION_ADDRESS } from "../../../services/marketplace/constants";
-import { useArcadeListedTokensForCollection } from "../../../hooks/useArcadeOrders";
+import { useArcadeListedTokensForCollection, type ArcadeOrderWithTime } from "../../../hooks/useArcadeOrders";
 
 export interface UseMarketplaceListingsResult {
   listings: Listing[];
   hydratingListings: boolean;
   listingsError: string | null;
-  listedOrders: OrderModel[];
+  listedOrders: ArcadeOrderWithTime[];
   ordersLoading: boolean;
   ordersFetching: boolean;
   ordersError: unknown;
@@ -31,7 +30,7 @@ export function useMarketplaceListings(): UseMarketplaceListingsResult {
 
   const prevOrdersRef = useRef<string>("");
 
-  // Fetch orders from Arcade
+  // Fetch orders from Arcade (now includes listedAt time)
   const {
     data: listedOrders = [],
     isLoading: ordersLoading,
@@ -41,7 +40,7 @@ export function useMarketplaceListings(): UseMarketplaceListingsResult {
   } = useArcadeListedTokensForCollection(
     BEASTS_COLLECTION_ADDRESS
   ) as unknown as {
-    data: OrderModel[];
+    data: ArcadeOrderWithTime[];
     isLoading: boolean;
     isFetching: boolean;
     refetch: () => Promise<any>;
@@ -76,7 +75,7 @@ export function useMarketplaceListings(): UseMarketplaceListingsResult {
       // Only show skeletons if we have a reasonable number
       // Otherwise it causes performance issues
       if (listedOrders.length <= 200) {
-        const skeletons = listedOrders.map((order) => ({
+        const skeletons = listedOrders.map((order: ArcadeOrderWithTime) => ({
           listingId: order.identifier,
           tokenId: order.tokenId.toString(),
           seller: order.owner,
@@ -86,6 +85,7 @@ export function useMarketplaceListings(): UseMarketplaceListingsResult {
           status: "active" as const,
           quantity: order.quantity,
           expiration: order.expiration,
+          createdAt: order.listedAt, // Use actual listing time from event
           beast: null,
           orderId: order.id,
         }));

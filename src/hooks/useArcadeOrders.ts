@@ -55,11 +55,17 @@ function parseGraphQLOrder(node: any): ArcadeOrderModelCompat | null {
   };
 }
 
+// Extended type that includes listing time
+export type ArcadeOrderWithTime = ArcadeOrderModelCompat & {
+  listedAt?: number; // Unix timestamp when listed
+};
+
 async function fetchArcadeOrdersGraphQL(
   collectionAddress: string,
   limit: number = 1000
-): Promise<ArcadeOrderModelCompat[]> {
-  const query = `
+): Promise<ArcadeOrderWithTime[]> {
+  // Query current active orders first
+  const ordersQuery = `
     query GetArcadeOrders($collection: String!, $limit: Int!) {
       arcadeOrderModels(
         where: {
@@ -87,34 +93,90 @@ async function fetchArcadeOrdersGraphQL(
     }
   `;
 
-  const response = await fetch(ARCADE_GRAPHQL_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      query,
-      variables: {
-        collection: collectionAddress,
-        limit,
-      },
+  // Query listing events to get creation times
+  const listingsQuery = `
+    query GetArcadeListings($limit: Int!) {
+      arcadeListingModels(
+        limit: $limit
+      ) {
+        edges {
+          node {
+            order_id
+            time
+            order {
+              collection
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  // Fetch both in parallel
+  const [ordersResponse, listingsResponse] = await Promise.all([
+    fetch(ARCADE_GRAPHQL_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: ordersQuery,
+        variables: { collection: collectionAddress, limit },
+      }),
     }),
-  });
+    fetch(ARCADE_GRAPHQL_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: listingsQuery,
+        variables: { limit: limit * 2 }, // Fetch more to ensure coverage
+      }),
+    }),
+  ]);
 
-  if (!response.ok) {
-    throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
+  if (!ordersResponse.ok) {
+    throw new Error(`GraphQL request failed: ${ordersResponse.status} ${ordersResponse.statusText}`);
   }
 
-  const result = await response.json();
-
-  if (result.errors) {
-    throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
+  const ordersResult = await ordersResponse.json();
+  if (ordersResult.errors) {
+    throw new Error(`GraphQL errors: ${ordersResult.errors.map((e: any) => e.message).join(", ")}`);
   }
 
-  const edges = result.data?.arcadeOrderModels?.edges ?? [];
-  return edges
-    .map((edge: any) => parseGraphQLOrder(edge.node))
-    .filter(Boolean) as ArcadeOrderModelCompat[];
+  // Build a map of order_id -> listing time from listing events
+  const listingTimeMap = new Map<number, number>();
+  if (listingsResponse.ok) {
+    const listingsResult = await listingsResponse.json();
+    const listingEdges = listingsResult.data?.arcadeListingModels?.edges ?? [];
+    for (const edge of listingEdges) {
+      const node = edge.node;
+      if (!node) continue;
+      // Filter by collection
+      if (node.order?.collection && !compareStarknetAddresses(node.order.collection, collectionAddress)) continue;
+      const orderId = parseInt(node.order_id ?? "0", 10);
+      const time = parseInt(node.time ?? "0", 16);
+      if (orderId > 0 && time > 0) {
+        listingTimeMap.set(orderId, time);
+      }
+    }
+  }
+
+  // Parse orders and enrich with listing times
+  const orderEdges = ordersResult.data?.arcadeOrderModels?.edges ?? [];
+  const listings: ArcadeOrderWithTime[] = [];
+
+  for (const edge of orderEdges) {
+    const order = parseGraphQLOrder(edge.node);
+    if (!order) continue;
+
+    // Get listing time from the events map
+    const listedAt = listingTimeMap.get(order.id);
+
+    listings.push({
+      ...order,
+      listedAt,
+    });
+  }
+
+  return listings;
 }
 
 async function fetchArcadeOrderByTokenGraphQL(

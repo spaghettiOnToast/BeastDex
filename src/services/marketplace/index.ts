@@ -1,11 +1,11 @@
-import type { OrderModel } from "@cartridge/arcade";
 import { CategoryType, StatusType } from "@cartridge/arcade";
 import { deriveTokenHex, fetchBeastsByIds } from "../beast";
 import type { Beast } from "../beast";
 import type { Listing, ListingStatus } from "./types";
 import { compareStarknetAddresses } from "../../utils/address";
+import type { ArcadeOrderWithTime } from "../../hooks/useArcadeOrders";
 
-function getListingStatus(order: OrderModel): ListingStatus {
+function getListingStatus(order: ArcadeOrderWithTime): ListingStatus {
   const now = Math.floor(Date.now() / 1000);
   const isExpired = order.expiration && order.expiration <= now;
 
@@ -29,15 +29,16 @@ function getListingStatus(order: OrderModel): ListingStatus {
   return "expired";
 }
 
-function isActiveOrder(order: OrderModel) {
+function isActiveOrder(order: ArcadeOrderWithTime) {
   return (
     order.category.value === CategoryType.Sell &&
     getListingStatus(order) === "active"
   );
 }
 
-function toListingSkeleton(order: OrderModel): Listing {
+function toListingSkeleton(order: ArcadeOrderWithTime): Listing {
   const status = getListingStatus(order);
+
   return {
     listingId: order.identifier,
     tokenId: order.tokenId.toString(),
@@ -48,6 +49,7 @@ function toListingSkeleton(order: OrderModel): Listing {
     status,
     quantity: order.quantity,
     expiration: order.expiration,
+    createdAt: order.listedAt, // Use actual listing time from event
     beast: null,
     orderId: order.id,
   };
@@ -56,7 +58,7 @@ function toListingSkeleton(order: OrderModel): Listing {
 // Beast metadata cache to avoid refetching
 const beastCache = new Map<string, Beast | null>();
 
-export async function hydrateOrders(orders: OrderModel[]): Promise<Listing[]> {
+export async function hydrateOrders(orders: ArcadeOrderWithTime[]): Promise<Listing[]> {
   if (orders.length === 0) {
     return [];
   }

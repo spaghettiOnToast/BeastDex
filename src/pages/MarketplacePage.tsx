@@ -44,7 +44,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "../components/ui/dialog";
-import { ShoppingCart } from "lucide-react";
+import { ShoppingCart, LayoutGrid, List } from "lucide-react";
 import { toast } from "sonner";
 import { isUserRejection } from "../utils/transaction";
 
@@ -61,6 +61,32 @@ import type { ExploreSubTab, MyActivitySubTab } from "./marketplace/types";
 
 // Storage key for hidden offers
 const HIDDEN_OFFERS_KEY = "beastdex-hidden-offers";
+
+/**
+ * Format a timestamp to relative time (e.g., "24 minutes ago")
+ */
+function formatRelativeTime(timestamp: number): string {
+  const now = Math.floor(Date.now() / 1000);
+  const diff = now - timestamp;
+
+  if (diff < 0) return "just now"; // Future dates (shouldn't happen but handle gracefully)
+  if (diff < 60) return "just now";
+  if (diff < 3600) {
+    const mins = Math.floor(diff / 60);
+    return `${mins}m ago`;
+  }
+  if (diff < 86400) {
+    const hours = Math.floor(diff / 3600);
+    return `${hours}h ago`;
+  }
+  if (diff < 604800) {
+    const days = Math.floor(diff / 86400);
+    return `${days}d ago`;
+  }
+  const weeks = Math.floor(diff / 604800);
+  return `${weeks}w ago`;
+}
+
 
 /**
  * Main Marketplace Page Component - Refactored for maintainability
@@ -101,6 +127,7 @@ export default function MarketplacePage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [detailModalListing, setDetailModalListing] = useState<Listing | null>(null);
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<string | null>(null);
+  const [recentViewMode, setRecentViewMode] = useState<"cards" | "table">("cards");
 
   // Hidden offers state (persisted to localStorage)
   const [hiddenOfferIds, setHiddenOfferIds] = useState<Set<string>>(() => {
@@ -790,7 +817,7 @@ export default function MarketplacePage() {
                       : "text-gray-400 hover:text-lsGold"
                   )}
                 >
-                  All
+                  Listings
                 </button>
                 <button
                   type="button"
@@ -815,6 +842,18 @@ export default function MarketplacePage() {
                   )}
                 >
                   Sold
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExploreSubTab("activity")}
+                  className={cn(
+                    "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
+                    exploreSubTab === "activity"
+                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
+                      : "text-gray-400 hover:text-lsGold"
+                  )}
+                >
+                  Activity
                 </button>
               </div>
             </div>
@@ -851,7 +890,7 @@ export default function MarketplacePage() {
                           subtitlePriceLabel={formatSubtitlePrice(listing)}
                           tokenLogoUrl={getTokenLogoUrl(listing)}
                           status={listing.status}
-                          buyDisabled={!listing.active}
+                          buyDisabled={!listing.active || !address}
                           inCart={cartsHook.isInPurchaseCart(listing.listingId)}
                           primaryActionLabel={cartsHook.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
                           onCardClick={() => handleCardClick(listing)}
@@ -895,46 +934,209 @@ export default function MarketplacePage() {
                     No recent listings available.
                   </p>
                 ) : (
-                  <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                    {filtersHook.namedRecentListings.map((listing) => (
-                      <ListingCard
-                        key={`recent-${listing.listingId}`}
-                        beast={listing.beast}
-                        tokenId={listing.tokenId}
-                        priceLabel={formatPriceLabel(listing)}
-                        subtitlePriceLabel={formatSubtitlePrice(listing)}
-                        tokenLogoUrl={getTokenLogoUrl(listing)}
-                        status={listing.status}
-                        buyDisabled={!listing.active}
-                        inCart={cartsHook.isInPurchaseCart(listing.listingId)}
-                        primaryActionLabel={cartsHook.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
-                        onCardClick={() => handleCardClick(listing)}
-                        onBuyNow={() => {
-                          setPurchasingListing(listing);
-                          setPurchaseConfirmOpen(true);
-                        }}
-                        onAddToCart={() => cartsHook.handleAddToPurchaseCart(listing)}
-                        onMakeOffer={() => {
-                          setOfferBeast(listing.beast ?? null);
-                          setOfferTokenId(listing.tokenId);
-                          setMakeOfferOpen(true);
-                        }}
-                        onViewOffers={() => {
-                          setSelectedListingForOffers(listing);
-                          setOffersDialogOpen(true);
-                        }}
-                        ownedByUser={address?.toLowerCase() === listing.seller?.toLowerCase()}
-                        onEdit={() => {
-                          setEditingListing(listing);
-                          setEditDialogOpen(true);
-                        }}
-                        onCancel={listing.active ? () => handleCancelListing(listing) : undefined}
-                      />
-                    ))}
+                  <div className="space-y-3">
+                    {/* View Mode Toggle */}
+                    <div className="flex justify-end">
+                      <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setRecentViewMode("cards")}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                            recentViewMode === "cards"
+                              ? "bg-lsGold/20 text-lsGold"
+                              : "text-gray-400 hover:text-lsGold"
+                          )}
+                        >
+                          <LayoutGrid className="h-3.5 w-3.5" />
+                          Cards
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRecentViewMode("table")}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                            recentViewMode === "table"
+                              ? "bg-lsGold/20 text-lsGold"
+                              : "text-gray-400 hover:text-lsGold"
+                          )}
+                        >
+                          <List className="h-3.5 w-3.5" />
+                          Table
+                        </button>
+                      </div>
+                    </div>
+
+                    {recentViewMode === "cards" ? (
+                      <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                        {filtersHook.namedRecentListings.map((listing) => (
+                          <ListingCard
+                            key={`recent-${listing.listingId}`}
+                            beast={listing.beast}
+                            tokenId={listing.tokenId}
+                            priceLabel={formatPriceLabel(listing)}
+                            subtitlePriceLabel={formatSubtitlePrice(listing)}
+                            tokenLogoUrl={getTokenLogoUrl(listing)}
+                            status={listing.status}
+                            buyDisabled={!listing.active || !address}
+                            inCart={cartsHook.isInPurchaseCart(listing.listingId)}
+                            primaryActionLabel={cartsHook.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
+                            onCardClick={() => handleCardClick(listing)}
+                            onBuyNow={() => {
+                              setPurchasingListing(listing);
+                              setPurchaseConfirmOpen(true);
+                            }}
+                            onAddToCart={() => cartsHook.handleAddToPurchaseCart(listing)}
+                            onMakeOffer={() => {
+                              setOfferBeast(listing.beast ?? null);
+                              setOfferTokenId(listing.tokenId);
+                              setMakeOfferOpen(true);
+                            }}
+                            onViewOffers={() => {
+                              setSelectedListingForOffers(listing);
+                              setOffersDialogOpen(true);
+                            }}
+                            ownedByUser={address?.toLowerCase() === listing.seller?.toLowerCase()}
+                            onEdit={() => {
+                              setEditingListing(listing);
+                              setEditDialogOpen(true);
+                            }}
+                            onCancel={listing.active ? () => handleCancelListing(listing) : undefined}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      /* Table View */
+                      <div className="rounded-lg border border-gray-800 bg-black/30 overflow-hidden overflow-x-auto">
+                        <table className="w-full text-xs min-w-[600px]">
+                          <thead className="bg-gray-900/50 border-b border-gray-800">
+                            <tr>
+                              <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Listed</th>
+                              <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Beast</th>
+                              <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Price</th>
+                              <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Seller</th>
+                              <th className="px-3 py-2.5 text-right font-semibold text-gray-300">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filtersHook.namedRecentListings.map((listing) => {
+                              const isOwner = address?.toLowerCase() === listing.seller?.toLowerCase();
+                              const usdPrice = formatSubtitlePrice(listing);
+                              return (
+                                <tr
+                                  key={`recent-table-${listing.listingId}`}
+                                  className="border-b border-gray-800/50 hover:bg-gray-900/30 transition-colors"
+                                >
+                                  <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap">
+                                    {listing.createdAt ? formatRelativeTime(listing.createdAt) : "—"}
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCardClick(listing)}
+                                      className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                                    >
+                                      <div className="w-8 h-8 rounded overflow-hidden bg-gray-800 flex-shrink-0">
+                                        {listing.beast?.image ? (
+                                          <img
+                                            src={listing.beast.image}
+                                            alt={listing.beast.name || "Beast"}
+                                            className="w-full h-full object-contain"
+                                          />
+                                        ) : (
+                                          <div className="w-full h-full flex items-center justify-center text-gray-600 text-[8px]">
+                                            ?
+                                          </div>
+                                        )}
+                                      </div>
+                                      <span className="text-white font-medium truncate max-w-[120px]">
+                                        {listing.beast?.name || `Beast #${listing.tokenId}`}
+                                      </span>
+                                    </button>
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    <div className="flex flex-col">
+                                      <span className="text-lsGold font-semibold">
+                                        {formatPriceLabel(listing)}
+                                      </span>
+                                      {usdPrice && (
+                                        <span className="text-gray-500 text-[10px]">
+                                          ${usdPrice}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-gray-400">
+                                    {ownerUsernames[listing.seller?.toLowerCase()] ||
+                                      `${listing.seller?.slice(0, 6)}...${listing.seller?.slice(-4)}`}
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      {isOwner ? (
+                                        <>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-7 px-2.5 text-[10px] font-semibold"
+                                            onClick={() => {
+                                              setEditingListing(listing);
+                                              setEditDialogOpen(true);
+                                            }}
+                                          >
+                                            Edit
+                                          </Button>
+                                          {listing.active && (
+                                            <Button
+                                              variant="destructive"
+                                              size="sm"
+                                              className="h-7 px-2.5 text-[10px] font-semibold"
+                                              onClick={() => handleCancelListing(listing)}
+                                            >
+                                              Cancel
+                                            </Button>
+                                          )}
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-7 px-2.5 text-[10px] font-semibold bg-lsGold/10 text-lsGold border-lsGold/50 hover:bg-lsGold/20"
+                                            onClick={() => {
+                                              setPurchasingListing(listing);
+                                              setPurchaseConfirmOpen(true);
+                                            }}
+                                            disabled={!listing.active}
+                                          >
+                                            Buy
+                                          </Button>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-7 px-2.5 text-[10px] font-semibold"
+                                            onClick={() => {
+                                              setOfferBeast(listing.beast ?? null);
+                                              setOfferTokenId(listing.tokenId);
+                                              setMakeOfferOpen(true);
+                                            }}
+                                          >
+                                            Offer
+                                          </Button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 )}
               </>
-            ) : (
+            ) : exploreSubTab === "recent-sold" ? (
               <>
                 {namedRecentSales.length === 0 ? (
                   <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
@@ -986,6 +1188,225 @@ export default function MarketplacePage() {
                   </div>
                 )}
               </>
+            ) : (
+              /* Activity Tab - Combined listings and sales table */
+              <div className="rounded-lg border border-gray-800 bg-black/30 overflow-hidden overflow-x-auto">
+                <table className="w-full text-xs min-w-[700px]">
+                  <thead className="bg-gray-900/50 border-b border-gray-800">
+                    <tr>
+                      <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Type</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Time</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Beast</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Price</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-gray-300">From / Seller</th>
+                      <th className="px-3 py-2.5 text-right font-semibold text-gray-300">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Combine listings and sales, sorted by time */}
+                    {(() => {
+                      // Build combined activity entries
+                      type ActivityEntry = {
+                        type: "listing" | "sale";
+                        timestamp: number;
+                        beast: typeof filtersHook.namedRecentListings[0]["beast"] | null;
+                        tokenId: string;
+                        price: string;
+                        symbol: string;
+                        usdPrice?: string;
+                        from: string;
+                        to?: string;
+                        listing?: typeof filtersHook.namedRecentListings[0];
+                        sale?: typeof namedRecentSales[0];
+                      };
+
+                      const activities: ActivityEntry[] = [];
+
+                      // Add listings
+                      for (const listing of filtersHook.namedRecentListings) {
+                        const token = listing.paymentToken ? getPaymentTokenByAddress(listing.paymentToken) : null;
+                        activities.push({
+                          type: "listing",
+                          timestamp: listing.createdAt || 0,
+                          beast: listing.beast,
+                          tokenId: listing.tokenId,
+                          price: formatPriceLabel(listing),
+                          symbol: token?.symbol ?? "STRK",
+                          usdPrice: formatSubtitlePrice(listing),
+                          from: listing.seller,
+                          listing,
+                        });
+                      }
+
+                      // Add sales
+                      for (const saleData of namedRecentSales) {
+                        const token = saleData.sale.order?.currency ? getPaymentTokenByAddress(saleData.sale.order.currency) : null;
+                        activities.push({
+                          type: "sale",
+                          timestamp: saleData.time,
+                          beast: saleData.beast,
+                          tokenId: saleData.tokenId,
+                          price: formatPrice(saleData.price, token?.symbol ?? "STRK"),
+                          symbol: token?.symbol ?? "STRK",
+                          from: saleData.from,
+                          to: saleData.to,
+                          sale: saleData,
+                        });
+                      }
+
+                      // Sort by timestamp descending
+                      activities.sort((a, b) => b.timestamp - a.timestamp);
+
+                      // Take top 100
+                      const topActivities = activities.slice(0, 100);
+
+                      if (topActivities.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                              No recent activity available.
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return topActivities.map((activity, idx) => (
+                        <tr
+                          key={`activity-${activity.type}-${activity.tokenId}-${idx}`}
+                          className="border-b border-gray-800/50 hover:bg-gray-900/30 transition-colors"
+                        >
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <span
+                              className={cn(
+                                "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold",
+                                activity.type === "listing"
+                                  ? "bg-blue-500/20 text-blue-300"
+                                  : "bg-green-500/20 text-green-300"
+                              )}
+                            >
+                              {activity.type === "listing" ? "Listed" : "Sold"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap">
+                            {activity.timestamp ? formatRelativeTime(activity.timestamp) : "—"}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (activity.listing) {
+                                  handleCardClick(activity.listing);
+                                }
+                              }}
+                              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                              disabled={!activity.listing}
+                            >
+                              <div className="w-8 h-8 rounded overflow-hidden bg-gray-800 flex-shrink-0">
+                                {activity.beast?.image ? (
+                                  <img
+                                    src={activity.beast.image}
+                                    alt={activity.beast.name || "Beast"}
+                                    className="w-full h-full object-contain"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-gray-600 text-[8px]">
+                                    ?
+                                  </div>
+                                )}
+                              </div>
+                              <span className="text-white font-medium truncate max-w-[120px]">
+                                {activity.beast?.name || `Beast #${activity.tokenId}`}
+                              </span>
+                            </button>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <div className="flex flex-col">
+                              <span className="text-lsGold font-semibold">{activity.price}</span>
+                              {activity.usdPrice && (
+                                <span className="text-gray-500 text-[10px]">${activity.usdPrice}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2.5 text-gray-400">
+                            <div className="flex flex-col">
+                              <span>
+                                {ownerUsernames[activity.from?.toLowerCase()] ||
+                                  `${activity.from?.slice(0, 6)}...${activity.from?.slice(-4)}`}
+                              </span>
+                              {activity.to && (
+                                <span className="text-[10px] text-gray-500">
+                                  → {ownerUsernames[activity.to?.toLowerCase()] ||
+                                    `${activity.to?.slice(0, 6)}...${activity.to?.slice(-4)}`}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {activity.type === "listing" && activity.listing ? (
+                                address?.toLowerCase() === activity.listing.seller?.toLowerCase() ? (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 px-2.5 text-[10px] font-semibold"
+                                      onClick={() => {
+                                        setEditingListing(activity.listing!);
+                                        setEditDialogOpen(true);
+                                      }}
+                                    >
+                                      Edit
+                                    </Button>
+                                    {activity.listing.active && (
+                                      <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        className="h-7 px-2.5 text-[10px] font-semibold"
+                                        onClick={() => handleCancelListing(activity.listing!)}
+                                      >
+                                        Cancel
+                                      </Button>
+                                    )}
+                                  </>
+                                ) : (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 px-2.5 text-[10px] font-semibold bg-lsGold/10 text-lsGold border-lsGold/50 hover:bg-lsGold/20"
+                                      onClick={() => {
+                                        setPurchasingListing(activity.listing!);
+                                        setPurchaseConfirmOpen(true);
+                                      }}
+                                      disabled={!activity.listing.active}
+                                    >
+                                      Buy
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 px-2.5 text-[10px] font-semibold"
+                                      onClick={() => {
+                                        setOfferBeast(activity.listing!.beast ?? null);
+                                        setOfferTokenId(activity.listing!.tokenId);
+                                        setMakeOfferOpen(true);
+                                      }}
+                                    >
+                                      Offer
+                                    </Button>
+                                  </>
+                                )
+                              ) : (
+                                <span className="text-gray-500 text-[10px]">—</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
             )}
           </section>
         ) : (

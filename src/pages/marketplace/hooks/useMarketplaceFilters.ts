@@ -138,15 +138,22 @@ export function useMarketplaceFilters({
   );
 
   /**
-   * Filter recent listings (only those with names)
+   * Filter recent listings (only those with names) and apply attribute filters + sorting
    */
-  const namedRecentListings = useMemo(
-    () =>
-      recentListings.filter(
-        (listing) => listing.beast?.name && listing.beast.name.trim().length > 0
-      ),
-    [recentListings]
-  );
+  const namedRecentListings = useMemo(() => {
+    // First filter to only those with beast names
+    const withNames = recentListings.filter(
+      (listing) => listing.beast?.name && listing.beast.name.trim().length > 0
+    );
+
+    // Apply attribute filters
+    const filtered = withNames.filter((listing) =>
+      matchesAttributeFilters(listing, attributeFilters)
+    );
+
+    // Apply sorting
+    return sortListings(filtered, sortOption);
+  }, [recentListings, attributeFilters, sortOption]);
 
   /**
    * Reset to page 1 when filters change

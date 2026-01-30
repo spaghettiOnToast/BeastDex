@@ -23,11 +23,12 @@ export function useMarketplaceData(address: string | undefined) {
 
   /**
    * Recent listings - automatically derived from main listings
-   * Only shows active listings, sorted by most recently created
+   * Only shows active listings, sorted by most recently created (highest orderId first)
    */
   const recentListings = useMemo(() => {
     return [...listingsHook.listings]
       .filter((listing) => listing.active)
+      .sort((a, b) => (b.orderId ?? 0) - (a.orderId ?? 0))
       .slice(0, 50);
   }, [listingsHook.listings]);
 

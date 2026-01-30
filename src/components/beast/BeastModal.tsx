@@ -98,7 +98,7 @@ export function BeastModal({
 
   return (
     <Dialog open={!!beast} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-5xl p-0 gap-0 border-muted/50 bg-background/95 backdrop-blur-sm">
+      <DialogContent className="max-w-6xl p-0 gap-0 border-muted/50 bg-background/95 backdrop-blur-sm">
         <DialogHeader className="px-4 py-5 border-b border-border/50 bg-muted/30">
           <div className="flex items-center justify-between pr-8">
             <DialogTitle className="text-xl font-bold tracking-tight">{beast.name}</DialogTitle>
@@ -141,8 +141,8 @@ export function BeastModal({
             </div>
           </div>
         </DialogHeader>
-        <ScrollArea className="max-h-[75vh]">
-          <div className="px-4 py-6 space-y-4">
+        <ScrollArea className="max-h-[85vh]">
+          <div className="px-6 py-6 space-y-4">
             <BeastDetailContent
               beast={beast}
               ownerUsername={ownerUsername}

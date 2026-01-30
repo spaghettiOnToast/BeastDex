@@ -6,7 +6,7 @@ export type MarketplaceView = "explore" | "my";
 /**
  * Explore sub-tab types
  */
-export type ExploreSubTab = "browse" | "recent-listed" | "recent-sold";
+export type ExploreSubTab = "browse" | "recent-listed" | "recent-sold" | "activity";
 
 /**
  * My Activity sub-tab types
