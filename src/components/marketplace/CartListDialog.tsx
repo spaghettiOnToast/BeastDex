@@ -14,9 +14,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import {
   DEFAULT_PAYMENT_TOKEN,
   BEASTS_COLLECTION_ADDRESS,
-  CLIENT_FEE_BP,
-  CLIENT_FEE_RECEIVER,
   MARKETPLACE_ADDRESS,
+  ROYALTIES_ENABLED,
+  PLATFORM_FEE_BP,
+  CREATOR_ROYALTY_BP,
 } from "../../services/marketplace/constants";
 import { ensureCollectionApproval, getProvider } from "../../services/marketplace/approvals";
 import { toWei, fromWei } from "../../utils/price";
@@ -26,7 +27,7 @@ import type { Listing } from "../../services/marketplace/types";
 import TokenSelect from "./TokenSelect";
 import { useSelectedToken, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
 import { isUserRejection } from "../../utils/transaction";
-import { toUint256Hex, UINT128_MASK } from "../../utils/uint256";
+import { toUint256Hex } from "../../utils/uint256";
 import {
   useExpirationDetails,
   DURATION_SELECT_OPTIONS,
@@ -207,23 +208,7 @@ export default function CartListDialog({
             collection: BEASTS_COLLECTION_ADDRESS,
           });
 
-          // Calculate platform fee (2% of listing price)
-          const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
-          const feeLow = feeAmount & UINT128_MASK;
-          const feeHigh = feeAmount >> 128n;
-
-          // Build ERC20 transfer call for platform fee
-          const feeTransferCall = {
-            contractAddress: currencyAddress,
-            entrypoint: "transfer",
-            calldata: [
-              CLIENT_FEE_RECEIVER,
-              feeLow.toString(),
-              feeHigh.toString(),
-            ],
-          };
-
-          // Build list call (direct contract call)
+          // Build list call (free to list - buyer pays fees on purchase)
           // Contract signature: list(collection, token_id: u256, quantity: u128, price: u128, currency, expiration: u64, royalties: bool)
           const listCall = {
             contractAddress: MARKETPLACE_ADDRESS,
@@ -235,14 +220,14 @@ export default function CartListDialog({
               priceBigInt.toString(), // price: u128 (single felt, not u256!)
               currencyAddress,
               expirationSeconds.toString(), // expiration: u64
-              "0", // royalties: bool = false
+              ROYALTIES_ENABLED ? "1" : "0", // royalties: bool
             ],
           };
 
-          console.log(`Adding calls for ${beast.name} (${i}):`, { feeTransferCall, listCall });
+          console.log(`Adding list call for ${beast.name} (${i}):`, { listCall });
 
-          // Add to batch - fee transfer then list (2 calls per beast)
-          allCalls.push(feeTransferCall, listCall);
+          // Add to batch (1 call per beast - free to list)
+          allCalls.push(listCall);
 
           // Pre-populate success for validation
           successfulBeasts.push(beast);
@@ -401,7 +386,10 @@ export default function CartListDialog({
                         const priceNum = Number.parseFloat(priceStr);
                         if (Number.isFinite(priceNum) && priceNum > 0) {
                           const priceBigInt = toWei(priceStr, tokenDecimals);
-                          const platformFeeBigInt = CLIENT_FEE_BP > 0 ? (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n : 0n;
+                          // Seller fees (deducted from proceeds)
+                          const platformFee = (priceBigInt * BigInt(PLATFORM_FEE_BP)) / 10000n;
+                          const creatorRoyalty = (priceBigInt * BigInt(CREATOR_ROYALTY_BP)) / 10000n;
+                          const sellerReceives = priceBigInt - platformFee - creatorRoyalty;
                           return (
                             <div className="text-[10px] space-y-0.5">
                               {usdPrice && (
@@ -409,11 +397,9 @@ export default function CartListDialog({
                                   ≈ ${tokenAmountToUsd(priceBigInt, tokenDecimals, usdPrice).toFixed(2)} USD
                                 </div>
                               )}
-                              {CLIENT_FEE_BP > 0 && (
-                                <div className="text-amber-300">
-                                  You pay {CLIENT_FEE_BP / 100}% fee: {fromWei(platformFeeBigInt, tokenDecimals)} {tokenSymbol}
-                                </div>
-                              )}
+                              <div className="text-green-300">
+                                You receive: {fromWei(sellerReceives, tokenDecimals)} {tokenSymbol}
+                              </div>
                             </div>
                           );
                         }
@@ -456,6 +442,48 @@ export default function CartListDialog({
                 className="mt-1"
               />
             </div>
+
+            {/* Fee Summary */}
+            {availableToList.length > 0 && (() => {
+              // Calculate totals for all beasts with valid prices
+              let totalListingPrice = 0n;
+              let validCount = 0;
+              for (const beast of availableToList) {
+                const priceStr = beastPrices.get(beast.id) || "";
+                const priceNum = Number.parseFloat(priceStr);
+                if (Number.isFinite(priceNum) && priceNum > 0) {
+                  totalListingPrice += toWei(priceStr, tokenDecimals);
+                  validCount++;
+                }
+              }
+
+              if (validCount === 0) return null;
+
+              const totalPlatformFee = (totalListingPrice * BigInt(PLATFORM_FEE_BP)) / 10000n;
+              const totalCreatorRoyalty = (totalListingPrice * BigInt(CREATOR_ROYALTY_BP)) / 10000n;
+              const totalYouReceive = totalListingPrice - totalPlatformFee - totalCreatorRoyalty;
+
+              return (
+                <div className="border-t border-gray-700 pt-4 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-400">Total Listing Price:</span>
+                    <span className="text-sm font-medium">{fromWei(totalListingPrice, tokenDecimals)} {tokenSymbol}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-400">Platform Fee ({PLATFORM_FEE_BP / 100}%):</span>
+                    <span className="text-sm font-medium text-gray-400">-{fromWei(totalPlatformFee, tokenDecimals)} {tokenSymbol}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-400">Creator Royalty ({CREATOR_ROYALTY_BP / 100}%):</span>
+                    <span className="text-sm font-medium text-gray-400">-{fromWei(totalCreatorRoyalty, tokenDecimals)} {tokenSymbol}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-gray-700 pt-2">
+                    <span className="text-sm font-semibold text-white">You Receive:</span>
+                    <span className="text-sm font-semibold text-lsGold">{fromWei(totalYouReceive, tokenDecimals)} {tokenSymbol}</span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Duration selector */}
             <div>

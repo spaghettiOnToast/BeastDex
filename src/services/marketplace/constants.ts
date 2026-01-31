@@ -90,17 +90,31 @@ export function getDefaultListingExpiration(): bigint {
 // Collection address (re-use beasts contract)
 export { CONTRACT_ADDRESS as BEASTS_COLLECTION_ADDRESS } from "../beast/constants";
 
-// Client fee configuration
-// Fee is in basis points where 10000 = 100%, so 200 = 2%
-// Applied only on listing creation, not on buying
-// TODO: Set back to 200 (2%) after testing period
-export const CLIENT_FEE_BP = 0; // Temporarily disabled for testing
+// =============================================================================
+// FEE STRUCTURE
+// =============================================================================
+// SELLER PAYS (deducted from listing price by contract):
+//   - Platform Fee (Cartridge): 2.5%
+//   - Creator Royalty: 5%
+//   - Total seller deduction: 7.5%
+//
+// BUYER PAYS (added on top of listing price):
+//   - Client Fee (BeastDex): 5%
+// =============================================================================
+
+// Client fee configuration (paid by BUYER, added on top of listing price)
+// Fee is in basis points where 10000 = 100%, so 500 = 5%
+export const CLIENT_FEE_BP = 500; // 5% client fee paid by buyer
 export const CLIENT_FEE_RECEIVER = "0x0495fc00f87ab20ae908dd24c763c9553b67955e6301113809320da20e8ecb5b";
 
-// Royalties configuration
-// Set to true to enable creator royalties on listings/purchases
-// The marketplace contract may enforce this - test with false to see if it's optional
-export const ROYALTIES_ENABLED = false; // Set to true to enable creator royalties
+// Seller fee constants (for display purposes - handled by contract)
+// These are deducted from the seller's proceeds by the marketplace contract
+export const PLATFORM_FEE_BP = 250; // 2.5% Cartridge platform fee
+export const CREATOR_ROYALTY_BP = 500; // 5% creator royalty
+export const TOTAL_SELLER_FEE_BP = PLATFORM_FEE_BP + CREATOR_ROYALTY_BP; // 7.5% total
+
+// Royalties configuration - must be true for creator royalties to be enforced
+export const ROYALTIES_ENABLED = true;
 
 // Whitelisted payment tokens for marketplace transactions
 export const WHITELISTED_PAYMENT_TOKENS = [

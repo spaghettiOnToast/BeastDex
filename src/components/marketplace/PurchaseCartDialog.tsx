@@ -276,9 +276,9 @@ export default function PurchaseCartDialog({
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Platform Fee (2%):</span>
+                        <span className="text-gray-400">Client Fee ({CLIENT_FEE_BP / 100}%):</span>
                         <span className="text-gray-300">
-                          {formatPrice(tokenTotal.fee, tokenTotal.tokenSymbol)}
+                          +{formatPrice(tokenTotal.fee, tokenTotal.tokenSymbol)}
                         </span>
                       </div>
                       <div className="flex justify-between text-base font-semibold border-t border-gray-700 pt-1">
@@ -292,7 +292,7 @@ export default function PurchaseCartDialog({
                 </div>
               )}
               <p className="text-[10px] text-gray-500 italic">
-                A 2% platform fee applies to each purchase. Each purchase uses the token specified in the listing.
+                A {CLIENT_FEE_BP / 100}% client fee is added to each purchase. Each purchase uses the token specified in the listing.
               </p>
               {validListings.length > 0 && (
                 <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-3">

@@ -14,18 +14,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import {
   BEASTS_COLLECTION_ADDRESS,
   CLIENT_FEE_BP,
-  CLIENT_FEE_RECEIVER,
   DEFAULT_PAYMENT_TOKEN,
   MARKETPLACE_ADDRESS,
+  ROYALTIES_ENABLED,
+  PLATFORM_FEE_BP,
+  CREATOR_ROYALTY_BP,
 } from "../../services/marketplace/constants";
 import { toWei, fromWei } from "../../utils/price";
 import { toast } from "sonner";
 import TokenSelect from "./TokenSelect";
 import { useSelectedToken, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
-import { useRoyaltyInfo } from "../../hooks/useRoyaltyInfo";
 import { ensureCollectionApproval, getProvider } from "../../services/marketplace/approvals";
 import { isUserRejection } from "../../utils/transaction";
-import { toUint256Hex, UINT128_MASK } from "../../utils/uint256";
+import { toUint256Hex } from "../../utils/uint256";
 import {
   useExpirationDetails,
   DURATION_SELECT_OPTIONS,
@@ -48,8 +49,6 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
   const [currencyAddress, setCurrencyAddress] = useState(DEFAULT_PAYMENT_TOKEN.address);
   const { decimals: tokenDecimals, symbol: tokenSymbol, usdPrice } = useSelectedToken(currencyAddress);
 
-  // Royalty info
-  const { percentage: royaltyPercentage, loading: royaltyLoading, calculateRoyalty } = useRoyaltyInfo();
 
   // Use shared expiration hook with max expiration enforcement
   const {
@@ -125,11 +124,6 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
       // Build token ID as Uint256
       const tokenIdU256 = toUint256Hex(tokenIdBigInt);
 
-      // Calculate platform fee (2% of listing price)
-      const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
-      const feeLow = feeAmount & UINT128_MASK;
-      const feeHigh = feeAmount >> 128n;
-
       // Build list call
       // Contract signature: list(collection, token_id: u256, quantity: u128, price: u128, currency, expiration: u64, royalties: bool)
       const listCall = {
@@ -142,25 +136,14 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
           priceBigInt.toString(), // price: u128 (single felt, not u256!)
           currencyAddress,
           expirationSeconds.toString(), // expiration: u64
-          "0", // royalties: bool = false
-        ],
-      };
-
-      // Build ERC20 transfer call for platform fee
-      const feeTransferCall = {
-        contractAddress: currencyAddress,
-        entrypoint: "transfer",
-        calldata: [
-          CLIENT_FEE_RECEIVER,
-          feeLow.toString(),
-          feeHigh.toString(),
+          ROYALTIES_ENABLED ? "1" : "0", // royalties: bool
         ],
       };
 
       toast.loading("Submitting listing...", { id: toastId });
 
-      // Execute: transfer fee + list
-      const result = await account.execute([feeTransferCall, listCall]);
+      // Execute listing (free to list - buyer pays fees on purchase)
+      const result = await account.execute([listCall]);
 
       if (result?.transaction_hash) {
         const provider = getProvider(account);
@@ -220,55 +203,57 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
                   ≈ ${tokenAmountToUsd(priceBigInt, tokenDecimals, usdPrice).toFixed(2)} USD
                 </p>
               )}
-              {priceBigInt && priceBigInt > 0n && (
-                <div className="mt-2 space-y-2">
-                  {/* Seller's fees - only show if fees are enabled */}
-                  {CLIENT_FEE_BP > 0 && (
-                    <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-2 space-y-1">
-                      <p className="text-xs text-amber-200 font-medium">Listing fee (paid by you):</p>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-gray-400">Platform fee ({CLIENT_FEE_BP / 100}%):</span>
-                        <span className="text-white">{fromWei((priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n, tokenDecimals)} {tokenSymbol}</span>
-                      </div>
-                    </div>
-                  )}
+              {priceBigInt && priceBigInt > 0n && (() => {
+                // Calculate seller fees (deducted from proceeds)
+                const platformFee = (priceBigInt * BigInt(PLATFORM_FEE_BP)) / 10000n;
+                const creatorRoyalty = (priceBigInt * BigInt(CREATOR_ROYALTY_BP)) / 10000n;
+                const sellerReceives = priceBigInt - platformFee - creatorRoyalty;
 
-                  {/* Buyer's fees info */}
-                  <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-2 space-y-1">
-                    <p className="text-xs text-blue-200 font-medium">Buyer pays on purchase:</p>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-400">Your listing price:</span>
-                      <span className="text-white">{fromWei(priceBigInt, tokenDecimals)} {tokenSymbol}</span>
+                // Calculate buyer fees (added on top)
+                const clientFee = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
+                const buyerTotal = priceBigInt + clientFee;
+
+                return (
+                  <div className="mt-3 space-y-3">
+                    {/* You receive section */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-400">Listing Price:</span>
+                        <span className="text-sm font-medium">{fromWei(priceBigInt, tokenDecimals)} {tokenSymbol}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-400">Platform Fee ({PLATFORM_FEE_BP / 100}%):</span>
+                        <span className="text-sm font-medium text-gray-400">-{fromWei(platformFee, tokenDecimals)} {tokenSymbol}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-400">Creator Royalty ({CREATOR_ROYALTY_BP / 100}%):</span>
+                        <span className="text-sm font-medium text-gray-400">-{fromWei(creatorRoyalty, tokenDecimals)} {tokenSymbol}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-gray-700 pt-2">
+                        <span className="text-sm font-semibold text-white">You Receive:</span>
+                        <span className="text-sm font-semibold text-lsGold">{fromWei(sellerReceives, tokenDecimals)} {tokenSymbol}</span>
+                      </div>
                     </div>
-                    {CLIENT_FEE_BP > 0 && (
-                      <div className="flex justify-between text-xs">
-                        <span className="text-gray-400">Platform fee ({CLIENT_FEE_BP / 100}%):</span>
-                        <span className="text-gray-300">{fromWei((priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n, tokenDecimals)} {tokenSymbol}</span>
+
+                    {/* Buyer pays section */}
+                    <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-3 space-y-2">
+                      <p className="text-xs text-blue-200 font-medium mb-2">Buyer pays on purchase:</p>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Listing Price:</span>
+                        <span className="text-white">{fromWei(priceBigInt, tokenDecimals)} {tokenSymbol}</span>
                       </div>
-                    )}
-                    {royaltyPercentage !== null && royaltyPercentage > 0 && (
-                      <div className="flex justify-between text-xs">
-                        <span className="text-gray-400">Creator royalty ({royaltyPercentage}%):</span>
-                        <span className="text-gray-300">{fromWei(calculateRoyalty(priceBigInt), tokenDecimals)} {tokenSymbol}</span>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Client Fee ({CLIENT_FEE_BP / 100}%):</span>
+                        <span className="text-gray-300">+{fromWei(clientFee, tokenDecimals)} {tokenSymbol}</span>
                       </div>
-                    )}
-                    {royaltyLoading && (
-                      <div className="text-xs text-gray-500">Loading royalty info...</div>
-                    )}
-                    <div className="border-t border-blue-500/20 pt-1 flex justify-between text-xs font-medium">
-                      <span className="text-blue-200">Buyer total:</span>
-                      <span className="text-blue-100">
-                        {fromWei(
-                          priceBigInt +
-                          (CLIENT_FEE_BP > 0 ? (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n : 0n) +
-                          (royaltyPercentage ? calculateRoyalty(priceBigInt) : 0n),
-                          tokenDecimals
-                        )} {tokenSymbol}
-                      </span>
+                      <div className="flex justify-between text-sm font-semibold border-t border-blue-500/30 pt-2">
+                        <span className="text-blue-200">Buyer Total:</span>
+                        <span className="text-blue-100">{fromWei(buyerTotal, tokenDecimals)} {tokenSymbol}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
             <div>
               <label className="text-sm text-gray-400">Currency</label>

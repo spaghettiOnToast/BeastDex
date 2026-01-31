@@ -19,6 +19,7 @@ import {
   DEFAULT_PAYMENT_TOKEN,
   getPaymentTokenByAddress,
   MARKETPLACE_ADDRESS,
+  ROYALTIES_ENABLED,
 } from "../../../services/marketplace/constants";
 import { fromWei, TOKEN_DECIMALS } from "../../../utils/price";
 import { toBigIntSafe } from "../../../utils/bigint";
@@ -156,7 +157,7 @@ export function useMarketplaceActions({
           BEASTS_COLLECTION_ADDRESS,
           tokenIdBigInt,
           BigInt(listing.quantity ?? 1),
-          false, // royalties disabled
+          ROYALTIES_ENABLED, // creator royalties (5%)
           currency,
           priceBigInt,
           BigInt(CLIENT_FEE_BP),
@@ -267,7 +268,7 @@ export function useMarketplaceActions({
               BEASTS_COLLECTION_ADDRESS,
               tokenIdBigInt,
               BigInt(listing.quantity ?? 1),
-              false, // royalties disabled
+              ROYALTIES_ENABLED, // creator royalties (5%)
               currency,
               priceBigInt,
               BigInt(CLIENT_FEE_BP),
@@ -360,7 +361,7 @@ export function useMarketplaceActions({
           BEASTS_COLLECTION_ADDRESS,
           tokenIdBigInt,
           BigInt(order.quantity ?? 1),
-          false, // royalties disabled
+          ROYALTIES_ENABLED, // creator royalties (5%)
           order.currency,
           toBigInt(order.price),
           BigInt(CLIENT_FEE_BP),
@@ -774,7 +775,7 @@ export function useMarketplaceActions({
                 BEASTS_COLLECTION_ADDRESS,
                 tokenIdBigInt,
                 BigInt(listing.quantity ?? 1),
-                false, // royalties disabled
+                ROYALTIES_ENABLED, // creator royalties (5%)
                 currency,
                 priceBigInt,
                 BigInt(CLIENT_FEE_BP),

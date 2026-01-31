@@ -78,9 +78,9 @@ export default function PurchaseConfirmDialog({
 
             {CLIENT_FEE_BP > 0 && (
               <div className="flex justify-between">
-                <span className="text-sm text-gray-400">Platform Fee ({CLIENT_FEE_BP / 100}%):</span>
+                <span className="text-sm text-gray-400">Client Fee ({CLIENT_FEE_BP / 100}%):</span>
                 <span className="text-sm font-medium text-gray-400">
-                  {buyerFeeLabel}
+                  +{buyerFeeLabel}
                 </span>
               </div>
             )}
