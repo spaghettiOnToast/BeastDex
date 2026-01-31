@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { useAccount } from "@starknet-react/core";
-import { useLocation, useNavigate } from "react-router-dom";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import { useGlobalCart } from "../contexts/GlobalCartContext";
-import { FloatingCarts } from "../components/marketplace/FloatingCarts";
 import { Button } from "../components/ui/button";
 import ListingCard from "../components/marketplace/ListingCard";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
@@ -101,8 +99,6 @@ function formatRelativeTime(timestamp: number): string {
 export default function MarketplacePage() {
   const { address, account } = useAccount();
   const { getToken } = useTokenMap();
-  const location = useLocation();
-  const navigate = useNavigate();
   const globalCart = useGlobalCart();
 
   // Dialog states
@@ -153,19 +149,21 @@ export default function MarketplacePage() {
     }
   }, [hiddenOfferIds]);
 
-  // Handle navigation state from FloatingCarts (open dialogs when navigating from other pages)
+  // Sync global cart dialog state with local dialogs
+  // When floating cart buttons are clicked, open the local marketplace-specific dialogs
   useEffect(() => {
-    const state = location.state as { openListDialog?: boolean; openPurchaseDialog?: boolean } | null;
-    if (state?.openListDialog) {
+    if (globalCart.listDialogOpen) {
       setListDialogOpen(true);
-      // Clear the state so it doesn't re-trigger
-      navigate(location.pathname, { replace: true, state: {} });
+      globalCart.closeListDialog();
     }
-    if (state?.openPurchaseDialog) {
+  }, [globalCart.listDialogOpen, globalCart.closeListDialog]);
+
+  useEffect(() => {
+    if (globalCart.purchaseDialogOpen) {
       setPurchaseCartOpen(true);
-      navigate(location.pathname, { replace: true, state: {} });
+      globalCart.closePurchaseDialog();
     }
-  }, [location.state, location.pathname, navigate]);
+  }, [globalCart.purchaseDialogOpen, globalCart.closePurchaseDialog]);
 
   // Toggle hide/unhide offer
   const handleToggleHideOffer = useCallback((offerId: string) => {
@@ -2312,11 +2310,6 @@ export default function MarketplacePage() {
           onResetFilters={filtersHook.handleResetFilters}
         />
 
-        {/* Floating Cart Buttons (List Beasts / Buy Beasts) */}
-        <FloatingCarts
-          onOpenListCart={() => setListDialogOpen(true)}
-          onOpenPurchaseCart={() => setPurchaseCartOpen(true)}
-        />
       </div>
     </AppLayout>
   );

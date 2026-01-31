@@ -19,6 +19,14 @@ interface GlobalCartContextValue {
   togglePurchaseCart: (listing: Listing) => void;
   clearPurchaseCart: () => void;
   isInPurchaseCart: (listingId: string) => boolean;
+
+  // Dialog state
+  listDialogOpen: boolean;
+  purchaseDialogOpen: boolean;
+  openListDialog: () => void;
+  openPurchaseDialog: () => void;
+  closeListDialog: () => void;
+  closePurchaseDialog: () => void;
 }
 
 const GlobalCartContext = createContext<GlobalCartContextValue | null>(null);
@@ -99,6 +107,15 @@ export function GlobalCartProvider({ children }: { children: ReactNode }) {
     return purchaseCart.some((l) => l.listingId === listingId);
   }, [purchaseCart]);
 
+  // Dialog state
+  const [listDialogOpen, setListDialogOpen] = useState(false);
+  const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
+
+  const openListDialog = useCallback(() => setListDialogOpen(true), []);
+  const openPurchaseDialog = useCallback(() => setPurchaseDialogOpen(true), []);
+  const closeListDialog = useCallback(() => setListDialogOpen(false), []);
+  const closePurchaseDialog = useCallback(() => setPurchaseDialogOpen(false), []);
+
   const value: GlobalCartContextValue = {
     listCart,
     addToListCart,
@@ -112,6 +129,12 @@ export function GlobalCartProvider({ children }: { children: ReactNode }) {
     togglePurchaseCart,
     clearPurchaseCart,
     isInPurchaseCart,
+    listDialogOpen,
+    purchaseDialogOpen,
+    openListDialog,
+    openPurchaseDialog,
+    closeListDialog,
+    closePurchaseDialog,
   };
 
   return (

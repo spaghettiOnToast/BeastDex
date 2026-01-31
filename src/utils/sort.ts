@@ -15,18 +15,6 @@ import {
 import { toBigIntSafe } from "./bigint";
 
 /**
- * Compare two strings for sorting (case-insensitive)
- */
-function compareStrings(
-  a: string | null | undefined,
-  b: string | null | undefined
-): number {
-  const left = (a ?? "").toLowerCase();
-  const right = (b ?? "").toLowerCase();
-  return left.localeCompare(right);
-}
-
-/**
  * Get comparable price info from a listing
  */
 function getComparablePrice(listing: Listing): { currency: string; value: bigint } {
@@ -41,6 +29,9 @@ function getComparablePrice(listing: Listing): { currency: string; value: bigint
 
 /**
  * Sort listings based on the selected sort option
+ * Uses Schwartzian transform to pre-compute sort keys for O(n) key extraction
+ * instead of O(n*log(n)) during comparison.
+ *
  * @param listings - Array of listings to sort
  * @param option - Sort option to apply
  * @returns Sorted array of listings (new array, original not mutated)
@@ -49,176 +40,110 @@ export function sortListings(
   listings: Listing[],
   option: SortOption
 ): Listing[] {
-  const copy = [...listings];
+  if (listings.length <= 1) return [...listings];
 
-  switch (option) {
-    case "beast-asc":
-      return copy.sort((a, b) => {
-        const traitA =
-          getAttributeValues(a.beast ?? null, "Beast")[0] ??
-          a.beast?.name ??
-          "";
-        const traitB =
-          getAttributeValues(b.beast ?? null, "Beast")[0] ??
-          b.beast?.name ??
-          "";
-        return (
-          compareStrings(traitA, traitB) || a.tokenId.localeCompare(b.tokenId)
-        );
-      });
+  // Pre-compute sort keys once (O(n)) instead of during each comparison
+  type SortKey = { primary: string | number | bigint; secondary: string };
+  type KeyedListing = { listing: Listing; key: SortKey };
 
-    case "beast-desc":
-      return copy.sort((a, b) => {
-        const traitA =
-          getAttributeValues(a.beast ?? null, "Beast")[0] ??
-          a.beast?.name ??
-          "";
-        const traitB =
-          getAttributeValues(b.beast ?? null, "Beast")[0] ??
-          b.beast?.name ??
-          "";
-        return (
-          compareStrings(traitB, traitA) || a.tokenId.localeCompare(b.tokenId)
-        );
-      });
+  const getKey = (listing: Listing): SortKey => {
+    const tokenId = listing.tokenId;
+    const beast = listing.beast;
 
-    case "tier-asc":
-      return copy.sort((a, b) => {
-        const tierA =
-          getNumericAttribute(a.beast ?? null, "Tier") ??
-          Number.POSITIVE_INFINITY;
-        const tierB =
-          getNumericAttribute(b.beast ?? null, "Tier") ??
-          Number.POSITIVE_INFINITY;
-        return tierA - tierB || a.tokenId.localeCompare(b.tokenId);
-      });
+    switch (option) {
+      case "beast-asc":
+      case "beast-desc":
+        return {
+          primary: getAttributeValues(beast ?? null, "Beast")[0] ?? beast?.name ?? "",
+          secondary: tokenId,
+        };
 
-    case "tier-desc":
-      return copy.sort((a, b) => {
-        const tierA =
-          getNumericAttribute(a.beast ?? null, "Tier") ??
-          Number.POSITIVE_INFINITY;
-        const tierB =
-          getNumericAttribute(b.beast ?? null, "Tier") ??
-          Number.POSITIVE_INFINITY;
-        return tierB - tierA || a.tokenId.localeCompare(b.tokenId);
-      });
+      case "tier-asc":
+      case "tier-desc":
+        return {
+          primary: getNumericAttribute(beast ?? null, "Tier") ?? Number.POSITIVE_INFINITY,
+          secondary: tokenId,
+        };
 
-    case "health-desc":
-      return copy.sort((a, b) => {
-        const healthA =
-          getNumericAttribute(a.beast ?? null, "Health") ?? -Infinity;
-        const healthB =
-          getNumericAttribute(b.beast ?? null, "Health") ?? -Infinity;
-        return healthA === healthB
-          ? a.tokenId.localeCompare(b.tokenId)
-          : healthB - healthA;
-      });
+      case "health-asc":
+      case "health-desc":
+        return {
+          primary: getNumericAttribute(beast ?? null, "Health") ?? -Infinity,
+          secondary: tokenId,
+        };
 
-    case "health-asc":
-      return copy.sort((a, b) => {
-        const healthA =
-          getNumericAttribute(a.beast ?? null, "Health") ?? -Infinity;
-        const healthB =
-          getNumericAttribute(b.beast ?? null, "Health") ?? -Infinity;
-        return healthA === healthB
-          ? a.tokenId.localeCompare(b.tokenId)
-          : healthA - healthB;
-      });
+      case "rank-asc":
+      case "rank-desc":
+        return {
+          primary: getNumericAttribute(beast ?? null, "Rank") ?? Number.POSITIVE_INFINITY,
+          secondary: tokenId,
+        };
 
-    case "rank-asc":
-      return copy.sort((a, b) => {
-        const rankA =
-          getNumericAttribute(a.beast ?? null, "Rank") ??
-          Number.POSITIVE_INFINITY;
-        const rankB =
-          getNumericAttribute(b.beast ?? null, "Rank") ??
-          Number.POSITIVE_INFINITY;
-        return rankA - rankB || a.tokenId.localeCompare(b.tokenId);
-      });
+      case "last-death-asc":
+      case "last-death-desc":
+        return {
+          primary: getBeastLastDeathTimestamp(beast) ?? 0,
+          secondary: tokenId,
+        };
 
-    case "rank-desc":
-      return copy.sort((a, b) => {
-        const rankA =
-          getNumericAttribute(a.beast ?? null, "Rank") ??
-          Number.POSITIVE_INFINITY;
-        const rankB =
-          getNumericAttribute(b.beast ?? null, "Rank") ??
-          Number.POSITIVE_INFINITY;
-        return rankB - rankA || a.tokenId.localeCompare(b.tokenId);
-      });
+      case "price-asc":
+      case "price-desc": {
+        const comp = getComparablePrice(listing);
+        // Combine currency and price into a single comparable value
+        // Currency prefix ensures same-currency grouping
+        return {
+          primary: comp.value,
+          secondary: `${comp.currency}:${tokenId}`,
+        };
+      }
 
-    case "last-death-desc":
-      return copy.sort((a, b) => {
-        const deathA = getBeastLastDeathTimestamp(a.beast) ?? 0;
-        const deathB = getBeastLastDeathTimestamp(b.beast) ?? 0;
-        return deathA === deathB
-          ? a.tokenId.localeCompare(b.tokenId)
-          : deathB - deathA;
-      });
+      case "default":
+      default:
+        return {
+          primary: beast?.power ?? -Infinity,
+          secondary: tokenId,
+        };
+    }
+  };
 
-    case "last-death-asc":
-      return copy.sort((a, b) => {
-        const deathA = getBeastLastDeathTimestamp(a.beast) ?? 0;
-        const deathB = getBeastLastDeathTimestamp(b.beast) ?? 0;
-        return deathA === deathB
-          ? a.tokenId.localeCompare(b.tokenId)
-          : deathA - deathB;
-      });
+  // Create keyed array (Schwartzian transform step 1)
+  const keyed: KeyedListing[] = listings.map(listing => ({ listing, key: getKey(listing) }));
 
-    case "price-asc":
-      return copy.sort((a, b) => {
-        try {
-          const compA = getComparablePrice(a);
-          const compB = getComparablePrice(b);
+  // Determine sort direction and type
+  const isDesc = option.endsWith("-desc") || option === "default";
+  const isString = option === "beast-asc" || option === "beast-desc";
+  const isPrice = option === "price-asc" || option === "price-desc";
 
-          // Sort by currency first to group same-currency listings
-          if (compA.currency !== compB.currency) {
-            return compA.currency.localeCompare(compB.currency);
-          }
+  // Sort using pre-computed keys (step 2)
+  keyed.sort((a, b) => {
+    let compare: number;
 
-          // Then sort by price within the same currency
-          if (compA.value === compB.value) {
-            return a.tokenId.localeCompare(b.tokenId);
-          }
-          return compA.value < compB.value ? -1 : 1;
-        } catch {
-          return a.tokenId.localeCompare(b.tokenId);
-        }
-      });
+    if (isPrice) {
+      // For price, first compare by currency (in secondary), then by value
+      const currA = (a.key.secondary as string).split(":")[0];
+      const currB = (b.key.secondary as string).split(":")[0];
+      if (currA !== currB) {
+        return currA.localeCompare(currB);
+      }
+      const valA = a.key.primary as bigint;
+      const valB = b.key.primary as bigint;
+      compare = valA === valB ? 0 : valA < valB ? -1 : 1;
+    } else if (isString) {
+      compare = (a.key.primary as string).toLowerCase().localeCompare(
+        (b.key.primary as string).toLowerCase()
+      );
+    } else {
+      compare = (a.key.primary as number) - (b.key.primary as number);
+    }
 
-    case "price-desc":
-      return copy.sort((a, b) => {
-        try {
-          const compA = getComparablePrice(a);
-          const compB = getComparablePrice(b);
+    if (compare === 0) {
+      return a.key.secondary.localeCompare(b.key.secondary);
+    }
+    return isDesc ? -compare : compare;
+  });
 
-          // Sort by currency first to group same-currency listings
-          if (compA.currency !== compB.currency) {
-            return compA.currency.localeCompare(compB.currency);
-          }
-
-          // Then sort by price within the same currency (descending)
-          if (compA.value === compB.value) {
-            return a.tokenId.localeCompare(b.tokenId);
-          }
-          return compA.value > compB.value ? -1 : 1;
-        } catch {
-          return a.tokenId.localeCompare(b.tokenId);
-        }
-      });
-
-    case "default":
-    default:
-      // Sort by power descending
-      return copy.sort((a, b) => {
-        const powerA = a.beast?.power ?? -Infinity;
-        const powerB = b.beast?.power ?? -Infinity;
-        return powerA === powerB
-          ? a.tokenId.localeCompare(b.tokenId)
-          : powerB - powerA;
-      });
-  }
+  // Extract sorted listings (step 3)
+  return keyed.map(k => k.listing);
 }
 
 /**

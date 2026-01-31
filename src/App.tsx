@@ -11,6 +11,7 @@ import ErrorBoundary from "./components/common/ErrorBoundary";
 import { GlobalSearchProvider } from "./hooks/useGlobalSearch";
 import { GlobalCartProvider } from "./contexts/GlobalCartContext";
 import { FloatingCarts } from "./components/marketplace/FloatingCarts";
+import { GlobalCartDialogs } from "./components/marketplace/GlobalCartDialogs";
 import { Toaster } from "sonner";
 
 // Lazy load pages for better performance
@@ -85,8 +86,9 @@ function App() {
                 <Route path="/leaderboard" element={<LeaderboardPage />} />
                 <Route path="/marketplace" element={<MarketplacePage />} />
               </Routes>
-              {/* Global floating carts - callbacks provided by MarketplacePage when on that route */}
+              {/* Global floating carts and dialogs */}
               <FloatingCarts />
+              <GlobalCartDialogs />
             </Suspense>
           </ErrorBoundary>
         </GlobalCartProvider>

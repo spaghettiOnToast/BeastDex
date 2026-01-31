@@ -7,7 +7,39 @@
 import type { Beast, BeastAttributeFilters } from "../services/beast";
 
 /**
+ * WeakMap cache for pre-indexed beast attributes
+ * Maps Beast -> Map<trait_type (lowercase), string[]>
+ */
+const attributeIndexCache = new WeakMap<Beast, Map<string, string[]>>();
+
+/**
+ * Get or create an attribute index for a beast
+ * This converts O(n) attribute lookups to O(1) after first access
+ */
+function getAttributeIndex(beast: Beast): Map<string, string[]> {
+  let index = attributeIndexCache.get(beast);
+  if (!index) {
+    index = new Map<string, string[]>();
+    for (const attr of beast.attributes ?? []) {
+      const trait = attr.trait_type?.toLowerCase();
+      if (trait) {
+        const existing = index.get(trait);
+        const value = String(attr.value ?? "");
+        if (existing) {
+          existing.push(value);
+        } else {
+          index.set(trait, [value]);
+        }
+      }
+    }
+    attributeIndexCache.set(beast, index);
+  }
+  return index;
+}
+
+/**
  * Get attribute values for a specific trait from a beast
+ * Uses cached index for O(1) lookup after first access
  * @param beast - The beast to extract attributes from
  * @param trait - The trait type to search for (case-insensitive)
  * @returns Array of attribute values matching the trait
@@ -17,10 +49,8 @@ export function getAttributeValues(
   trait: string
 ): string[] {
   if (!beast) return [];
-  const target = trait.toLowerCase();
-  return (beast.attributes ?? [])
-    .filter((attr) => attr.trait_type?.toLowerCase() === target)
-    .map((attr) => String(attr.value ?? ""));
+  const index = getAttributeIndex(beast);
+  return index.get(trait.toLowerCase()) ?? [];
 }
 
 /**

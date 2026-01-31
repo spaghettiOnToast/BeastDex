@@ -80,53 +80,46 @@ export function useMarketplaceFilters({
   /**
    * Filter listings based on current filters and deduplicate by tokenId
    * Only show one listing per beast - prefer active listings over expired ones
+   *
+   * Optimized: Single pass for grouping + filtering combined
    */
   const filteredListings = useMemo(() => {
-    // First, filter out hidden listings and those without beast data
-    const baseListings = listings
-      .filter((listing) => !hiddenListingIds.has(listing.listingId))
-      .filter(
-        (listing): listing is Listing & { beast: Beast } =>
-          listing.beast != null
-      );
+    // Single pass: group by tokenId while filtering out invalid listings
+    const listingsByTokenId = new Map<string, Listing & { beast: Beast }>();
 
-    // Group listings by tokenId to deduplicate
-    // Normalize tokenId to handle potential inconsistencies (trim, lowercase not needed for numbers)
-    const listingsByTokenId = new Map<string, Array<Listing & { beast: Beast }>>();
-    for (const listing of baseListings) {
+    for (const listing of listings) {
+      // Skip hidden listings
+      if (hiddenListingIds.has(listing.listingId)) continue;
+
+      // Skip listings without beast data
+      if (!listing.beast) continue;
+
+      // Skip expired if hideExpired is on
+      if (hideExpired && listing.status === "expired") continue;
+
+      // Skip if doesn't match attribute filters
+      if (!matchesAttributeFilters(listing as Listing & { beast: Beast }, attributeFilters)) continue;
+
+      // Only consider active listings
+      if (listing.status !== "active") continue;
+
       const tokenId = String(listing.tokenId).trim();
-      if (!listingsByTokenId.has(tokenId)) {
-        listingsByTokenId.set(tokenId, []);
+      const existing = listingsByTokenId.get(tokenId);
+
+      if (!existing) {
+        // First listing for this tokenId
+        listingsByTokenId.set(tokenId, listing as Listing & { beast: Beast });
+      } else {
+        // Keep the one with later expiration (more time left)
+        const existingExp = existing.expiration ?? 0;
+        const currentExp = listing.expiration ?? 0;
+        if (currentExp > existingExp) {
+          listingsByTokenId.set(tokenId, listing as Listing & { beast: Beast });
+        }
       }
-      listingsByTokenId.get(tokenId)!.push(listing);
     }
 
-    // For each tokenId, pick the best listing (active preferred, then by expiration)
-    const deduplicatedListings: Array<Listing & { beast: Beast }> = [];
-    for (const [, tokenListings] of listingsByTokenId) {
-      // Separate active and non-active listings
-      const activeListings = tokenListings.filter((l) => l.status === "active");
-
-      if (activeListings.length > 0) {
-        // Pick the active listing with the latest expiration (most time left)
-        const bestActive = activeListings.reduce((best, current) => {
-          const bestExp = best.expiration ?? 0;
-          const currentExp = current.expiration ?? 0;
-          return currentExp > bestExp ? current : best;
-        });
-        deduplicatedListings.push(bestActive);
-      }
-      // If no active listings exist for this tokenId, don't show any listing
-      // (expired listings for the same beast are hidden)
-    }
-
-    // Apply "Hide Expired" toggle and attribute filters
-    return deduplicatedListings
-      .filter((listing) => {
-        if (hideExpired && listing.status === "expired") return false;
-        return true;
-      })
-      .filter((listing) => matchesAttributeFilters(listing, attributeFilters));
+    return Array.from(listingsByTokenId.values());
   }, [listings, attributeFilters, hiddenListingIds, hideExpired]);
 
   /**
