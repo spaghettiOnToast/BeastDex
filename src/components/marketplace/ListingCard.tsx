@@ -196,7 +196,7 @@ function ListingCard({
                   onClick={handleBuyNow}
                   disabled={buyDisabled}
                 >
-                  {buyDisabled ? "N/A" : "Buy"}
+                  Buy
                 </Button>
               )}
 
@@ -204,7 +204,7 @@ function ListingCard({
               {handleAddToCart && (
                 isAlreadyListed ? (
                   <div className="flex-1 text-[7px] sm:text-[9px] px-0.5 sm:px-1.5 py-0.5 sm:py-1 h-5 sm:h-6 bg-green-500/20 text-green-300 border border-green-400/50 rounded-md flex items-center justify-center font-semibold">
-                    ✓
+                    Listed
                   </div>
                 ) : (
                   <Button
@@ -228,7 +228,7 @@ function ListingCard({
               {/* Make Offer - hide on very small screens to save space */}
               {onMakeOffer && (
                 <Button
-                  className="hidden xs:flex flex-1 border-white text-white hover:bg-gray-800/50 hover:border-white font-semibold transition-all text-[7px] sm:text-[9px] px-0.5 sm:px-1.5 py-0.5 sm:py-1 h-5 sm:h-6"
+                  className="flex flex-1 border-white text-white hover:bg-gray-800/50 hover:border-white font-semibold transition-all text-[7px] sm:text-[9px] px-0.5 sm:px-1.5 py-0.5 sm:py-1 h-5 sm:h-6"
                   variant="outline"
                   onClick={onMakeOffer}
                 >

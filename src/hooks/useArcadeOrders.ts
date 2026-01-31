@@ -2,7 +2,7 @@ import { useMemo, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getChecksumAddress } from "starknet";
 import { CategoryType, StatusType } from "@cartridge/arcade";
-import { compareStarknetAddresses } from "../utils/address";
+import { compareStarknetAddresses, padStarknetAddress } from "../utils/address";
 
 // GraphQL endpoint for arcade-main
 const ARCADE_GRAPHQL_ENDPOINT = "https://api.cartridge.gg/x/arcade-main/torii/graphql";
@@ -401,8 +401,8 @@ async function fetchUserOffersGraphQL(
   collectionAddress: string,
   limit: number = 100
 ): Promise<ArcadeOrderModelCompat[]> {
-  // Normalize address to match GraphQL format (with leading zeros)
-  const normalizedOwner = userAddress.toLowerCase();
+  // Pad address to 64 hex chars to match GraphQL storage format
+  const normalizedOwner = padStarknetAddress(userAddress) ?? userAddress.toLowerCase();
 
   const query = `
     query GetUserOffers($owner: String!, $limit: Int!) {
@@ -476,8 +476,8 @@ export function useUserOffers(userAddress: string | undefined, collectionAddress
   const query = useQuery({
     queryKey,
     enabled: !!userAddress && !!collectionAddress,
-    staleTime: 30_000, // Consider data fresh for 30 seconds
-    refetchOnWindowFocus: false,
+    staleTime: 15_000, // Consider data fresh for 15 seconds (offers change frequently)
+    refetchOnWindowFocus: true, // Refetch when user returns to window
     refetchOnMount: true, // Refetch when component mounts to get latest offers
     queryFn: async () => {
       if (!userAddress) return [];

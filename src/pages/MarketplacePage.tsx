@@ -2035,7 +2035,11 @@ export default function MarketplacePage() {
               onOpenChange={setMakeOfferOpen}
               beast={offerBeast}
               tokenId={offerTokenId}
-              onOfferMade={() => setMakeOfferOpen(false)}
+              onOfferMade={() => {
+                setMakeOfferOpen(false);
+                // Refetch offers after making one
+                refetchUserMadeOffers();
+              }}
             />
           )}
 
