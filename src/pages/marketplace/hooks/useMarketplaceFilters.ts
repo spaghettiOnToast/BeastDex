@@ -174,38 +174,45 @@ export function useMarketplaceFilters({
   );
 
   /**
+   * Pre-compute beast type keys for duplicate detection (O(n) instead of O(n²))
+   */
+  const beastTypeKeyMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const beast of filteredUserBeasts) {
+      const beastTypeAttr = beast.attributes.find(
+        (attr) => attr.trait_type?.toLowerCase() === "beast"
+      );
+      const key = beastTypeAttr?.value
+        ? String(beastTypeAttr.value).trim().toLowerCase()
+        : `unique_${beast.id}`;
+      map.set(beast.id, key);
+    }
+    return map;
+  }, [filteredUserBeasts]);
+
+  /**
    * Sort user beasts and optionally filter duplicates
    */
   const sortedUserBeasts = useMemo(() => {
     let beasts = sortBeasts(filteredUserBeasts, sortOption);
 
     if (showDuplicatesOnly) {
-      // Group beasts by their beast type attribute to find duplicates
+      // Count occurrences using pre-computed keys (O(n))
       const beastCounts = new Map<string, number>();
-      beasts.forEach((beast) => {
-        const beastTypeAttr = beast.attributes.find(
-          (attr) => attr.trait_type?.toLowerCase() === "beast"
-        );
-        const key = beastTypeAttr?.value
-          ? String(beastTypeAttr.value).trim().toLowerCase()
-          : `unique_${beast.id}`;
+      for (const beast of beasts) {
+        const key = beastTypeKeyMap.get(beast.id) || `unique_${beast.id}`;
         beastCounts.set(key, (beastCounts.get(key) || 0) + 1);
-      });
+      }
 
-      // Only keep beasts that have duplicates
+      // Filter to duplicates only using pre-computed keys (O(n))
       beasts = beasts.filter((beast) => {
-        const beastTypeAttr = beast.attributes.find(
-          (attr) => attr.trait_type?.toLowerCase() === "beast"
-        );
-        const key = beastTypeAttr?.value
-          ? String(beastTypeAttr.value).trim().toLowerCase()
-          : `unique_${beast.id}`;
+        const key = beastTypeKeyMap.get(beast.id) || `unique_${beast.id}`;
         return (beastCounts.get(key) || 0) > 1;
       });
     }
 
     return beasts;
-  }, [filteredUserBeasts, sortOption, showDuplicatesOnly]);
+  }, [filteredUserBeasts, sortOption, showDuplicatesOnly, beastTypeKeyMap]);
 
   /**
    * Get listings to render based on pagination
@@ -227,6 +234,37 @@ export function useMarketplaceFilters({
   }, [sortedListings.length, ITEMS_PER_PAGE]);
 
   /**
+   * Paginate user beasts for better performance with large collections
+   */
+  const userBeastsToRender = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    return sortedUserBeasts.slice(startIndex, endIndex);
+  }, [sortedUserBeasts, currentPage, ITEMS_PER_PAGE]);
+
+  /**
+   * Calculate total pages for user beasts
+   */
+  const totalUserBeastsPages = useMemo(() => {
+    return Math.ceil(sortedUserBeasts.length / ITEMS_PER_PAGE);
+  }, [sortedUserBeasts.length, ITEMS_PER_PAGE]);
+
+  /**
+   * Pre-compute normalized token IDs for beasts (avoid conversion in render loop)
+   */
+  const normalizedBeastTokenIds = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const beast of userBeasts) {
+      const rawTokenId = beast.id.split(":").pop() || beast.id;
+      const tokenId = rawTokenId.startsWith("0x")
+        ? BigInt(rawTokenId).toString()
+        : rawTokenId;
+      map.set(beast.id, tokenId);
+    }
+    return map;
+  }, [userBeasts]);
+
+  /**
    * Get user's active listings
    * Also filters out listings for NFTs the user no longer owns
    * (e.g., if they accepted an offer, the NFT transferred but the listing wasn't cancelled)
@@ -236,16 +274,8 @@ export function useMarketplaceFilters({
     const lower = address.toLowerCase();
     const base = showAllMyListings ? listings : sortedListings;
 
-    // Build a set of token IDs the user currently owns
-    const ownedTokenIds = new Set<string>();
-    for (const beast of userBeasts) {
-      const rawTokenId = beast.id.split(":").pop() || beast.id;
-      // Normalize: convert hex to decimal string for comparison
-      const tokenId = rawTokenId.startsWith("0x")
-        ? BigInt(rawTokenId).toString()
-        : rawTokenId;
-      ownedTokenIds.add(tokenId);
-    }
+    // Use pre-computed token IDs for owned beasts
+    const ownedTokenIds = new Set(normalizedBeastTokenIds.values());
 
     // Filter to listings where:
     // 1. The seller is the current user
@@ -256,7 +286,7 @@ export function useMarketplaceFilters({
       const normalizedTokenId = String(listing.tokenId).trim();
       return ownedTokenIds.has(normalizedTokenId);
     });
-  }, [sortedListings, listings, address, showAllMyListings, userBeasts]);
+  }, [sortedListings, listings, address, showAllMyListings, normalizedBeastTokenIds]);
 
   /**
    * Track which token IDs are already actively listed
@@ -349,11 +379,14 @@ export function useMarketplaceFilters({
     namedRecentListings,
     filteredUserBeasts,
     sortedUserBeasts,
+    userBeastsToRender,
     listingsToRender,
     myActiveListings,
     alreadyListedTokenIds,
+    normalizedBeastTokenIds,
     ownerAddresses,
     totalPages,
+    totalUserBeastsPages,
     itemsPerPage: ITEMS_PER_PAGE,
 
     // Handlers

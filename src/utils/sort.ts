@@ -223,93 +223,63 @@ export function sortListings(
 
 /**
  * Sort beasts based on the selected sort option
+ * Uses Schwartzian transform to pre-compute sort keys for O(n) key extraction
+ * instead of O(n*log(n)) during comparison.
+ *
  * @param beasts - Array of beasts to sort
  * @param option - Sort option to apply
  * @returns Sorted array of beasts (new array, original not mutated)
  */
 export function sortBeasts(beasts: Beast[], option: SortOption): Beast[] {
-  const copy = [...beasts];
+  if (beasts.length <= 1) return [...beasts];
 
-  switch (option) {
-    case "beast-asc":
-      return copy.sort((a, b) => {
-        const traitA = getAttributeValues(a, "Beast")[0] ?? a.name ?? "";
-        const traitB = getAttributeValues(b, "Beast")[0] ?? b.name ?? "";
-        const compare = traitA.localeCompare(traitB);
-        return compare !== 0 ? compare : a.numericId - b.numericId;
-      });
+  // Pre-compute sort keys once (O(n)) instead of during each comparison (O(n*log(n)))
+  type KeyedBeast = { beast: Beast; key: string | number };
 
-    case "beast-desc":
-      return copy.sort((a, b) => {
-        const traitA = getAttributeValues(a, "Beast")[0] ?? a.name ?? "";
-        const traitB = getAttributeValues(b, "Beast")[0] ?? b.name ?? "";
-        const compare = traitB.localeCompare(traitA);
-        return compare !== 0 ? compare : a.numericId - b.numericId;
-      });
+  const getKey = (beast: Beast): string | number => {
+    switch (option) {
+      case "beast-asc":
+      case "beast-desc":
+        return getAttributeValues(beast, "Beast")[0] ?? beast.name ?? "";
+      case "tier-asc":
+      case "tier-desc":
+        return getNumericAttribute(beast, "Tier") ?? Number.POSITIVE_INFINITY;
+      case "health-asc":
+      case "health-desc":
+        return getNumericAttribute(beast, "Health") ?? -Infinity;
+      case "rank-asc":
+      case "rank-desc":
+        return getNumericAttribute(beast, "Rank") ?? Number.POSITIVE_INFINITY;
+      case "last-death-asc":
+      case "last-death-desc":
+        return getBeastLastDeathTimestamp(beast) ?? 0;
+      case "default":
+      default:
+        return beast.power ?? -Infinity;
+    }
+  };
 
-    case "tier-asc":
-      return copy.sort((a, b) => {
-        const tierA = getNumericAttribute(a, "Tier") ?? Number.POSITIVE_INFINITY;
-        const tierB = getNumericAttribute(b, "Tier") ?? Number.POSITIVE_INFINITY;
-        return tierA === tierB ? a.numericId - b.numericId : tierA - tierB;
-      });
+  // Create keyed array (Schwartzian transform step 1)
+  const keyed: KeyedBeast[] = beasts.map(beast => ({ beast, key: getKey(beast) }));
 
-    case "tier-desc":
-      return copy.sort((a, b) => {
-        const tierA = getNumericAttribute(a, "Tier") ?? Number.POSITIVE_INFINITY;
-        const tierB = getNumericAttribute(b, "Tier") ?? Number.POSITIVE_INFINITY;
-        return tierA === tierB ? a.numericId - b.numericId : tierB - tierA;
-      });
+  // Sort using pre-computed keys (step 2)
+  const isDesc = option.endsWith("-desc") || option === "default";
+  const isString = option === "beast-asc" || option === "beast-desc";
 
-    case "health-desc":
-      return copy.sort((a, b) => {
-        const healthA = getNumericAttribute(a, "Health") ?? -Infinity;
-        const healthB = getNumericAttribute(b, "Health") ?? -Infinity;
-        return healthA === healthB ? a.numericId - b.numericId : healthB - healthA;
-      });
+  keyed.sort((a, b) => {
+    let compare: number;
+    if (isString) {
+      compare = (a.key as string).localeCompare(b.key as string);
+    } else {
+      compare = (a.key as number) - (b.key as number);
+    }
 
-    case "health-asc":
-      return copy.sort((a, b) => {
-        const healthA = getNumericAttribute(a, "Health") ?? -Infinity;
-        const healthB = getNumericAttribute(b, "Health") ?? -Infinity;
-        return healthA === healthB ? a.numericId - b.numericId : healthA - healthB;
-      });
+    if (compare === 0) {
+      return a.beast.numericId - b.beast.numericId;
+    }
+    return isDesc ? -compare : compare;
+  });
 
-    case "rank-asc":
-      return copy.sort((a, b) => {
-        const rankA = getNumericAttribute(a, "Rank") ?? Number.POSITIVE_INFINITY;
-        const rankB = getNumericAttribute(b, "Rank") ?? Number.POSITIVE_INFINITY;
-        return rankA === rankB ? a.numericId - b.numericId : rankA - rankB;
-      });
-
-    case "rank-desc":
-      return copy.sort((a, b) => {
-        const rankA = getNumericAttribute(a, "Rank") ?? Number.POSITIVE_INFINITY;
-        const rankB = getNumericAttribute(b, "Rank") ?? Number.POSITIVE_INFINITY;
-        return rankA === rankB ? a.numericId - b.numericId : rankB - rankA;
-      });
-
-    case "last-death-desc":
-      return copy.sort((a, b) => {
-        const deathA = getBeastLastDeathTimestamp(a) ?? 0;
-        const deathB = getBeastLastDeathTimestamp(b) ?? 0;
-        return deathA === deathB ? a.numericId - b.numericId : deathB - deathA;
-      });
-
-    case "last-death-asc":
-      return copy.sort((a, b) => {
-        const deathA = getBeastLastDeathTimestamp(a) ?? 0;
-        const deathB = getBeastLastDeathTimestamp(b) ?? 0;
-        return deathA === deathB ? a.numericId - b.numericId : deathA - deathB;
-      });
-
-    case "default":
-    default:
-      // Sort by power descending
-      return copy.sort((a, b) => {
-        const powerA = a.power ?? -Infinity;
-        const powerB = b.power ?? -Infinity;
-        return powerA === powerB ? a.numericId - b.numericId : powerB - powerA;
-      });
-  }
+  // Extract sorted beasts (step 3)
+  return keyed.map(k => k.beast);
 }

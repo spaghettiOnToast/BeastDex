@@ -455,6 +455,51 @@ export function useMarketplaceActions({
   );
 
   /**
+   * Batch cancel multiple listings in a single transaction
+   */
+  const batchCancel = useCallback(
+    async (
+      snAccount: AccountInterface,
+      listings: Array<{
+        orderId: BigNumberish;
+        collection: string;
+        tokenId: BigNumberish;
+      }>
+    ) => {
+      if (listings.length === 0) return null;
+
+      const calls = listings.map((listing) => {
+        const tokenIdBigInt = typeof listing.tokenId === 'bigint'
+          ? listing.tokenId
+          : BigInt(listing.tokenId.toString());
+        const tokenIdU256 = toUint256Hex(tokenIdBigInt);
+
+        return {
+          contractAddress: MARKETPLACE_ADDRESS,
+          entrypoint: "cancel",
+          calldata: [
+            listing.orderId.toString(),
+            listing.collection,
+            ...tokenIdU256,
+          ],
+        };
+      });
+
+      const result = await snAccount.execute(calls);
+
+      if (result?.transaction_hash) {
+        const provider = getProvider(snAccount);
+        await provider.waitForTransaction(result.transaction_hash, {
+          retryInterval: 2000,
+        });
+      }
+
+      return result;
+    },
+    []
+  );
+
+  /**
    * List a beast for sale
    */
   const list = useCallback(
@@ -490,6 +535,90 @@ export function useMarketplaceActions({
       };
 
       const result = await snAccount.execute([call]);
+
+      if (result?.transaction_hash) {
+        const provider = getProvider(snAccount);
+        await provider.waitForTransaction(result.transaction_hash, {
+          retryInterval: 2000,
+        });
+      }
+
+      return result;
+    },
+    []
+  );
+
+  /**
+   * Batch list multiple beasts in a single transaction
+   */
+  const batchList = useCallback(
+    async (
+      snAccount: AccountInterface,
+      listings: Array<{
+        collection: string;
+        tokenId: BigNumberish;
+        price: BigNumberish;
+        currency: string;
+        expiration: BigNumberish;
+      }>
+    ) => {
+      if (listings.length === 0) return null;
+
+      // First ensure collection approval
+      await ensureCollectionApproval(snAccount);
+
+      const UINT128_MASK = (1n << 128n) - 1n;
+      const calls: Array<{
+        contractAddress: string;
+        entrypoint: string;
+        calldata: string[];
+      }> = [];
+
+      for (const listing of listings) {
+        const tokenIdBigInt = typeof listing.tokenId === 'bigint'
+          ? listing.tokenId
+          : BigInt(listing.tokenId.toString());
+        const priceBigInt = typeof listing.price === 'bigint'
+          ? listing.price
+          : BigInt(listing.price.toString());
+        const tokenIdU256 = toUint256Hex(tokenIdBigInt);
+
+        // Calculate platform fee
+        const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
+        const feeLow = feeAmount & UINT128_MASK;
+        const feeHigh = feeAmount >> 128n;
+
+        // Build ERC20 transfer call for platform fee
+        const feeTransferCall = {
+          contractAddress: listing.currency,
+          entrypoint: "transfer",
+          calldata: [
+            CLIENT_FEE_RECEIVER,
+            feeLow.toString(),
+            feeHigh.toString(),
+          ],
+        };
+
+        // Build list call
+        const listCall = {
+          contractAddress: MARKETPLACE_ADDRESS,
+          entrypoint: "list",
+          calldata: [
+            listing.collection,
+            ...tokenIdU256,
+            "0", // quantity: u128 = 0 for ERC721
+            priceBigInt.toString(),
+            listing.currency,
+            listing.expiration.toString(),
+            "0", // royalties: bool = false
+          ],
+        };
+
+        // Add fee transfer then list (2 calls per beast)
+        calls.push(feeTransferCall, listCall);
+      }
+
+      const result = await snAccount.execute(calls);
 
       if (result?.transaction_hash) {
         const provider = getProvider(snAccount);
@@ -698,7 +827,9 @@ export function useMarketplaceActions({
 
     // Direct marketplace actions
     cancel,
+    batchCancel,
     list,
+    batchList,
     editListing,
   };
 }

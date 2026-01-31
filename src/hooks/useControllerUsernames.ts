@@ -26,9 +26,14 @@ export function useControllerUsernames(
     error: null,
   });
 
+  // Stringify addresses to create a stable dependency key
+  // (arrays change reference on every render even if values are the same)
+  const addressesKey = addresses.filter(Boolean).join(",");
+
   const uniqueAddresses = useMemo(() => {
     return normaliseStarknetAddresses(addresses);
-  }, [addresses]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addressesKey is a stable string representation of addresses
+  }, [addressesKey]);
 
   useEffect(() => {
     if (uniqueAddresses.length === 0) {
@@ -68,7 +73,8 @@ export function useControllerUsernames(
       cancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [uniqueAddresses, delayMs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addressesKey captures when uniqueAddresses changes
+  }, [addressesKey, delayMs]);
 
   return state;
 }

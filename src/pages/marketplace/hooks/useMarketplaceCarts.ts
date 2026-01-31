@@ -8,7 +8,7 @@ export interface UseMarketplaceCartsProps {
 }
 
 /**
- * Hook for managing marketplace carts (listing cart and purchase cart)
+ * Hook for managing marketplace carts (listing cart, purchase cart, and cancel cart)
  */
 export function useMarketplaceCarts({ alreadyListedTokenIds }: UseMarketplaceCartsProps) {
   // Listing cart state
@@ -17,6 +17,9 @@ export function useMarketplaceCarts({ alreadyListedTokenIds }: UseMarketplaceCar
 
   // Purchase cart state
   const [purchaseCart, setPurchaseCart] = useState<Listing[]>([]);
+
+  // Cancel cart state
+  const [cancelCart, setCancelCart] = useState<Listing[]>([]);
 
   /**
    * Toggle a beast in the listing cart
@@ -110,6 +113,52 @@ export function useMarketplaceCarts({ alreadyListedTokenIds }: UseMarketplaceCar
     return purchaseCart.some((l) => l.listingId === listingId);
   }, [purchaseCart]);
 
+  /**
+   * Toggle a listing in the cancel cart
+   */
+  const handleToggleCancelCart = useCallback((listing: Listing) => {
+    if (!listing.active) {
+      toast.error("This listing is not active");
+      return;
+    }
+    setCancelCart((prev) => {
+      const inCart = prev.some((l) => l.listingId === listing.listingId);
+      if (inCart) {
+        return prev.filter((l) => l.listingId !== listing.listingId);
+      }
+      return [...prev, listing];
+    });
+  }, []);
+
+  /**
+   * Remove a listing from the cancel cart
+   */
+  const handleRemoveFromCancelCart = useCallback((listingId: string) => {
+    setCancelCart((prev) => prev.filter((l) => l.listingId !== listingId));
+  }, []);
+
+  /**
+   * Clear the cancel cart
+   */
+  const handleClearCancelCart = useCallback(() => {
+    setCancelCart([]);
+  }, []);
+
+  /**
+   * Add all active listings to the cancel cart
+   */
+  const handleAddAllToCancelCart = useCallback((listings: Listing[]) => {
+    const activeListings = listings.filter((l) => l.active);
+    setCancelCart(activeListings);
+  }, []);
+
+  /**
+   * Check if a listing is in the cancel cart
+   */
+  const isInCancelCart = useCallback((listingId: string) => {
+    return cancelCart.some((l) => l.listingId === listingId);
+  }, [cancelCart]);
+
   return {
     // Listing cart
     cartBeasts,
@@ -129,5 +178,14 @@ export function useMarketplaceCarts({ alreadyListedTokenIds }: UseMarketplaceCar
     handleRemoveFromPurchaseCart,
     handleClearPurchaseCart,
     isInPurchaseCart,
+
+    // Cancel cart
+    cancelCart,
+    setCancelCart,
+    handleToggleCancelCart,
+    handleRemoveFromCancelCart,
+    handleClearCancelCart,
+    handleAddAllToCancelCart,
+    isInCancelCart,
   };
 }

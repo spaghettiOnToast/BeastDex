@@ -44,7 +44,25 @@ function App() {
     >
       <GlobalSearchProvider>
         <ErrorBoundary>
-          <Toaster position="top-right" expand={false} richColors />
+          <Toaster
+            position="top-right"
+            expand={false}
+            toastOptions={{
+              className: "!bg-black/90 !backdrop-blur-md !border !border-gray-700 !text-white !shadow-xl",
+              style: {
+                background: "rgba(0, 0, 0, 0.9)",
+                backdropFilter: "blur(12px)",
+                border: "1px solid rgba(75, 85, 99, 0.5)",
+              },
+              classNames: {
+                success: "!border-green-500/50 !text-green-300",
+                error: "!border-red-500/50 !text-red-300",
+                warning: "!border-yellow-500/50 !text-yellow-300",
+                info: "!border-lsGold/50 !text-lsGold",
+                loading: "!border-gray-500/50 !text-gray-300",
+              },
+            }}
+          />
           <Suspense
           fallback={
             <div className="flex items-center justify-center min-h-screen">

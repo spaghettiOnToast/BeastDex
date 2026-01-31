@@ -113,5 +113,4 @@ export const WHITELISTED_PAYMENT_TOKENS = [
   "usdt",
   "cash",
   "dai",
-  "dticket",
 ] as const;

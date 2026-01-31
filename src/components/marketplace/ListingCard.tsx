@@ -173,11 +173,16 @@ function ListingCard({
               )}
               {onCancel && !pendingCancel ? (
                 <Button
-                  className="flex-1 text-[8px] sm:text-[10px] px-1 sm:px-2 py-0.5 sm:py-1 h-5 sm:h-7 font-semibold"
-                  variant="destructive"
+                  className={[
+                    "flex-1 text-[8px] sm:text-[10px] px-1 sm:px-2 py-0.5 sm:py-1 h-5 sm:h-7 font-semibold",
+                    inCart
+                      ? "bg-red-500/30 text-red-300 border border-red-400/50 hover:bg-red-500/40"
+                      : "",
+                  ].join(" ")}
+                  variant={inCart ? "outline" : "destructive"}
                   onClick={onCancel}
                 >
-                  Cancel
+                  {inCart ? "Selected" : "Cancel"}
                 </Button>
               ) : null}
             </div>

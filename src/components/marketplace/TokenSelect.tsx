@@ -24,7 +24,6 @@ const TOKEN_PRIORITY_ORDER = [
   "usdt",
   "cash",
   "dai",
-  "dticket",
 ];
 
 interface TokenSelectProps {

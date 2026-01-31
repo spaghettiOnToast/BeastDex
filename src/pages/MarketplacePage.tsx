@@ -127,6 +127,7 @@ export default function MarketplacePage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [detailModalListing, setDetailModalListing] = useState<Listing | null>(null);
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<string | null>(null);
+  const [activityTypeFilter, setActivityTypeFilter] = useState<"listing" | "sale" | null>(null);
   const [recentViewMode, setRecentViewMode] = useState<"cards" | "table">("cards");
 
   // Hidden offers state (persisted to localStorage)
@@ -593,15 +594,71 @@ export default function MarketplacePage() {
         await dataHook.refetchOrders();
         await dataHook.reloadUserBeasts();
       } catch (error) {
+        // Always dismiss the loading toast first
+        toast.dismiss(toastId);
+
         if (isUserRejection(error)) {
-          toast.info("Listing cancellation cancelled", { id: toastId });
+          toast.info("Listing cancellation cancelled");
         } else {
           const errorMessage = (error as Error).message || "Failed to cancel listing";
-          toast.error(errorMessage, { id: toastId });
+          if (errorMessage && errorMessage.trim().length > 0) {
+            toast.error(errorMessage);
+          }
         }
       }
     },
     [account, actionsHook, dataHook]
+  );
+
+  /**
+   * Handle batch cancel of multiple listings
+   */
+  const handleBatchCancel = useCallback(
+    async () => {
+      if (!account || cartsHook.cancelCart.length === 0) return;
+
+      const count = cartsHook.cancelCart.length;
+      const toastId = toast.loading(`Cancelling ${count} listing${count > 1 ? "s" : ""}...`);
+
+      try {
+        await actionsHook.batchCancel(
+          account as any,
+          cartsHook.cancelCart.map((listing) => ({
+            orderId: listing.orderId ?? 0,
+            collection: BEASTS_COLLECTION_ADDRESS,
+            tokenId: listing.tokenId,
+          }))
+        );
+
+        toast.success(`${count} listing${count > 1 ? "s" : ""} cancelled successfully!`, { id: toastId });
+
+        // Optimistically remove listings from UI
+        for (const listing of cartsHook.cancelCart) {
+          dataHook.markListingAsSold(listing.listingId);
+        }
+
+        // Clear the cancel cart
+        cartsHook.handleClearCancelCart();
+
+        // Refresh data
+        await dataHook.refetchOrders();
+        await dataHook.reloadUserBeasts();
+      } catch (error) {
+        // Always dismiss the loading toast first
+        toast.dismiss(toastId);
+
+        if (isUserRejection(error)) {
+          toast.info("Batch cancellation cancelled");
+        } else {
+          const errorMessage = (error as Error).message || "Failed to cancel listings";
+          // Don't show error for empty/undefined messages (likely user closed popup)
+          if (errorMessage && errorMessage.trim().length > 0) {
+            toast.error(errorMessage);
+          }
+        }
+      }
+    },
+    [account, actionsHook, cartsHook, dataHook]
   );
 
   /**
@@ -1190,7 +1247,46 @@ export default function MarketplacePage() {
               </>
             ) : (
               /* Activity Tab - Combined listings and sales table */
-              <div className="rounded-lg border border-gray-800 bg-black/30 overflow-hidden overflow-x-auto">
+              <div className="space-y-3">
+                {/* Activity Type Filters */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-gray-400 mr-1">Filter:</span>
+                  <button
+                    type="button"
+                    onClick={() => setActivityTypeFilter(null)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer",
+                      activityTypeFilter === null
+                        ? "bg-lsGold/20 text-lsGold border border-lsGold/50"
+                        : "bg-gray-800/50 text-gray-400 border border-gray-700 hover:border-gray-600 hover:text-gray-300"
+                    )}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivityTypeFilter(activityTypeFilter === "listing" ? null : "listing")}
+                    className={cn(
+                      "px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer border",
+                      "bg-blue-500/20 text-blue-400 border-blue-500/50",
+                      activityTypeFilter === "listing" && "ring-2 ring-blue-400/50"
+                    )}
+                  >
+                    Listed
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivityTypeFilter(activityTypeFilter === "sale" ? null : "sale")}
+                    className={cn(
+                      "px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer border",
+                      "bg-green-500/20 text-green-400 border-green-500/50",
+                      activityTypeFilter === "sale" && "ring-2 ring-green-400/50"
+                    )}
+                  >
+                    Sold
+                  </button>
+                </div>
+                <div className="rounded-lg border border-gray-800 bg-black/30 overflow-hidden overflow-x-auto">
                 <table className="w-full text-xs min-w-[700px]">
                   <thead className="bg-gray-900/50 border-b border-gray-800">
                     <tr>
@@ -1257,14 +1353,21 @@ export default function MarketplacePage() {
                       // Sort by timestamp descending
                       activities.sort((a, b) => b.timestamp - a.timestamp);
 
+                      // Apply filter
+                      const filteredActivities = activityTypeFilter
+                        ? activities.filter(a => a.type === activityTypeFilter)
+                        : activities;
+
                       // Take top 100
-                      const topActivities = activities.slice(0, 100);
+                      const topActivities = filteredActivities.slice(0, 100);
 
                       if (topActivities.length === 0) {
                         return (
                           <tr>
                             <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                              No recent activity available.
+                              {activityTypeFilter
+                                ? `No ${activityTypeFilter === "listing" ? "listings" : "sales"} found.`
+                                : "No recent activity available."}
                             </td>
                           </tr>
                         );
@@ -1407,6 +1510,7 @@ export default function MarketplacePage() {
                   </tbody>
                 </table>
               </div>
+              </div>
             )}
           </section>
         ) : (
@@ -1476,30 +1580,71 @@ export default function MarketplacePage() {
                     You don't have any active listings yet.
                   </p>
                 ) : (
-                  <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                    {filtersHook.myActiveListings.map((listing) => (
-                      <ListingCard
-                        key={`my-${listing.listingId}`}
-                        beast={listing.beast}
-                        tokenId={listing.tokenId}
-                        priceLabel={formatPriceLabel(listing)}
-                        subtitlePriceLabel={formatSubtitlePrice(listing)}
-                        tokenLogoUrl={getTokenLogoUrl(listing)}
-                        status={listing.status}
-                        ownedByUser={true}
-                        onCardClick={() => handleCardClick(listing)}
-                        onEdit={() => {
-                          setEditingListing(listing);
-                          setEditDialogOpen(true);
-                        }}
-                        onCancel={listing.active ? () => handleCancelListing(listing) : undefined}
-                        onViewOffers={() => {
-                          setSelectedListingForOffers(listing);
-                          setOffersDialogOpen(true);
-                        }}
-                      />
-                    ))}
-                  </div>
+                  <>
+                    {/* Cancel cart controls */}
+                    <div className="flex items-center gap-2 mb-3">
+                      {cartsHook.cancelCart.length > 0 ? (
+                        <>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="text-xs"
+                            onClick={handleBatchCancel}
+                          >
+                            Cancel {cartsHook.cancelCart.length} Listing{cartsHook.cancelCart.length > 1 ? "s" : ""}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs"
+                            onClick={cartsHook.handleClearCancelCart}
+                          >
+                            Clear Selection
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => cartsHook.handleAddAllToCancelCart(filtersHook.myActiveListings)}
+                        >
+                          Select All to Cancel
+                        </Button>
+                      )}
+                      <span className="text-xs text-gray-400 ml-auto">
+                        Click Cancel on cards to select
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                      {filtersHook.myActiveListings.map((listing) => {
+                        const inCancelCart = cartsHook.isInCancelCart(listing.listingId);
+                        return (
+                          <ListingCard
+                            key={`my-${listing.listingId}`}
+                            beast={listing.beast}
+                            tokenId={listing.tokenId}
+                            priceLabel={formatPriceLabel(listing)}
+                            subtitlePriceLabel={formatSubtitlePrice(listing)}
+                            tokenLogoUrl={getTokenLogoUrl(listing)}
+                            status={listing.status}
+                            ownedByUser={true}
+                            inCart={inCancelCart}
+                            onCardClick={() => handleCardClick(listing)}
+                            onEdit={() => {
+                              setEditingListing(listing);
+                              setEditDialogOpen(true);
+                            }}
+                            onCancel={listing.active ? () => cartsHook.handleToggleCancelCart(listing) : undefined}
+                            onViewOffers={() => {
+                              setSelectedListingForOffers(listing);
+                              setOffersDialogOpen(true);
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </>
                 )}
               </>
             )}
@@ -1541,12 +1686,9 @@ export default function MarketplacePage() {
                       )}
                     </div>
                     <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                      {filtersHook.sortedUserBeasts.map((beast) => {
-                        const rawTokenId = beast.id.split(":").pop() || beast.id;
-                        // Convert hex tokenId to decimal string for comparison with listing tokenIds
-                        const tokenId = rawTokenId.startsWith("0x")
-                          ? BigInt(rawTokenId).toString()
-                          : rawTokenId;
+                      {filtersHook.userBeastsToRender.map((beast) => {
+                        // Use pre-computed token ID from filters hook
+                        const tokenId = filtersHook.normalizedBeastTokenIds.get(beast.id) || beast.id;
                         const isListed = filtersHook.alreadyListedTokenIds.has(tokenId);
                         const inCart = cartsHook.isInCart(beast.id);
 
@@ -1563,6 +1705,15 @@ export default function MarketplacePage() {
                         );
                       })}
                     </div>
+                    {filtersHook.totalUserBeastsPages > 1 && (
+                      <Pagination
+                        currentPage={filtersHook.currentPage}
+                        totalPages={filtersHook.totalUserBeastsPages}
+                        totalItems={filtersHook.sortedUserBeasts.length}
+                        itemsPerPage={filtersHook.itemsPerPage}
+                        onPageChange={filtersHook.setCurrentPage}
+                      />
+                    )}
                   </>
                 )}
               </>

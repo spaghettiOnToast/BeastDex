@@ -33,13 +33,28 @@ export function isUserRejection(error: unknown): boolean {
     return true;
   }
 
+  // Cartridge Controller specific patterns
+  if (
+    message.includes("popup closed") ||
+    message.includes("popup was closed") ||
+    message.includes("session cancelled") ||
+    message.includes("session canceled") ||
+    message.includes("closed by user") ||
+    message.includes("dismissed") ||
+    message.includes("modal closed") ||
+    message.includes("dialog closed")
+  ) {
+    return true;
+  }
+
   // Flexible pattern: "user" + any rejection-related word
   if (
     message.includes("user") &&
     (message.includes("reject") ||
       message.includes("cancel") ||
       message.includes("abort") ||
-      message.includes("denied"))
+      message.includes("denied") ||
+      message.includes("close"))
   ) {
     return true;
   }
