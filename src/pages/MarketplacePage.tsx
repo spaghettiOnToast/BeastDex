@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { useAccount } from "@starknet-react/core";
+import { useLocation, useNavigate } from "react-router-dom";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
+import { useGlobalCart } from "../contexts/GlobalCartContext";
+import { FloatingCarts } from "../components/marketplace/FloatingCarts";
 import { Button } from "../components/ui/button";
 import ListingCard from "../components/marketplace/ListingCard";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
@@ -9,7 +12,6 @@ import { useOffersForToken, useOffersReceivedForListings, useUserOffers } from "
 import type { Listing } from "../services/marketplace/types";
 import {
   getPaymentTokenByAddress,
-  DEFAULT_PAYMENT_TOKEN,
   BEASTS_COLLECTION_ADDRESS,
 } from "../services/marketplace/constants";
 import { cancelListingFlow } from "../services/marketplace/flows";
@@ -35,7 +37,6 @@ const PurchaseConfirmDialog = lazy(() => import("../components/marketplace/Purch
 const PurchaseCartDialog = lazy(() => import("../components/marketplace/PurchaseCartDialog"));
 const MakeOfferDialog = lazy(() => import("../components/marketplace/MakeOfferDialog"));
 const OffersDialog = lazy(() => import("../components/marketplace/OffersDialog"));
-const UnifiedCartDialog = lazy(() => import("../components/marketplace/UnifiedCartDialog"));
 const BeastModal = lazy(() => import("../components/beast/BeastModal"));
 import {
   Dialog,
@@ -44,7 +45,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "../components/ui/dialog";
-import { ShoppingCart, LayoutGrid, List } from "lucide-react";
+import { LayoutGrid, List } from "lucide-react";
 import { toast } from "sonner";
 import { isUserRejection } from "../utils/transaction";
 
@@ -100,11 +101,15 @@ function formatRelativeTime(timestamp: number): string {
 export default function MarketplacePage() {
   const { address, account } = useAccount();
   const { getToken } = useTokenMap();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const globalCart = useGlobalCart();
 
   // Dialog states
   const [exploreSubTab, setExploreSubTab] = useState<ExploreSubTab>("browse");
   const [myActivitySubTab, setMyActivitySubTab] = useState<MyActivitySubTab>("listings");
   const [listDialogOpen, setListDialogOpen] = useState(false);
+  const [singleBeastToList, setSingleBeastToList] = useState<Beast | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingListing, setEditingListing] = useState<Listing | null>(null);
   const [purchaseConfirmOpen, setPurchaseConfirmOpen] = useState(false);
@@ -115,7 +120,6 @@ export default function MarketplacePage() {
   const [offerTokenId, setOfferTokenId] = useState<string | undefined>(undefined);
   const [offersDialogOpen, setOffersDialogOpen] = useState(false);
   const [selectedListingForOffers, setSelectedListingForOffers] = useState<Listing | null>(null);
-  const [unifiedCartOpen, setUnifiedCartOpen] = useState(false);
   const [acceptOfferConfirmOpen, setAcceptOfferConfirmOpen] = useState(false);
   const [offerToAccept, setOfferToAccept] = useState<{
     offer: OrderModel;
@@ -123,7 +127,6 @@ export default function MarketplacePage() {
     priceFormatted: string;
     buyerAddress: string;
   } | null>(null);
-  const [selectedPaymentToken] = useState(DEFAULT_PAYMENT_TOKEN);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [detailModalListing, setDetailModalListing] = useState<Listing | null>(null);
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<string | null>(null);
@@ -150,6 +153,20 @@ export default function MarketplacePage() {
     }
   }, [hiddenOfferIds]);
 
+  // Handle navigation state from FloatingCarts (open dialogs when navigating from other pages)
+  useEffect(() => {
+    const state = location.state as { openListDialog?: boolean; openPurchaseDialog?: boolean } | null;
+    if (state?.openListDialog) {
+      setListDialogOpen(true);
+      // Clear the state so it doesn't re-trigger
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+    if (state?.openPurchaseDialog) {
+      setPurchaseCartOpen(true);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, location.pathname, navigate]);
+
   // Toggle hide/unhide offer
   const handleToggleHideOffer = useCallback((offerId: string) => {
     setHiddenOfferIds(prev => {
@@ -175,10 +192,8 @@ export default function MarketplacePage() {
     availableFilters: dataHook.availableFilters,
   });
 
-  // Carts hook
-  const cartsHook = useMarketplaceCarts({
-    alreadyListedTokenIds: filtersHook.alreadyListedTokenIds,
-  });
+  // Cancel cart hook (list and purchase carts are in GlobalCartContext)
+  const cartsHook = useMarketplaceCarts();
 
   // User transactions hook (from indexer instead of localStorage)
   const { transactions: userTransactions, refetchOffers, invalidateSales } = useUserTransactions({
@@ -393,23 +408,6 @@ export default function MarketplacePage() {
   const handleCardClick = useCallback((listing: Listing) => {
     setDetailModalListing(listing);
   }, []);
-
-  /**
-   * Handle clicking on a beast in My Beasts to open detail modal
-   */
-  const handleBeastClick = useCallback((beast: Beast) => {
-    setDetailModalListing({
-      listingId: beast.id,
-      tokenId: beast.id.split(':').pop() || beast.id,
-      seller: address || '',
-      price: '0',
-      beast: beast,
-      status: 'active' as const,
-      active: false,
-      paymentToken: null,
-      orderId: 0,
-    });
-  }, [address]);
 
   /**
    * Handle closing the detail modal
@@ -724,12 +722,12 @@ export default function MarketplacePage() {
           size="default"
           onClick={() => {
             handleCloseDetailModal();
-            cartsHook.handleAddToPurchaseCart(listing);
+            globalCart.togglePurchaseCart(listing);
           }}
           disabled={!listing.active}
           className="w-full sm:w-auto font-semibold tracking-wide cursor-pointer"
         >
-          {cartsHook.isInPurchaseCart(listing.listingId) ? "In Cart" : "Add to Cart"}
+          {globalCart.isInPurchaseCart(listing.listingId) ? "In Cart" : "Add to Cart"}
         </Button>
         <Button
           variant="outline"
@@ -826,6 +824,17 @@ export default function MarketplacePage() {
           <ViewToggle value={filtersHook.activeTab} onChange={filtersHook.setActiveTab} />
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {filterControls}
+            {filtersHook.activeTab === "my-beasts" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-[10px] sm:text-xs h-7 sm:h-9 px-2 sm:px-4"
+                onClick={() => dataHook.reloadUserBeasts()}
+                disabled={dataHook.userBeastsLoading}
+              >
+                {dataHook.userBeastsLoading ? "…" : "Refresh"}
+              </Button>
+            )}
             {filtersHook.activeTab === "my" && (
               <Button
                 variant="outline"
@@ -860,7 +869,7 @@ export default function MarketplacePage() {
         </div>
 
         {/* Main content area */}
-        {filtersHook.activeTab === "explore" ? (
+        {filtersHook.activeTab === "explore" && (
           <section className="space-y-4">
             <div className="overflow-x-auto -mx-2 px-2 scrollbar-hide">
               <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-1 min-w-max">
@@ -948,14 +957,14 @@ export default function MarketplacePage() {
                           tokenLogoUrl={getTokenLogoUrl(listing)}
                           status={listing.status}
                           buyDisabled={!listing.active || !address}
-                          inCart={cartsHook.isInPurchaseCart(listing.listingId)}
-                          primaryActionLabel={cartsHook.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
+                          inCart={globalCart.isInPurchaseCart(listing.listingId)}
+                          primaryActionLabel={globalCart.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
                           onCardClick={() => handleCardClick(listing)}
                           onBuyNow={() => {
                             setPurchasingListing(listing);
                             setPurchaseConfirmOpen(true);
                           }}
-                          onAddToCart={() => cartsHook.handleAddToPurchaseCart(listing)}
+                          onAddToCart={() => globalCart.togglePurchaseCart(listing)}
                           onMakeOffer={() => {
                             setOfferBeast(listing.beast ?? null);
                             setOfferTokenId(listing.tokenId);
@@ -1036,14 +1045,14 @@ export default function MarketplacePage() {
                             tokenLogoUrl={getTokenLogoUrl(listing)}
                             status={listing.status}
                             buyDisabled={!listing.active || !address}
-                            inCart={cartsHook.isInPurchaseCart(listing.listingId)}
-                            primaryActionLabel={cartsHook.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
+                            inCart={globalCart.isInPurchaseCart(listing.listingId)}
+                            primaryActionLabel={globalCart.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
                             onCardClick={() => handleCardClick(listing)}
                             onBuyNow={() => {
                               setPurchasingListing(listing);
                               setPurchaseConfirmOpen(true);
                             }}
-                            onAddToCart={() => cartsHook.handleAddToPurchaseCart(listing)}
+                            onAddToCart={() => globalCart.togglePurchaseCart(listing)}
                             onMakeOffer={() => {
                               setOfferBeast(listing.beast ?? null);
                               setOfferTokenId(listing.tokenId);
@@ -1513,7 +1522,83 @@ export default function MarketplacePage() {
               </div>
             )}
           </section>
-        ) : (
+        )}
+
+        {filtersHook.activeTab === "my-beasts" && (
+          <section className="space-y-4">
+            {dataHook.userBeastsLoading ? (
+              <p className="text-xs text-gray-400">Loading your beasts…</p>
+            ) : dataHook.userBeastsError ? (
+              <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-4">
+                <p className="text-sm text-yellow-200">{dataHook.userBeastsError}</p>
+              </div>
+            ) : filtersHook.sortedUserBeasts.length === 0 ? (
+              <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
+                You don't own any beasts yet.
+              </p>
+            ) : (
+              <>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={filtersHook.showDuplicatesOnly}
+                      onChange={(e) => filtersHook.setShowDuplicatesOnly(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-lsGold focus:ring-lsGold focus:ring-offset-gray-900"
+                    />
+                    <span className="text-xs font-medium text-gray-400 group-hover:text-lsGold transition-colors">
+                      Show Duplicates Only
+                    </span>
+                  </label>
+                  {globalCart.listCart.length > 0 && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setListDialogOpen(true)}
+                      className="ml-auto"
+                    >
+                      List {globalCart.listCart.length} Beast{globalCart.listCart.length > 1 ? "s" : ""}
+                    </Button>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                  {filtersHook.userBeastsToRender.map((beast) => {
+                    // Use pre-computed token ID from filters hook
+                    const tokenId = filtersHook.normalizedBeastTokenIds.get(beast.id) || beast.id;
+                    const isListed = filtersHook.alreadyListedTokenIds.has(tokenId);
+                    const inCart = globalCart.isInListCart(beast.id);
+
+                    return (
+                      <ListingCard
+                        key={beast.id}
+                        beast={beast}
+                        tokenId={tokenId}
+                        inCart={inCart}
+                        isAlreadyListed={isListed}
+                        showSelectionOverlay={!isListed}
+                        onCardClick={() => !isListed && globalCart.toggleListCart(beast)}
+                        onListSingle={() => {
+                          setSingleBeastToList(beast);
+                          setListDialogOpen(true);
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                {filtersHook.totalUserBeastsPages > 1 && (
+                  <Pagination
+                    currentPage={filtersHook.currentPage}
+                    totalPages={filtersHook.totalUserBeastsPages}
+                    totalItems={filtersHook.sortedUserBeasts.length}
+                    itemsPerPage={filtersHook.itemsPerPage}
+                    onPageChange={filtersHook.setCurrentPage}
+                  />
+                )}
+              </>
+            )}
+          </section>
+        )}
+
+        {filtersHook.activeTab === "my" && (
           <section className="space-y-4">
             <div className="overflow-x-auto -mx-2 px-2 scrollbar-hide">
               <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-1 min-w-max">
@@ -1528,18 +1613,6 @@ export default function MarketplacePage() {
                   )}
                 >
                   Listings
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMyActivitySubTab("beasts")}
-                  className={cn(
-                    "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
-                    myActivitySubTab === "beasts"
-                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
-                      : "text-gray-400 hover:text-lsGold"
-                  )}
-                >
-                  Beasts
                 </button>
                 <button
                   type="button"
@@ -1644,76 +1717,6 @@ export default function MarketplacePage() {
                         );
                       })}
                     </div>
-                  </>
-                )}
-              </>
-            )}
-
-            {myActivitySubTab === "beasts" && (
-              <>
-                {dataHook.userBeastsLoading ? (
-                  <p className="text-xs text-gray-400">Loading your beasts…</p>
-                ) : dataHook.userBeastsError ? (
-                  <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-4">
-                    <p className="text-sm text-yellow-200">{dataHook.userBeastsError}</p>
-                  </div>
-                ) : filtersHook.sortedUserBeasts.length === 0 ? (
-                  <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
-                    You don't own any beasts yet.
-                  </p>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-4">
-                      <label className="flex items-center gap-2 cursor-pointer group">
-                        <input
-                          type="checkbox"
-                          checked={filtersHook.showDuplicatesOnly}
-                          onChange={(e) => filtersHook.setShowDuplicatesOnly(e.target.checked)}
-                          className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-lsGold focus:ring-lsGold focus:ring-offset-gray-900"
-                        />
-                        <span className="text-xs font-medium text-gray-400 group-hover:text-lsGold transition-colors">
-                          Show Duplicates Only
-                        </span>
-                      </label>
-                      {cartsHook.cartBeasts.length > 0 && (
-                        <Button
-                          variant="outline"
-                          onClick={() => setListDialogOpen(true)}
-                          className="ml-auto"
-                        >
-                          List {cartsHook.cartBeasts.length} Beast{cartsHook.cartBeasts.length > 1 ? "s" : ""}
-                        </Button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                      {filtersHook.userBeastsToRender.map((beast) => {
-                        // Use pre-computed token ID from filters hook
-                        const tokenId = filtersHook.normalizedBeastTokenIds.get(beast.id) || beast.id;
-                        const isListed = filtersHook.alreadyListedTokenIds.has(tokenId);
-                        const inCart = cartsHook.isInCart(beast.id);
-
-                        return (
-                          <ListingCard
-                            key={beast.id}
-                            beast={beast}
-                            tokenId={tokenId}
-                            inCart={inCart}
-                            isAlreadyListed={isListed}
-                            onCardClick={() => handleBeastClick(beast)}
-                            onAddToCart={() => cartsHook.handleToggleCart(beast)}
-                          />
-                        );
-                      })}
-                    </div>
-                    {filtersHook.totalUserBeastsPages > 1 && (
-                      <Pagination
-                        currentPage={filtersHook.currentPage}
-                        totalPages={filtersHook.totalUserBeastsPages}
-                        totalItems={filtersHook.sortedUserBeasts.length}
-                        itemsPerPage={filtersHook.itemsPerPage}
-                        onPageChange={filtersHook.setCurrentPage}
-                      />
-                    )}
                   </>
                 )}
               </>
@@ -2118,11 +2121,17 @@ export default function MarketplacePage() {
           {listDialogOpen && (
             <CartListDialog
               open={listDialogOpen}
-              onOpenChange={setListDialogOpen}
-              beasts={cartsHook.cartBeasts}
-              onRemoveBeast={cartsHook.handleRemoveFromCart}
-              onListed={actionsHook.handleListed}
-              onClearCart={cartsHook.handleClearCart}
+              onOpenChange={(open) => {
+                setListDialogOpen(open);
+                if (!open) setSingleBeastToList(null);
+              }}
+              beasts={singleBeastToList ? [singleBeastToList] : globalCart.listCart}
+              onRemoveBeast={singleBeastToList ? undefined : globalCart.removeFromListCart}
+              onListed={() => {
+                actionsHook.handleListed();
+                if (singleBeastToList) setSingleBeastToList(null);
+              }}
+              onClearCart={singleBeastToList ? undefined : globalCart.clearListCart}
               existingListings={filtersHook.sortedListings}
             />
           )}
@@ -2165,13 +2174,13 @@ export default function MarketplacePage() {
             <PurchaseCartDialog
               open={purchaseCartOpen}
               onOpenChange={setPurchaseCartOpen}
-              listings={cartsHook.purchaseCart}
-              onRemove={cartsHook.handleRemoveFromPurchaseCart}
-              onClearAll={cartsHook.handleClearPurchaseCart}
+              listings={globalCart.purchaseCart}
+              onRemove={globalCart.removeFromPurchaseCart}
+              onClearAll={globalCart.clearPurchaseCart}
               onPurchaseAll={(validListings) =>
                 actionsHook.handlePurchaseAll(
-                  validListings ?? cartsHook.purchaseCart,
-                  cartsHook.handleRemoveFromPurchaseCart
+                  validListings ?? globalCart.purchaseCart,
+                  globalCart.removeFromPurchaseCart
                 ).then((success) => {
                   if (success) setPurchaseCartOpen(false);
                 })
@@ -2303,72 +2312,11 @@ export default function MarketplacePage() {
           onResetFilters={filtersHook.handleResetFilters}
         />
 
-        <Suspense fallback={null}>
-          {unifiedCartOpen && (
-            <UnifiedCartDialog
-              open={unifiedCartOpen}
-              onOpenChange={setUnifiedCartOpen}
-              buyItems={cartsHook.purchaseCart}
-              listBeasts={cartsHook.cartBeasts}
-              beastPrices={cartsHook.beastPrices}
-              onRemoveBuyItem={cartsHook.handleRemoveFromPurchaseCart}
-              onRemoveListBeast={cartsHook.handleRemoveFromCart}
-              onUpdateBeastPrice={cartsHook.handleUpdateBeastPrice}
-              onClearAll={() => {
-                cartsHook.setCartBeasts([]);
-                cartsHook.setPurchaseCart([]);
-                cartsHook.setBeastPrices(new Map());
-              }}
-              onExecuteAll={(validBuyItems) =>
-                actionsHook.handleExecuteUnifiedCart(
-                  cartsHook.cartBeasts,
-                  cartsHook.purchaseCart,
-                  cartsHook.beastPrices,
-                  validBuyItems
-                ).then((success) => {
-                  if (success) setUnifiedCartOpen(false);
-                })
-              }
-              isProcessing={actionsHook.purchasingBatch || actionsHook.listingBatch}
-              selectedToken={selectedPaymentToken}
-            />
-          )}
-        </Suspense>
-
-        {/* Floating Cart Button */}
-        {(cartsHook.cartBeasts.length > 0 || cartsHook.purchaseCart.length > 0) && (
-          <button
-            onClick={() => {
-              // Smart cart button - opens the appropriate dialog based on cart contents
-              const hasListings = cartsHook.cartBeasts.length > 0;
-              const hasPurchases = cartsHook.purchaseCart.length > 0;
-
-              if (hasListings && !hasPurchases) {
-                // Only beasts to list - open List dialog
-                setListDialogOpen(true);
-              } else if (hasPurchases && !hasListings) {
-                // Only purchases - open Purchase Cart dialog
-                setPurchaseCartOpen(true);
-              } else {
-                // Both - this is not supported yet, show message
-                toast.error("Please complete listings and purchases separately. Use the 'List X Beasts' button for listings.");
-              }
-            }}
-            className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-green-600 to-amber-600 text-white rounded-full shadow-2xl hover:shadow-3xl hover:scale-110 transition-all duration-300 font-semibold text-sm group animate-bounce"
-            style={{
-              animationDuration: "2s",
-              animationIterationCount: "3",
-            }}
-          >
-            <ShoppingCart className="h-5 w-5 group-hover:rotate-12 transition-transform" />
-            <span className="flex items-center gap-1.5">
-              Cart
-              <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs font-bold">
-                {cartsHook.cartBeasts.length + cartsHook.purchaseCart.length}
-              </span>
-            </span>
-          </button>
-        )}
+        {/* Floating Cart Buttons (List Beasts / Buy Beasts) */}
+        <FloatingCarts
+          onOpenListCart={() => setListDialogOpen(true)}
+          onOpenPurchaseCart={() => setPurchaseCartOpen(true)}
+        />
       </div>
     </AppLayout>
   );

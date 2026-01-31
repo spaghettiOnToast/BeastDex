@@ -21,9 +21,14 @@ export function ViewToggle({ value, onChange }: ViewToggleProps) {
       description: "Browse and purchase beasts from other users.",
     },
     {
+      value: "my-beasts",
+      label: "My Beasts",
+      description: "View and list your beasts for sale.",
+    },
+    {
       value: "my",
       label: "My Activity",
-      description: "Manage your beasts and live listings.",
+      description: "Manage your listings and offers.",
     },
   ];
 

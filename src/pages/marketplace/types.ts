@@ -1,7 +1,7 @@
 /**
  * Marketplace view types
  */
-export type MarketplaceView = "explore" | "my";
+export type MarketplaceView = "explore" | "my-beasts" | "my";
 
 /**
  * Explore sub-tab types
@@ -11,7 +11,7 @@ export type ExploreSubTab = "browse" | "recent-listed" | "recent-sold" | "activi
 /**
  * My Activity sub-tab types
  */
-export type MyActivitySubTab = "listings" | "beasts" | "offers" | "transactions";
+export type MyActivitySubTab = "listings" | "offers" | "transactions";
 
 /**
  * Transaction entry for user activity tracking

@@ -20,6 +20,7 @@ type Props = {
   onEdit?: () => void;
   onCancel?: () => void;
   onCardClick?: () => void; // Click on card image to show details
+  onListSingle?: () => void; // Open list dialog for single beast
   ownedByUser?: boolean;
   compact?: boolean;
   primaryActionLabel?: string;
@@ -30,6 +31,7 @@ type Props = {
   pendingCancel?: boolean;
   status?: ListingStatus;
   isAlreadyListed?: boolean;
+  showSelectionOverlay?: boolean; // Show + on hover, tick when in cart
 };
 
 function ListingCard({
@@ -46,6 +48,7 @@ function ListingCard({
   onEdit,
   onCancel,
   onCardClick,
+  onListSingle,
   ownedByUser = false,
   compact = false,
   primaryActionLabel,
@@ -56,6 +59,7 @@ function ListingCard({
   pendingCancel = false,
   status,
   isAlreadyListed = false,
+  showSelectionOverlay = false,
 }: Props) {
   // For backwards compatibility, if onBuy is provided but not onBuyNow/onAddToCart, use onBuy as Buy Now
   const handleBuyNow = onBuyNow || onBuy;
@@ -118,6 +122,22 @@ function ListingCard({
                 {offersCount}
               </p>
             </div>
+          )}
+          {/* Selection overlay for My Beasts */}
+          {showSelectionOverlay && (
+            inCart ? (
+              <div className="absolute top-1 right-1 sm:top-2 sm:right-2 w-5 h-5 sm:w-6 sm:h-6 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+                <svg className="w-3 h-3 sm:w-4 sm:h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            ) : (
+              <div className="absolute top-1 right-1 sm:top-2 sm:right-2 w-5 h-5 sm:w-6 sm:h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <svg className="w-3 h-3 sm:w-4 sm:h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+              </div>
+            )
           )}
         </div>
       </CardContent>
@@ -205,8 +225,25 @@ function ListingCard({
                 </Button>
               )}
 
+              {/* List Single Beast (My Beasts tab) */}
+              {onListSingle && (
+                isAlreadyListed ? (
+                  <div className="flex-1 text-[7px] sm:text-[9px] px-0.5 sm:px-1.5 py-0.5 sm:py-1 h-5 sm:h-6 bg-green-500/20 text-green-300 border border-green-400/50 rounded-md flex items-center justify-center font-semibold">
+                    Listed
+                  </div>
+                ) : (
+                  <Button
+                    className="flex-1 text-[7px] sm:text-[9px] px-0.5 sm:px-1.5 py-0.5 sm:py-1 h-5 sm:h-6 border-lsGold text-lsGold hover:bg-lsGold/10 hover:border-lsGold font-semibold"
+                    variant="outline"
+                    onClick={onListSingle}
+                  >
+                    List
+                  </Button>
+                )
+              )}
+
               {/* Add to Cart */}
-              {handleAddToCart && (
+              {handleAddToCart && !onListSingle && (
                 isAlreadyListed ? (
                   <div className="flex-1 text-[7px] sm:text-[9px] px-0.5 sm:px-1.5 py-0.5 sm:py-1 h-5 sm:h-6 bg-green-500/20 text-green-300 border border-green-400/50 rounded-md flex items-center justify-center font-semibold">
                     Listed
