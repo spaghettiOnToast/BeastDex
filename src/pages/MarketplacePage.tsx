@@ -11,7 +11,11 @@ import type { Listing } from "../services/marketplace/types";
 import {
   getPaymentTokenByAddress,
   BEASTS_COLLECTION_ADDRESS,
+  PLATFORM_FEE_BP,
+  CREATOR_ROYALTY_BP,
 } from "../services/marketplace/constants";
+import { toBigIntSafe } from "../utils/bigint";
+import { fromWei } from "../utils/price";
 import { cancelListingFlow } from "../services/marketplace/flows";
 import {
   type OrderModel,
@@ -58,8 +62,9 @@ import { useTokenMap, tokenAmountToUsd } from "../hooks/useEkuboTokens";
 import { ViewToggle } from "./marketplace/components/ViewToggle";
 import type { ExploreSubTab, MyActivitySubTab } from "./marketplace/types";
 
-// Storage key for hidden offers
+// Storage keys for hidden offers
 const HIDDEN_OFFERS_KEY = "beastdex-hidden-offers";
+const HIDDEN_MADE_OFFERS_KEY = "beastdex-hidden-made-offers";
 
 /**
  * Format a timestamp to relative time (e.g., "24 minutes ago")
@@ -129,7 +134,7 @@ export default function MarketplacePage() {
   const [activityTypeFilter, setActivityTypeFilter] = useState<"listing" | "sale" | null>(null);
   const [recentViewMode, setRecentViewMode] = useState<"cards" | "table">("cards");
 
-  // Hidden offers state (persisted to localStorage)
+  // Hidden offers received state (persisted to localStorage)
   const [hiddenOfferIds, setHiddenOfferIds] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem(HIDDEN_OFFERS_KEY);
@@ -140,6 +145,17 @@ export default function MarketplacePage() {
   });
   const [showHiddenOffers, setShowHiddenOffers] = useState(false);
 
+  // Hidden made offers state (persisted to localStorage)
+  const [hiddenMadeOfferIds, setHiddenMadeOfferIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(HIDDEN_MADE_OFFERS_KEY);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const [showHiddenMadeOffers, setShowHiddenMadeOffers] = useState(false);
+
   // Persist hidden offers to localStorage
   useEffect(() => {
     try {
@@ -148,6 +164,15 @@ export default function MarketplacePage() {
       // Ignore localStorage errors
     }
   }, [hiddenOfferIds]);
+
+  // Persist hidden made offers to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(HIDDEN_MADE_OFFERS_KEY, JSON.stringify([...hiddenMadeOfferIds]));
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [hiddenMadeOfferIds]);
 
   // Sync global cart dialog state with local dialogs
   // When floating cart buttons are clicked, open the local marketplace-specific dialogs
@@ -165,9 +190,22 @@ export default function MarketplacePage() {
     }
   }, [globalCart.purchaseDialogOpen, globalCart.closePurchaseDialog]);
 
-  // Toggle hide/unhide offer
+  // Toggle hide/unhide offer received
   const handleToggleHideOffer = useCallback((offerId: string) => {
     setHiddenOfferIds(prev => {
+      const next = new Set(prev);
+      if (next.has(offerId)) {
+        next.delete(offerId);
+      } else {
+        next.add(offerId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Toggle hide/unhide made offer
+  const handleToggleHideMadeOffer = useCallback((offerId: string) => {
+    setHiddenMadeOfferIds(prev => {
       const next = new Set(prev);
       if (next.has(offerId)) {
         next.delete(offerId);
@@ -290,13 +328,20 @@ export default function MarketplacePage() {
 
   // Enrich offers with beast names from listings or owned beasts, and hidden state
   // Also filter out offers made by the current user (you can't accept your own offers)
+  // And filter out expired offers
   const enrichedOffersReceived = useMemo(() => {
     if (!offersReceived || offersReceived.length === 0) return [];
 
-    // Filter out offers made by the current user
-    const filteredOffers = address
-      ? offersReceived.filter(offer => offer.owner.toLowerCase() !== address.toLowerCase())
-      : offersReceived;
+    const now = Math.floor(Date.now() / 1000);
+
+    // Filter out offers made by the current user and expired offers
+    const filteredOffers = offersReceived.filter(offer => {
+      // Filter out own offers
+      if (address && offer.owner.toLowerCase() === address.toLowerCase()) return false;
+      // Filter out expired offers
+      if (offer.expiration && offer.expiration < now) return false;
+      return true;
+    });
 
     return filteredOffers.map(offer => {
       const tokenId = String(offer.tokenId);
@@ -332,6 +377,40 @@ export default function MarketplacePage() {
     }
     return enrichedOffersReceived.filter(offer => !offer.isHidden);
   }, [enrichedOffersReceived, showHiddenOffers]);
+
+  // Enrich made offers with hidden state and filter expired by default
+  const enrichedMadeOffers = useMemo(() => {
+    if (!userMadeOffers || userMadeOffers.length === 0) return [];
+
+    const now = Math.floor(Date.now() / 1000);
+
+    return userMadeOffers.map(offer => {
+      const isExpired = offer.expiration && offer.expiration < now;
+      // Try to find beast name from listings
+      const matchingListing = dataHook.listings.find(l => l.tokenId === String(offer.tokenId));
+      const beastName = matchingListing?.beast?.name || `Beast #${offer.tokenId}`;
+
+      return {
+        ...offer,
+        beastName,
+        isExpired,
+        isHidden: hiddenMadeOfferIds.has(offer.id.toString()) || isExpired, // Auto-hide expired
+      };
+    });
+  }, [userMadeOffers, dataHook.listings, hiddenMadeOfferIds]);
+
+  // Filter made offers based on visibility
+  const visibleMadeOffers = useMemo(() => {
+    if (showHiddenMadeOffers) {
+      return enrichedMadeOffers;
+    }
+    return enrichedMadeOffers.filter(offer => !offer.isHidden);
+  }, [enrichedMadeOffers, showHiddenMadeOffers]);
+
+  // Count hidden made offers for badge
+  const hiddenMadeOffersCount = useMemo(() => {
+    return enrichedMadeOffers.filter(offer => offer.isHidden).length;
+  }, [enrichedMadeOffers]);
 
   // Count hidden offers for badge
   const hiddenOffersCount = useMemo(() => {
@@ -873,7 +952,10 @@ export default function MarketplacePage() {
               <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-1 min-w-max">
                 <button
                   type="button"
-                  onClick={() => setExploreSubTab("browse")}
+                  onClick={() => {
+                    setExploreSubTab("browse");
+                    filtersHook.setSortOption("default");
+                  }}
                   className={cn(
                     "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
                     exploreSubTab === "browse"
@@ -885,7 +967,10 @@ export default function MarketplacePage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setExploreSubTab("recent-listed")}
+                  onClick={() => {
+                    setExploreSubTab("recent-listed");
+                    filtersHook.setSortOption("recent-desc");
+                  }}
                   className={cn(
                     "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
                     exploreSubTab === "recent-listed"
@@ -1724,7 +1809,7 @@ export default function MarketplacePage() {
               <>
                 {(offersReceivedLoading || userMadeOffersLoading) ? (
                   <p className="text-xs text-gray-400">Loading offers...</p>
-                ) : (enrichedOffersReceived.length === 0 && (!userMadeOffers || userMadeOffers.length === 0)) ? (
+                ) : (enrichedOffersReceived.length === 0 && enrichedMadeOffers.length === 0) ? (
                   <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
                     No offers yet. Make an offer on a beast or wait for offers on your beasts.
                   </p>
@@ -1860,15 +1945,34 @@ export default function MarketplacePage() {
                     )}
 
                     {/* Offers Made Section */}
-                    {userMadeOffers && userMadeOffers.length > 0 && (
+                    {enrichedMadeOffers.length > 0 && (
                       <div className="space-y-3">
-                        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                          Offers Made
-                          <span className="bg-purple-500/20 text-purple-400 text-[10px] px-2 py-0.5 rounded-full">
-                            {userMadeOffers.length}
-                          </span>
-                        </h3>
-                        {userMadeOffers.map((offer, idx) => {
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                            Offers Made
+                            <span className="bg-purple-500/20 text-purple-400 text-[10px] px-2 py-0.5 rounded-full">
+                              {visibleMadeOffers.length}
+                            </span>
+                          </h3>
+                          {hiddenMadeOffersCount > 0 && (
+                            <label className="flex items-center gap-2 cursor-pointer group">
+                              <input
+                                type="checkbox"
+                                checked={showHiddenMadeOffers}
+                                onChange={(e) => setShowHiddenMadeOffers(e.target.checked)}
+                                className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-lsGold focus:ring-lsGold focus:ring-offset-gray-900"
+                              />
+                              <span className="text-xs font-medium text-gray-400 group-hover:text-lsGold transition-colors">
+                                Show Hidden ({hiddenMadeOffersCount})
+                              </span>
+                            </label>
+                          )}
+                        </div>
+                        {visibleMadeOffers.length === 0 ? (
+                          <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-4 text-center text-xs text-gray-400">
+                            All offers are hidden or expired. Check "Show Hidden" to view them.
+                          </p>
+                        ) : visibleMadeOffers.map((offer, idx) => {
                           const token = getPaymentTokenByAddress(offer.currency);
                           const symbol = token?.symbol ?? 'LORDS';
                           const priceFormatted = formatPrice(String(offer.price), symbol);
@@ -1876,18 +1980,13 @@ export default function MarketplacePage() {
                           const now = new Date();
                           const hoursRemaining = Math.floor((expirationDate.getTime() - now.getTime()) / (1000 * 60 * 60));
                           const daysRemaining = Math.floor(hoursRemaining / 24);
-                          const isExpired = expirationDate < now;
-
-                          // Try to find beast name from listings
-                          const matchingListing = dataHook.listings.find(l => l.tokenId === String(offer.tokenId));
-                          const beastName = matchingListing?.beast?.name || `Beast #${offer.tokenId}`;
 
                           return (
                             <div
                               key={`offer-made-${offer.id}-${idx}`}
                               className={cn(
                                 "rounded-lg border p-4 transition-all",
-                                isExpired
+                                offer.isHidden
                                   ? "border-gray-700/50 bg-gray-900/30 opacity-60"
                                   : "border-purple-500/30 bg-purple-500/5"
                               )}
@@ -1899,11 +1998,16 @@ export default function MarketplacePage() {
                                       Offer Made
                                     </span>
                                     <p className="font-semibold text-white truncate">
-                                      {beastName}
+                                      {offer.beastName}
                                     </p>
-                                    {isExpired && (
+                                    {offer.isExpired && (
                                       <span className="flex-shrink-0 text-[10px] bg-gray-700/50 text-gray-400 px-2 py-0.5 rounded">
                                         Expired
+                                      </span>
+                                    )}
+                                    {offer.isHidden && !offer.isExpired && (
+                                      <span className="flex-shrink-0 text-[10px] bg-gray-700/50 text-gray-400 px-2 py-0.5 rounded">
+                                        Hidden
                                       </span>
                                     )}
                                   </div>
@@ -1914,7 +2018,7 @@ export default function MarketplacePage() {
                                     <span>Token #{offer.tokenId}</span>
                                     <span className="text-gray-600">•</span>
                                     <span>
-                                      {isExpired
+                                      {offer.isExpired
                                         ? `Expired ${expirationDate.toLocaleDateString()}`
                                         : daysRemaining > 1
                                         ? `Expires in ${daysRemaining} days`
@@ -1924,12 +2028,20 @@ export default function MarketplacePage() {
                                     </span>
                                   </div>
                                 </div>
-                                <div className="flex-shrink-0">
+                                <div className="flex-shrink-0 flex items-center gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleToggleHideMadeOffer(offer.id.toString())}
+                                    className="text-gray-400 hover:text-white text-xs px-3"
+                                  >
+                                    {hiddenMadeOfferIds.has(offer.id.toString()) ? "Unhide" : "Hide"}
+                                  </Button>
                                   <span className={cn(
                                     "text-xs px-3 py-1.5 rounded-md font-medium",
-                                    isExpired ? "bg-gray-700/50 text-gray-400" : "bg-purple-500/20 text-purple-300"
+                                    offer.isExpired ? "bg-gray-700/50 text-gray-400" : "bg-purple-500/20 text-purple-300"
                                   )}>
-                                    {isExpired ? "Expired" : "Pending"}
+                                    {offer.isExpired ? "Expired" : "Pending"}
                                   </span>
                                 </div>
                               </div>
@@ -2232,7 +2344,17 @@ export default function MarketplacePage() {
                 Are you sure you want to accept this offer?
               </DialogDescription>
             </DialogHeader>
-            {offerToAccept && (
+            {offerToAccept && (() => {
+              // Calculate fees from offer price
+              const token = getPaymentTokenByAddress(offerToAccept.offer.currency);
+              const tokenSymbol = token?.symbol ?? "STRK";
+              const tokenDecimals = token?.decimals ?? 18;
+              const priceBigInt = toBigIntSafe(offerToAccept.offer.price as any);
+              const platformFee = (priceBigInt * BigInt(PLATFORM_FEE_BP)) / 10000n;
+              const creatorRoyalty = (priceBigInt * BigInt(CREATOR_ROYALTY_BP)) / 10000n;
+              const youReceive = priceBigInt - platformFee - creatorRoyalty;
+
+              return (
               <div className="space-y-4">
                 <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-4 space-y-3">
                   <div>
@@ -2250,6 +2372,27 @@ export default function MarketplacePage() {
                     </p>
                   </div>
                 </div>
+
+                {/* Fee breakdown */}
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Offer Amount:</span>
+                    <span className="text-white">{fromWei(priceBigInt, tokenDecimals)} {tokenSymbol}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Platform Fee ({PLATFORM_FEE_BP / 100}%):</span>
+                    <span className="text-gray-400">-{fromWei(platformFee, tokenDecimals)} {tokenSymbol}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Creator Royalty ({CREATOR_ROYALTY_BP / 100}%):</span>
+                    <span className="text-gray-400">-{fromWei(creatorRoyalty, tokenDecimals)} {tokenSymbol}</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-semibold border-t border-gray-700 pt-2">
+                    <span className="text-white">You Receive:</span>
+                    <span className="text-lsGold">{fromWei(youReceive, tokenDecimals)} {tokenSymbol}</span>
+                  </div>
+                </div>
+
                 <p className="text-xs text-gray-400">
                   By accepting this offer, your beast will be transferred to the buyer and you will receive the payment.
                 </p>
@@ -2282,7 +2425,8 @@ export default function MarketplacePage() {
                   </Button>
                 </div>
               </div>
-            )}
+              );
+            })()}
           </DialogContent>
         </Dialog>
 

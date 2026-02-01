@@ -22,8 +22,6 @@ import {
   BEASTS_COLLECTION_ADDRESS,
   CLIENT_FEE_BP,
   MARKETPLACE_ADDRESS,
-  PLATFORM_FEE_BP,
-  CREATOR_ROYALTY_BP,
 } from "../../services/marketplace/constants";
 import { ensureErc20Allowance, getProvider } from "../../services/marketplace/approvals";
 import { toWei, fromWei } from "../../utils/price";
@@ -314,57 +312,26 @@ export default function MakeOfferDialog({
               </p>
             ) : null}
           </div>
-          {feeDetails && priceBigInt && (() => {
-            // Calculate what seller would receive
-            const platformFee = (priceBigInt * BigInt(PLATFORM_FEE_BP)) / 10000n;
-            const creatorRoyalty = (priceBigInt * BigInt(CREATOR_ROYALTY_BP)) / 10000n;
-            const sellerReceives = priceBigInt - platformFee - creatorRoyalty;
-            return (
-              <div className="space-y-4">
-                {/* You pay section */}
-                <div className="space-y-2">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">You pay if accepted</p>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-400">Offer Amount:</span>
-                    <span className="text-sm font-medium">{price} {tokenSymbol}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-400">Client Fee ({CLIENT_FEE_BP / 100}%):</span>
-                    <span className="text-sm font-medium text-gray-400">+{feeDetails.feeFormatted} {tokenSymbol}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-gray-700 pt-2">
-                    <span className="text-sm font-semibold text-white">Total to Pay:</span>
-                    <span className="text-sm font-semibold text-lsGold">{feeDetails.totalFormatted} {tokenSymbol}</span>
-                  </div>
-                </div>
-
-                {/* Seller receives section */}
-                <div className="rounded-md bg-gray-800/50 border border-gray-700 p-3 space-y-2">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Seller receives if accepted</p>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-400">Offer Amount:</span>
-                    <span className="text-sm font-medium">{price} {tokenSymbol}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-400">Platform Fee ({PLATFORM_FEE_BP / 100}%):</span>
-                    <span className="text-sm font-medium text-gray-400">-{fromWei(platformFee, tokenDecimals)} {tokenSymbol}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-400">Creator Royalty ({CREATOR_ROYALTY_BP / 100}%):</span>
-                    <span className="text-sm font-medium text-gray-400">-{fromWei(creatorRoyalty, tokenDecimals)} {tokenSymbol}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-gray-600 pt-2">
-                    <span className="text-sm font-semibold text-gray-300">Seller Gets:</span>
-                    <span className="text-sm font-semibold text-green-400">{fromWei(sellerReceives, tokenDecimals)} {tokenSymbol}</span>
-                  </div>
-                </div>
-
-                <p className="text-xs text-gray-500 text-center">
-                  Fees are only charged if your offer is accepted.
-                </p>
+          {feeDetails && priceBigInt && (
+            <div className="space-y-2">
+              <p className="text-xs text-gray-500 uppercase tracking-wide">You pay if accepted</p>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-400">Offer Amount:</span>
+                <span className="text-sm font-medium">{price} {tokenSymbol}</span>
               </div>
-            );
-          })()}
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-400">Client Fee ({CLIENT_FEE_BP / 100}%):</span>
+                <span className="text-sm font-medium text-gray-400">+{feeDetails.feeFormatted} {tokenSymbol}</span>
+              </div>
+              <div className="flex justify-between border-t border-gray-700 pt-2">
+                <span className="text-sm font-semibold text-white">Total to Pay:</span>
+                <span className="text-sm font-semibold text-lsGold">{feeDetails.totalFormatted} {tokenSymbol}</span>
+              </div>
+              <p className="text-xs text-gray-500 text-center mt-2">
+                Fees are only charged if your offer is accepted.
+              </p>
+            </div>
+          )}
           {error && <p className="text-sm text-red-400">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button

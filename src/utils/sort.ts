@@ -42,6 +42,24 @@ export function sortListings(
 ): Listing[] {
   if (listings.length <= 1) return [...listings];
 
+  // Special handling for "recent-desc" which needs complex comparison logic
+  if (option === "recent-desc") {
+    return [...listings].sort((a, b) => {
+      const aTime = a.createdAt && a.createdAt > 0 ? a.createdAt : 0;
+      const bTime = b.createdAt && b.createdAt > 0 ? b.createdAt : 0;
+
+      // If both have timestamps, compare by timestamp (most recent first)
+      if (aTime > 0 && bTime > 0) {
+        return bTime - aTime;
+      }
+      // If only one has a timestamp, prefer the one without (likely more recent edit)
+      if (aTime > 0 && bTime === 0) return 1;
+      if (bTime > 0 && aTime === 0) return -1;
+      // If neither has a timestamp, fall back to orderId (higher = more recent)
+      return (b.orderId ?? 0) - (a.orderId ?? 0);
+    });
+  }
+
   // Pre-compute sort keys once (O(n)) instead of during each comparison
   type SortKey = { primary: string | number | bigint; secondary: string };
   type KeyedListing = { listing: Listing; key: SortKey };

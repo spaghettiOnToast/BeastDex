@@ -132,7 +132,7 @@ function ListingCard({
                 </svg>
               </div>
             ) : (
-              <div className="absolute top-1 right-1 sm:top-2 sm:right-2 w-5 h-5 sm:w-6 sm:h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute top-1 right-1 sm:top-2 sm:right-2 w-5 h-5 sm:w-6 sm:h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity border-2 border-white shadow-[0_0_10px_rgba(255,255,255,0.6)]">
                 <svg className="w-3 h-3 sm:w-4 sm:h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                 </svg>
@@ -233,9 +233,15 @@ function ListingCard({
                   </div>
                 ) : (
                   <Button
-                    className="flex-1 text-[7px] sm:text-[9px] px-0.5 sm:px-1.5 py-0.5 sm:py-1 h-5 sm:h-6 border-lsGold text-lsGold hover:bg-lsGold/10 hover:border-lsGold font-semibold"
+                    className={[
+                      "flex-1 text-[7px] sm:text-[9px] px-0.5 sm:px-1.5 py-0.5 sm:py-1 h-5 sm:h-6 font-semibold",
+                      buyDisabled
+                        ? "bg-gray-800 text-gray-400 cursor-not-allowed border-gray-600"
+                        : "border-lsGold text-lsGold hover:bg-lsGold/10 hover:border-lsGold",
+                    ].join(" ")}
                     variant="outline"
                     onClick={onListSingle}
+                    disabled={buyDisabled}
                   >
                     List
                   </Button>
@@ -270,9 +276,15 @@ function ListingCard({
               {/* Make Offer - hide on very small screens to save space */}
               {onMakeOffer && (
                 <Button
-                  className="flex flex-1 border-white text-white hover:bg-gray-800/50 hover:border-white font-semibold transition-all text-[7px] sm:text-[9px] px-0.5 sm:px-1.5 py-0.5 sm:py-1 h-5 sm:h-6"
+                  className={[
+                    "flex flex-1 font-semibold transition-all text-[7px] sm:text-[9px] px-0.5 sm:px-1.5 py-0.5 sm:py-1 h-5 sm:h-6",
+                    buyDisabled
+                      ? "bg-gray-800 text-gray-400 cursor-not-allowed border-gray-600"
+                      : "border-white text-white hover:bg-gray-800/50 hover:border-white",
+                  ].join(" ")}
                   variant="outline"
                   onClick={onMakeOffer}
+                  disabled={buyDisabled}
                 >
                   Offer
                 </Button>

@@ -144,7 +144,7 @@ export function useMarketplaceFilters({
       matchesAttributeFilters(listing, attributeFilters)
     );
 
-    // Apply sorting
+    // Apply user's chosen sort
     return sortListings(filtered, sortOption);
   }, [recentListings, attributeFilters, sortOption]);
 

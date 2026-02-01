@@ -21,7 +21,8 @@ export type SortOption =
   | "last-death-asc"
   | "last-death-desc"
   | "price-asc"
-  | "price-desc";
+  | "price-desc"
+  | "recent-desc";
 
 /**
  * Converts a SortOption (with direction) to a BeastSortField (without direction)
@@ -42,6 +43,7 @@ type SortDropdownProps = {
 
 const OPTIONS: Array<{ label: string; value: SortOption }> = [
   { label: "Default (Power)", value: "default" },
+  { label: "Most Recent", value: "recent-desc" },
   { label: "Price (Low → High)", value: "price-asc" },
   { label: "Price (High → Low)", value: "price-desc" },
   { label: "Beast (A → Z)", value: "beast-asc" },
