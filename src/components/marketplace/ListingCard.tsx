@@ -32,6 +32,8 @@ type Props = {
   status?: ListingStatus;
   isAlreadyListed?: boolean;
   showSelectionOverlay?: boolean; // Show + on hover, tick when in cart
+  inSweepSelection?: boolean; // Highlight when part of sweep floor selection
+  onRemoveFromSweep?: () => void; // Remove this listing from sweep selection
 };
 
 function ListingCard({
@@ -60,6 +62,8 @@ function ListingCard({
   status,
   isAlreadyListed = false,
   showSelectionOverlay = false,
+  inSweepSelection = false,
+  onRemoveFromSweep,
 }: Props) {
   // For backwards compatibility, if onBuy is provided but not onBuyNow/onAddToCart, use onBuy as Buy Now
   const handleBuyNow = onBuyNow || onBuy;
@@ -89,8 +93,11 @@ function ListingCard({
   return (
     <Card
       className={[
-        "group w-full overflow-hidden border border-gray-800/50 bg-gradient-to-br from-black/40 to-gray-900/20 backdrop-blur-sm transition-all duration-300 hover:border-lsGold/30 hover:shadow-xl hover:shadow-lsGold/10 hover:-translate-y-1",
+        "group w-full overflow-hidden border bg-gradient-to-br from-black/40 to-gray-900/20 backdrop-blur-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1",
         compact ? "max-w-[220px]" : "max-w-[280px]",
+        inSweepSelection
+          ? "border-[#39ff14] shadow-[0_0_15px_rgba(57,255,20,0.4)] ring-1 ring-[#39ff14]/40"
+          : "border-gray-800/50 hover:border-lsGold/30 hover:shadow-lsGold/10",
       ].join(" ")}
     >
       <CardContent className="p-0">
@@ -111,6 +118,11 @@ function ListingCard({
               alt={displayName}
               className="object-contain w-full h-full"
             />
+          ) : !beast ? (
+            // Loading skeleton when beast data hasn't loaded yet
+            <div className="flex h-full w-full items-center justify-center bg-gray-800/30 animate-pulse">
+              <div className="w-16 h-16 rounded-full bg-gray-700/50" />
+            </div>
           ) : (
             <div className="flex h-full w-full items-center justify-center text-muted-foreground text-sm">
               No image
@@ -138,6 +150,21 @@ function ListingCard({
                 </svg>
               </div>
             )
+          )}
+          {/* Sweep floor selection tick */}
+          {inSweepSelection && !showSelectionOverlay && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemoveFromSweep?.();
+              }}
+              className="absolute top-1 right-1 sm:top-2 sm:right-2 w-5 h-5 sm:w-6 sm:h-6 bg-[#39ff14] rounded-full flex items-center justify-center shadow-lg shadow-[#39ff14]/30 hover:bg-[#39ff14]/80 transition-colors cursor-pointer"
+            >
+              <svg className="w-3 h-3 sm:w-4 sm:h-4 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </button>
           )}
         </div>
       </CardContent>

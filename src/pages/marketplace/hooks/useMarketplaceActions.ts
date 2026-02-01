@@ -289,6 +289,8 @@ export function useMarketplaceActions({
           );
           await refetchOrders();
           await reloadUserBeasts();
+          // Poll for sales updates to refresh activity/sold tabs
+          void pollForSalesUpdates();
         } else {
           toast.error("Failed to purchase any beasts", { id: toastId });
         }
@@ -312,7 +314,7 @@ export function useMarketplaceActions({
         setPurchasingBatch(false);
       }
     },
-    [account, purchasingBatch, refetchOrders, reloadUserBeasts]
+    [account, purchasingBatch, refetchOrders, reloadUserBeasts, pollForSalesUpdates]
   );
 
   /**

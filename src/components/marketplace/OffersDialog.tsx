@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,7 @@ import { CategoryType, StatusType } from "@cartridge/arcade";
 import { formatPrice } from "../../utils/price";
 import { toBigIntSafe } from "../../utils/bigint";
 import { getPaymentTokenByAddress } from "../../services/marketplace/constants";
+import { useEkuboTokens, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
 
 type Props = {
   open: boolean;
@@ -34,6 +35,33 @@ export default function OffersDialog({
   onAcceptOffer,
   isAccepting,
 }: Props) {
+  const { tokens } = useEkuboTokens();
+
+  // Build token data map for USD calculations
+  const tokenDataMap = useMemo(() => {
+    const map = new Map<string, { decimals: number; usdPrice: number | null | undefined }>();
+    for (const token of tokens) {
+      map.set(token.address.toLowerCase(), {
+        decimals: token.decimals,
+        usdPrice: token.usdPrice,
+      });
+    }
+    return map;
+  }, [tokens]);
+
+  // Get USD value for an offer
+  const getOfferUsdValue = useCallback((order: OrderModel): number | null => {
+    const tokenAddress = (order.currency ?? "0x0").toLowerCase();
+    const tokenData = tokenDataMap.get(tokenAddress);
+    if (!tokenData?.usdPrice) return null;
+    try {
+      const price = toBigIntSafe(order.price as any);
+      return tokenAmountToUsd(price, tokenData.decimals, tokenData.usdPrice);
+    } catch {
+      return null;
+    }
+  }, [tokenDataMap]);
+
   const offers = useMemo(() => {
     if (!orders || orders.length === 0) return [];
 
@@ -105,45 +133,51 @@ export default function OffersDialog({
               No offers yet. Be the first to make an offer!
             </p>
           ) : (
-            offers.map((offer, index) => (
-              <div
-                key={`${offer.id}-${index}`}
-                className="flex items-center justify-between p-4 rounded-lg border border-gray-800 bg-gray-900/50"
-              >
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center gap-3">
-                    <span className="text-lg font-semibold text-lsGold">
-                      {formatOfferPrice(offer)}
-                    </span>
-                    {index === 0 && (
-                      <span className="text-xs bg-lsGold/20 text-lsGold px-2 py-0.5 rounded">
-                        Highest
+            offers.map((offer, index) => {
+              const usdValue = getOfferUsdValue(offer);
+              return (
+                <div
+                  key={`${offer.id}-${index}`}
+                  className="flex items-center justify-between p-4 rounded-lg border border-gray-800 bg-gray-900/50"
+                >
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg font-semibold text-lsGold">
+                        {formatOfferPrice(offer)}
                       </span>
-                    )}
+                      {usdValue !== null && (
+                        <span className="text-sm text-gray-400">${usdValue.toFixed(2)}</span>
+                      )}
+                      {index === 0 && (
+                        <span className="text-xs bg-lsGold/20 text-lsGold px-2 py-0.5 rounded">
+                          Highest
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-400">
+                      <span>From: {formatAddress(offer.owner)}</span>
+                      {offer.expiration && (
+                        <>
+                          <span>•</span>
+                          <span>{formatExpiration(offer.expiration)}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
-                    <span>From: {formatAddress(offer.owner)}</span>
-                    {offer.expiration && (
-                      <>
-                        <span>•</span>
-                        <span>{formatExpiration(offer.expiration)}</span>
-                      </>
-                    )}
-                  </div>
-                </div>
 
-                {isOwner && onAcceptOffer && (
-                  <Button
-                    size="sm"
-                    onClick={() => onAcceptOffer(offer)}
-                    disabled={isAccepting}
-                    className="bg-lsGold text-black hover:bg-lsGold/90"
-                  >
-                    {isAccepting ? "Accepting..." : "Accept"}
-                  </Button>
-                )}
-              </div>
-            ))
+                  {isOwner && onAcceptOffer && (
+                    <Button
+                      size="sm"
+                      onClick={() => onAcceptOffer(offer)}
+                      disabled={isAccepting}
+                      className="bg-lsGold text-black hover:bg-lsGold/90"
+                    >
+                      {isAccepting ? "Accepting..." : "Accept"}
+                    </Button>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
 

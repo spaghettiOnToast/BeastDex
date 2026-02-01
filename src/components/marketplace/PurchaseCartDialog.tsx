@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAccount } from "@starknet-react/core";
 import {
   Dialog,
@@ -15,6 +15,7 @@ import { formatPrice } from "../../utils/price";
 import { getPaymentTokenByAddress, BEASTS_COLLECTION_ADDRESS, CLIENT_FEE_BP } from "../../services/marketplace/constants";
 import { toBigIntSafe } from "../../utils/bigint";
 import { validateListingOwnership, getProvider } from "../../services/marketplace/approvals";
+import { useEkuboTokens, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
 
 type Props = {
   open: boolean;
@@ -39,6 +40,32 @@ export default function PurchaseCartDialog({
   const [invalidListingIds, setInvalidListingIds] = useState<Set<string>>(new Set());
   const [isValidating, setIsValidating] = useState(false);
   const [hasValidated, setHasValidated] = useState(false);
+  const { tokens } = useEkuboTokens();
+
+  // Build a map of token address -> token data for USD calculations
+  const tokenDataMap = useMemo(() => {
+    const map = new Map<string, { decimals: number; usdPrice: number | null | undefined }>();
+    for (const token of tokens) {
+      map.set(token.address.toLowerCase(), {
+        decimals: token.decimals,
+        usdPrice: token.usdPrice,
+      });
+    }
+    return map;
+  }, [tokens]);
+
+  // Get USD value for a listing
+  const getListingUsdValue = useCallback((listing: Listing): number | null => {
+    const tokenAddress = (listing.paymentToken ?? "0x0").toLowerCase();
+    const tokenData = tokenDataMap.get(tokenAddress);
+    if (!tokenData?.usdPrice) return null;
+    try {
+      const price = toBigIntSafe(listing.price);
+      return tokenAmountToUsd(price, tokenData.decimals, tokenData.usdPrice);
+    } catch {
+      return null;
+    }
+  }, [tokenDataMap]);
 
   // Validate all listings when dialog opens or listings change
   const validateListings = useCallback(async () => {
@@ -125,7 +152,7 @@ export default function PurchaseCartDialog({
     return acc;
   }, {} as Record<string, Listing[]>);
 
-  // Calculate totals per token with fee breakdown
+  // Calculate totals per token with fee breakdown and USD values
   const tokenTotals = Object.entries(listingsByToken).map(([tokenAddress, tokenListings]) => {
     const subtotal = tokenListings.reduce((sum, listing) => {
       try {
@@ -137,6 +164,20 @@ export default function PurchaseCartDialog({
     const fee = (subtotal * BigInt(CLIENT_FEE_BP)) / 10000n;
     const total = subtotal + fee;
     const token = getPaymentTokenByAddress(tokenAddress !== 'default' ? tokenAddress : undefined);
+
+    // Calculate USD values
+    const normalizedAddress = (tokenAddress !== 'default' ? tokenAddress : "0x0").toLowerCase();
+    const tokenData = tokenDataMap.get(normalizedAddress);
+    let subtotalUsd: number | null = null;
+    let feeUsd: number | null = null;
+    let totalUsd: number | null = null;
+
+    if (tokenData?.usdPrice) {
+      subtotalUsd = tokenAmountToUsd(subtotal, tokenData.decimals, tokenData.usdPrice);
+      feeUsd = tokenAmountToUsd(fee, tokenData.decimals, tokenData.usdPrice);
+      totalUsd = tokenAmountToUsd(total, tokenData.decimals, tokenData.usdPrice);
+    }
+
     return {
       tokenAddress,
       tokenSymbol: token?.symbol ?? 'STRK',
@@ -144,6 +185,9 @@ export default function PurchaseCartDialog({
       fee,
       total,
       count: tokenListings.length,
+      subtotalUsd,
+      feeUsd,
+      totalUsd,
     };
   });
 
@@ -199,9 +243,17 @@ export default function PurchaseCartDialog({
                       </span>
                     )}
                   </div>
-                  <p className={`text-sm ${isInvalid ? "text-gray-500 line-through" : "text-lsGold"}`}>
-                    {formatListingPrice(listing)}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className={`text-sm ${isInvalid ? "text-gray-500 line-through" : "text-lsGold"}`}>
+                      {formatListingPrice(listing)}
+                    </p>
+                    {!isInvalid && (() => {
+                      const usdValue = getListingUsdValue(listing);
+                      return usdValue !== null ? (
+                        <span className="text-xs text-gray-400">${usdValue.toFixed(2)}</span>
+                      ) : null;
+                    })()}
+                  </div>
                   {isInvalid && (
                     <p className="text-[10px] text-red-400 mt-1">
                       Seller no longer owns this beast
@@ -271,21 +323,42 @@ export default function PurchaseCartDialog({
                     <div key={tokenTotal.tokenAddress} className="space-y-1">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-400">Subtotal ({tokenTotal.tokenSymbol}):</span>
-                        <span className="text-white">
-                          {formatPrice(tokenTotal.subtotal, tokenTotal.tokenSymbol)}
-                        </span>
+                        <div className="text-right">
+                          <span className="text-white">
+                            {formatPrice(tokenTotal.subtotal, tokenTotal.tokenSymbol)}
+                          </span>
+                          {tokenTotal.subtotalUsd !== null && (
+                            <span className="text-xs text-gray-500 ml-2">
+                              ${tokenTotal.subtotalUsd.toFixed(2)}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-400">Client Fee ({CLIENT_FEE_BP / 100}%):</span>
-                        <span className="text-gray-300">
-                          +{formatPrice(tokenTotal.fee, tokenTotal.tokenSymbol)}
-                        </span>
+                        <div className="text-right">
+                          <span className="text-gray-300">
+                            +{formatPrice(tokenTotal.fee, tokenTotal.tokenSymbol)}
+                          </span>
+                          {tokenTotal.feeUsd !== null && (
+                            <span className="text-xs text-gray-500 ml-2">
+                              ${tokenTotal.feeUsd.toFixed(2)}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex justify-between text-base font-semibold border-t border-gray-700 pt-1">
                         <span className="text-gray-300">Total ({tokenTotal.tokenSymbol}):</span>
-                        <span className="text-lsGold">
-                          {formatPrice(tokenTotal.total, tokenTotal.tokenSymbol)}
-                        </span>
+                        <div className="text-right">
+                          <span className="text-lsGold">
+                            {formatPrice(tokenTotal.total, tokenTotal.tokenSymbol)}
+                          </span>
+                          {tokenTotal.totalUsd !== null && (
+                            <span className="text-sm text-gray-400 ml-2">
+                              ${tokenTotal.totalUsd.toFixed(2)}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}

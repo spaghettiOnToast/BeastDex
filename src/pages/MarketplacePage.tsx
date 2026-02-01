@@ -31,6 +31,7 @@ import {
   formatPrice,
 } from "../utils/price";
 import Pagination from "../components/marketplace/Pagination";
+import SweepControl from "../components/marketplace/SweepControl";
 
 // Lazy load dialog components to reduce initial bundle size
 const CartListDialog = lazy(() => import("../components/marketplace/CartListDialog"));
@@ -155,6 +156,11 @@ export default function MarketplacePage() {
     }
   });
   const [showHiddenMadeOffers, setShowHiddenMadeOffers] = useState(false);
+
+  // Sweep selection state - tracks which listings are in the current sweep floor selection
+  const [sweepSelectionIds, setSweepSelectionIds] = useState<Set<string>>(new Set());
+  // Sweep exclusion state - tracks listings manually removed from sweep by user
+  const [sweepExcludedIds, setSweepExcludedIds] = useState<Set<string>>(new Set());
 
   // Persist hidden offers to localStorage
   useEffect(() => {
@@ -686,6 +692,31 @@ export default function MarketplacePage() {
   );
 
   /**
+   * Handle sweep - add multiple listings to cart at once
+   */
+  const handleSweep = useCallback(
+    (listings: Listing[]) => {
+      if (listings.length === 0) return;
+
+      // Add all listings to cart
+      let addedCount = 0;
+      for (const listing of listings) {
+        if (!globalCart.isInPurchaseCart(listing.listingId)) {
+          globalCart.addToPurchaseCart(listing);
+          addedCount++;
+        }
+      }
+
+      if (addedCount > 0) {
+        toast.success(`Added ${addedCount} item${addedCount > 1 ? "s" : ""} to cart`);
+        // Open purchase cart dialog
+        setPurchaseCartOpen(true);
+      }
+    },
+    [globalCart]
+  );
+
+  /**
    * Handle batch cancel of multiple listings
    */
   const handleBatchCancel = useCallback(
@@ -750,26 +781,26 @@ export default function MarketplacePage() {
       return (
         <div className="flex flex-col sm:flex-row gap-2">
           <Button
-            variant="default"
+            variant="outline"
             size="default"
             onClick={() => {
               handleCloseDetailModal();
               setEditingListing(listing);
               setEditDialogOpen(true);
             }}
-            className="w-full sm:w-auto font-semibold tracking-wide cursor-pointer"
+            className="w-full sm:w-auto font-semibold tracking-wide cursor-pointer bg-lsGold/20 text-lsGold border border-lsGold hover:bg-lsGold/30"
           >
             Edit Listing
           </Button>
           {listing.active && (
             <Button
-              variant="destructive"
+              variant="outline"
               size="default"
               onClick={() => {
                 handleCloseDetailModal();
                 handleCancelListing(listing);
               }}
-              className="w-full sm:w-auto font-semibold tracking-wide cursor-pointer"
+              className="w-full sm:w-auto font-semibold tracking-wide cursor-pointer bg-red-500/20 text-red-400 border border-red-500 hover:bg-red-500/30"
             >
               Cancel Listing
             </Button>
@@ -887,11 +918,6 @@ export default function MarketplacePage() {
           </div>
         )}
 
-        {dataHook.hydratingListings && dataHook.listings.length > 0 && (
-          <div className="rounded-md border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-xs text-blue-200">
-            Loading beast metadata for listings…
-          </div>
-        )}
 
 
         {/* Filters toolbar */}
@@ -955,6 +981,8 @@ export default function MarketplacePage() {
                   onClick={() => {
                     setExploreSubTab("browse");
                     filtersHook.setSortOption("default");
+                    setSweepSelectionIds(new Set());
+                    setSweepExcludedIds(new Set());
                   }}
                   className={cn(
                     "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
@@ -970,6 +998,8 @@ export default function MarketplacePage() {
                   onClick={() => {
                     setExploreSubTab("recent-listed");
                     filtersHook.setSortOption("recent-desc");
+                    setSweepSelectionIds(new Set());
+                    setSweepExcludedIds(new Set());
                   }}
                   className={cn(
                     "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
@@ -982,7 +1012,11 @@ export default function MarketplacePage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setExploreSubTab("recent-sold")}
+                  onClick={() => {
+                    setExploreSubTab("recent-sold");
+                    setSweepSelectionIds(new Set());
+                    setSweepExcludedIds(new Set());
+                  }}
                   className={cn(
                     "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
                     exploreSubTab === "recent-sold"
@@ -994,7 +1028,11 @@ export default function MarketplacePage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setExploreSubTab("activity")}
+                  onClick={() => {
+                    setExploreSubTab("activity");
+                    setSweepSelectionIds(new Set());
+                    setSweepExcludedIds(new Set());
+                  }}
                   className={cn(
                     "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
                     exploreSubTab === "activity"
@@ -1021,9 +1059,20 @@ export default function MarketplacePage() {
                       Retry
                     </Button>
                   </div>
-                ) : dataHook.ordersLoading || dataHook.ordersFetching || dataHook.hydratingListings ? (
-                  <p className="text-xs text-gray-400">Loading listings…</p>
-                ) : filtersHook.sortedListings.length === 0 ? (
+                ) : (dataHook.ordersLoading || dataHook.ordersFetching) && filtersHook.sortedListings.length === 0 ? (
+                  <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                    {/* Skeleton cards while loading */}
+                    {Array.from({ length: 24 }).map((_, i) => (
+                      <div key={i} className="animate-pulse rounded-lg border border-gray-800 bg-gray-900/50 overflow-hidden">
+                        <div className="aspect-square bg-gray-800/50" />
+                        <div className="p-2 space-y-2">
+                          <div className="h-3 bg-gray-800 rounded w-2/3" />
+                          <div className="h-6 bg-gray-800 rounded" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : filtersHook.sortedListings.length === 0 && !dataHook.hydratingListings ? (
                   <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
                     No active listings match your filters yet.
                   </p>
@@ -1041,6 +1090,10 @@ export default function MarketplacePage() {
                           status={listing.status}
                           buyDisabled={!listing.active || !address}
                           inCart={globalCart.isInPurchaseCart(listing.listingId)}
+                          inSweepSelection={sweepSelectionIds.has(listing.listingId)}
+                          onRemoveFromSweep={() => {
+                            setSweepExcludedIds(prev => new Set([...prev, listing.listingId]));
+                          }}
                           primaryActionLabel={globalCart.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
                           onCardClick={() => handleCardClick(listing)}
                           onBuyNow={() => {
@@ -1072,6 +1125,16 @@ export default function MarketplacePage() {
                       totalItems={filtersHook.sortedListings.length}
                       itemsPerPage={filtersHook.itemsPerPage}
                       onPageChange={filtersHook.setCurrentPage}
+                    />
+
+                    {/* Sweep Control */}
+                    <SweepControl
+                      listings={filtersHook.sortedListings.filter(l => address?.toLowerCase() !== l.seller?.toLowerCase())}
+                      onSweep={handleSweep}
+                      isInCart={globalCart.isInPurchaseCart}
+                      disabled={!address}
+                      onSelectionChange={setSweepSelectionIds}
+                      excludedIds={sweepExcludedIds}
                     />
                   </>
                 )}
@@ -1129,6 +1192,10 @@ export default function MarketplacePage() {
                             status={listing.status}
                             buyDisabled={!listing.active || !address}
                             inCart={globalCart.isInPurchaseCart(listing.listingId)}
+                            inSweepSelection={sweepSelectionIds.has(listing.listingId)}
+                            onRemoveFromSweep={() => {
+                              setSweepExcludedIds(prev => new Set([...prev, listing.listingId]));
+                            }}
                             primaryActionLabel={globalCart.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
                             onCardClick={() => handleCardClick(listing)}
                             onBuyNow={() => {
@@ -1282,6 +1349,16 @@ export default function MarketplacePage() {
                         </table>
                       </div>
                     )}
+
+                    {/* Sweep Control */}
+                    <SweepControl
+                      listings={filtersHook.namedRecentListings.filter(l => address?.toLowerCase() !== l.seller?.toLowerCase())}
+                      onSweep={handleSweep}
+                      isInCart={globalCart.isInPurchaseCart}
+                      disabled={!address}
+                      onSelectionChange={setSweepSelectionIds}
+                      excludedIds={sweepExcludedIds}
+                    />
                   </div>
                 )}
               </>
@@ -1609,8 +1686,19 @@ export default function MarketplacePage() {
 
         {filtersHook.activeTab === "my-beasts" && (
           <section className="space-y-4">
-            {dataHook.userBeastsLoading ? (
-              <p className="text-xs text-gray-400">Loading your beasts…</p>
+            {dataHook.userBeastsLoading && filtersHook.sortedUserBeasts.length === 0 ? (
+              // Show skeleton cards while initially loading
+              <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                {Array.from({ length: 24 }).map((_, i) => (
+                  <div key={i} className="animate-pulse rounded-lg border border-gray-800 bg-gray-900/50 overflow-hidden">
+                    <div className="aspect-square bg-gray-800/50" />
+                    <div className="p-2 space-y-2">
+                      <div className="h-3 bg-gray-800 rounded w-2/3" />
+                      <div className="h-6 bg-gray-800 rounded" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : dataHook.userBeastsError ? (
               <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-4">
                 <p className="text-sm text-yellow-200">{dataHook.userBeastsError}</p>
@@ -1852,6 +1940,11 @@ export default function MarketplacePage() {
                           const hoursRemaining = Math.floor((expirationDate.getTime() - now.getTime()) / (1000 * 60 * 60));
                           const daysRemaining = Math.floor(hoursRemaining / 24);
                           const beastName = offer.beastName || `Beast #${offer.tokenId}`;
+                          // Calculate USD value
+                          const tokenInfo = getToken(offer.currency);
+                          const usdValue = tokenInfo?.usdPrice
+                            ? tokenAmountToUsd(offer.price, tokenInfo.decimals, tokenInfo.usdPrice)
+                            : null;
 
                           return (
                             <div
@@ -1883,9 +1976,14 @@ export default function MarketplacePage() {
                                       </span>
                                     )}
                                   </div>
-                                  <p className="text-xl font-bold text-lsGold mb-2">
-                                    {priceFormatted}
-                                  </p>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <p className="text-xl font-bold text-lsGold">
+                                      {priceFormatted}
+                                    </p>
+                                    {usdValue !== null && (
+                                      <span className="text-sm text-gray-400">${usdValue.toFixed(2)}</span>
+                                    )}
+                                  </div>
                                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
                                     <span>From: {offer.owner.slice(0, 6)}...{offer.owner.slice(-4)}</span>
                                     <span className="text-gray-600">•</span>
@@ -1980,6 +2078,11 @@ export default function MarketplacePage() {
                           const now = new Date();
                           const hoursRemaining = Math.floor((expirationDate.getTime() - now.getTime()) / (1000 * 60 * 60));
                           const daysRemaining = Math.floor(hoursRemaining / 24);
+                          // Calculate USD value
+                          const tokenInfo = getToken(offer.currency);
+                          const madeOfferUsdValue = tokenInfo?.usdPrice
+                            ? tokenAmountToUsd(offer.price, tokenInfo.decimals, tokenInfo.usdPrice)
+                            : null;
 
                           return (
                             <div
@@ -2011,9 +2114,14 @@ export default function MarketplacePage() {
                                       </span>
                                     )}
                                   </div>
-                                  <p className="text-xl font-bold text-lsGold mb-2">
-                                    {priceFormatted}
-                                  </p>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <p className="text-xl font-bold text-lsGold">
+                                      {priceFormatted}
+                                    </p>
+                                    {madeOfferUsdValue !== null && (
+                                      <span className="text-sm text-gray-400">${madeOfferUsdValue.toFixed(2)}</span>
+                                    )}
+                                  </div>
                                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
                                     <span>Token #{offer.tokenId}</span>
                                     <span className="text-gray-600">•</span>

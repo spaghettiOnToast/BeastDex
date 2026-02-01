@@ -178,6 +178,95 @@ export function clearBeastCache() {
   beastCache.clear();
 }
 
+/**
+ * Progressive hydration - hydrates priority items first, then the rest
+ * Calls onProgress after each batch so UI can update incrementally
+ */
+export async function hydrateOrdersProgressive(
+  orders: ArcadeOrderWithTime[],
+  priorityTokenIds: string[],
+  onProgress: (listings: Listing[]) => void
+): Promise<Listing[]> {
+  if (orders.length === 0) {
+    return [];
+  }
+
+  const skeletons = orders.map(toListingSkeleton);
+  const beastMap = new Map<string, Beast | null>();
+  const BATCH_SIZE = 50; // Smaller batches for faster incremental updates
+
+  // Prime map with cached entries
+  const allTokenIds = Array.from(new Set(skeletons.map((l) => l.tokenId)));
+  for (const tokenId of allTokenIds) {
+    if (beastCache.has(tokenId)) {
+      beastMap.set(tokenId, beastCache.get(tokenId)!);
+    }
+  }
+
+  // Helper to build current listings state
+  const buildListings = () => {
+    return skeletons.map((listing) => ({
+      ...listing,
+      beast: beastMap.get(listing.tokenId) ?? null,
+    })).filter((listing) => {
+      if (!listing.beast || !listing.beast.owner) return true;
+      return compareStarknetAddresses(listing.seller, listing.beast.owner);
+    });
+  };
+
+  // Helper to hydrate a batch
+  const hydrateBatch = async (tokenIds: string[]) => {
+    const toFetch = tokenIds.filter((id) => !beastCache.has(id));
+    if (toFetch.length === 0) return;
+
+    try {
+      const beasts = await fetchBeastsByIds(toFetch);
+      const indexes = buildBeastLookup(beasts);
+
+      for (const id of toFetch) {
+        const beast = resolveBeastForIdentifier(id, indexes);
+        beastCache.set(id, beast);
+        beastMap.set(id, beast);
+      }
+    } catch (error) {
+      console.warn("[Progressive Hydration] Batch failed", error);
+      for (const id of toFetch) {
+        if (!beastCache.has(id)) beastCache.set(id, null);
+        if (!beastMap.has(id)) beastMap.set(id, null);
+      }
+    }
+  };
+
+  // 1. Hydrate priority items first (visible page)
+  const prioritySet = new Set(priorityTokenIds);
+  const priorityToHydrate = priorityTokenIds.filter((id) => !beastCache.has(id));
+
+  for (let i = 0; i < priorityToHydrate.length; i += BATCH_SIZE) {
+    const chunk = priorityToHydrate.slice(i, i + BATCH_SIZE);
+    await hydrateBatch(chunk);
+  }
+
+  // Emit progress after priority items are done
+  onProgress(buildListings());
+
+  // 2. Hydrate remaining items in background
+  const remainingIds = allTokenIds.filter((id) => !prioritySet.has(id) && !beastCache.has(id));
+
+  for (let i = 0; i < remainingIds.length; i += BATCH_SIZE) {
+    const chunk = remainingIds.slice(i, i + BATCH_SIZE);
+    await hydrateBatch(chunk);
+
+    // Emit progress every few batches to avoid too many re-renders
+    if ((i / BATCH_SIZE) % 3 === 0) {
+      onProgress(buildListings());
+    }
+  }
+
+  const finalListings = buildListings();
+  onProgress(finalListings);
+  return finalListings;
+}
+
 function buildBeastLookup(beasts: Beast[]) {
   const byId = new Map<string, Beast>();
   const byHex = new Map<string, Beast>();

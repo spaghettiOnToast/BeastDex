@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
 import { useSearchParams } from "react-router-dom";
+import { useAccount } from "@starknet-react/core";
 import TopBar from "../components/header/TopBar";
 import StatsPanel from "../components/stats/StatsPanel";
 import BeastGrid from "../components/beast/BeastGrid";
@@ -9,6 +10,7 @@ import PaginationControls from "../components/pagination/PaginationControls";
 import { FiltersButton } from "../components/filters/FiltersButton";
 import { FiltersDrawer } from "../components/filters/FiltersDrawer";
 import { AppLayout } from "../components/layout/AppLayout";
+import { Button } from "../components/ui/button";
 import { useBeasts } from "../hooks/useBeasts";
 import {
   fetchBeastAttributeFilters,
@@ -23,6 +25,15 @@ import {
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { getUserFriendlyErrorMessage } from "../utils/error";
 import { config } from "../config";
+import { useMarketplaceListings } from "./marketplace/hooks/useMarketplaceListings";
+import { useGlobalCart } from "../contexts/GlobalCartContext";
+import { formatPrice } from "../utils/price";
+import { getPaymentTokenByAddress } from "../services/marketplace/constants";
+import { useTokenMap, tokenAmountToUsd } from "../hooks/useEkuboTokens";
+import { toBigIntSafe } from "../utils/bigint";
+import MakeOfferDialog from "../components/marketplace/MakeOfferDialog";
+import PurchaseConfirmDialog from "../components/marketplace/PurchaseConfirmDialog";
+import type { Listing } from "../services/marketplace/types";
 
 const HIDDEN_FILTER_TRAITS = new Set<string>([
   "adventurerkilledcount",
@@ -55,6 +66,15 @@ function HomePage() {
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [searchParams] = useSearchParams();
+
+  // Marketplace state
+  const { address } = useAccount();
+  const globalCart = useGlobalCart();
+  const { listings } = useMarketplaceListings();
+  const { getToken } = useTokenMap();
+  const [makeOfferOpen, setMakeOfferOpen] = useState(false);
+  const [purchaseConfirmOpen, setPurchaseConfirmOpen] = useState(false);
+  const [purchasingListing, setPurchasingListing] = useState<Listing | null>(null);
 
   const { beasts, loading, error, reload, total } = useBeasts({
     limit: PAGE_SIZE,
@@ -253,6 +273,95 @@ function HomePage() {
     return items;
   }, [highlights, formatOwner]);
 
+  // Find listing for selected beast (if any)
+  const selectedBeastListing = useMemo(() => {
+    if (!selectedBeast) return null;
+    // Get the token ID from the beast
+    const beastTokenId = selectedBeast.numericId?.toString() || selectedBeast.id.split(":").pop() || "";
+    // Find active listing for this beast
+    return listings.find(
+      (l) => l.status === "active" && l.active && String(l.tokenId) === beastTokenId
+    ) || null;
+  }, [selectedBeast, listings]);
+
+  // Format price with USD for the listing
+  const formatPriceWithUsd = useCallback((listing: Listing) => {
+    const token = getPaymentTokenByAddress(listing.paymentToken);
+    const symbol = token?.symbol || "STRK";
+    const priceFormatted = formatPrice(listing.price, symbol);
+
+    // Calculate USD
+    const tokenInfo = getToken(listing.paymentToken || "0x0");
+    if (tokenInfo?.usdPrice) {
+      try {
+        const priceBigInt = toBigIntSafe(listing.price);
+        const usdValue = tokenAmountToUsd(priceBigInt, tokenInfo.decimals, tokenInfo.usdPrice);
+        return `${priceFormatted} ($${usdValue.toFixed(2)})`;
+      } catch {
+        return priceFormatted;
+      }
+    }
+    return priceFormatted;
+  }, [getToken]);
+
+  // Custom action slot for BeastModal when beast is listed
+  const beastModalActionSlot = useMemo(() => {
+    if (!selectedBeastListing) return undefined;
+
+    const listing = selectedBeastListing;
+    const isOwner = address?.toLowerCase() === listing.seller?.toLowerCase();
+
+    if (isOwner) {
+      // Owner shouldn't see buy buttons on homepage modal
+      return undefined;
+    }
+
+    return (
+      <div className="flex flex-col sm:flex-row gap-2">
+        <Button
+          variant="outline"
+          size="default"
+          onClick={() => {
+            handleCloseModal();
+            setPurchasingListing(listing);
+            setPurchaseConfirmOpen(true);
+          }}
+          disabled={!listing.active || !address}
+          className="w-full sm:w-auto font-semibold tracking-wide bg-lsGold/20 text-lsGold border border-lsGold hover:bg-lsGold/30"
+        >
+          Buy Now - {formatPriceWithUsd(listing)}
+        </Button>
+        <Button
+          variant="outline"
+          size="default"
+          onClick={() => {
+            globalCart.togglePurchaseCart(listing);
+          }}
+          disabled={!listing.active || !address}
+          className={`w-full sm:w-auto font-semibold tracking-wide ${
+            globalCart.isInPurchaseCart(listing.listingId)
+              ? "bg-[#39ff14]/20 text-[#39ff14] border-[#39ff14]"
+              : "border-gray-600 hover:border-gray-500"
+          }`}
+        >
+          {globalCart.isInPurchaseCart(listing.listingId) ? "In Cart" : "Add to Cart"}
+        </Button>
+        <Button
+          variant="outline"
+          size="default"
+          onClick={() => {
+            handleCloseModal();
+            setMakeOfferOpen(true);
+          }}
+          disabled={!address}
+          className="w-full sm:w-auto font-semibold tracking-wide border-gray-600 hover:border-gray-500"
+        >
+          Make Offer
+        </Button>
+      </div>
+    );
+  }, [selectedBeastListing, address, globalCart, formatPriceWithUsd, handleCloseModal]);
+
   const topBar = <TopBar onLogoClick={handleResetFilters} />;
 
   const filtersControl = (
@@ -311,6 +420,32 @@ function HomePage() {
         beast={selectedBeast}
         ownerUsernames={ownerUsernames}
         onClose={handleCloseModal}
+        customActionSlot={beastModalActionSlot}
+        listingExpiration={selectedBeastListing?.expiration}
+      />
+
+      {/* Marketplace Dialogs */}
+      <MakeOfferDialog
+        open={makeOfferOpen}
+        onOpenChange={setMakeOfferOpen}
+        beast={selectedBeast}
+        tokenId={selectedBeast?.numericId?.toString() || selectedBeast?.id.split(":").pop() || ""}
+      />
+
+      <PurchaseConfirmDialog
+        open={purchaseConfirmOpen}
+        onOpenChange={setPurchaseConfirmOpen}
+        listing={purchasingListing}
+        priceLabel={purchasingListing ? formatPriceWithUsd(purchasingListing) : ""}
+        onConfirm={() => {
+          if (purchasingListing) {
+            globalCart.addToPurchaseCart(purchasingListing);
+            globalCart.openPurchaseDialog();
+          }
+          setPurchaseConfirmOpen(false);
+          setPurchasingListing(null);
+        }}
+        isProcessing={false}
       />
 
       <FiltersDrawer

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { Listing } from "../../../services/marketplace/types";
-import { hydrateOrders } from "../../../services/marketplace";
+import { hydrateOrdersProgressive } from "../../../services/marketplace";
 import { BEASTS_COLLECTION_ADDRESS } from "../../../services/marketplace/constants";
 import { useArcadeListedTokensForCollection, type ArcadeOrderWithTime } from "../../../hooks/useArcadeOrders";
 
@@ -47,7 +47,7 @@ export function useMarketplaceListings(): UseMarketplaceListingsResult {
     error: unknown;
   };
 
-  // Hydrate listings with beast data
+  // Hydrate listings with beast data (progressive - first page loads fast)
   useEffect(() => {
     let cancelled = false;
 
@@ -72,43 +72,50 @@ export function useMarketplaceListings(): UseMarketplaceListingsResult {
       setHydratingListings(true);
       setListingsError(null);
 
-      // Only show skeletons if we have a reasonable number
-      // Otherwise it causes performance issues
-      if (listedOrders.length <= 200) {
-        const skeletons = listedOrders.map((order: ArcadeOrderWithTime) => ({
-          listingId: order.identifier,
-          tokenId: order.tokenId.toString(),
-          seller: order.owner,
-          price: order.price.toString(),
-          paymentToken: order.currency,
-          active: false, // Will be updated after hydration
-          status: "active" as const,
-          quantity: order.quantity,
-          expiration: order.expiration,
-          createdAt: order.listedAt, // Use actual listing time from event
-          beast: null,
-          orderId: order.id,
-        }));
-        setListings(skeletons);
-      }
+      // Show skeletons immediately with active: true so they pass filters
+      const skeletons = listedOrders.map((order: ArcadeOrderWithTime) => ({
+        listingId: order.identifier,
+        tokenId: order.tokenId.toString(),
+        seller: order.owner,
+        price: order.price.toString(),
+        paymentToken: order.currency,
+        active: true, // Mark as active so they show in filtered listings
+        status: "active" as const,
+        quantity: order.quantity,
+        expiration: order.expiration,
+        createdAt: order.listedAt,
+        beast: null,
+        orderId: order.id,
+      }));
+      setListings(skeletons);
+
+      // Priority token IDs - first 50 items (covers first page on both mobile and desktop)
+      const priorityTokenIds = listedOrders.slice(0, 50).map((o) => o.tokenId.toString());
 
       try {
-        const listingsData = await hydrateOrders(listedOrders);
+        // Progressive hydration - updates UI incrementally
+        await hydrateOrdersProgressive(
+          listedOrders,
+          priorityTokenIds,
+          (progressListings) => {
+            if (cancelled) return;
+            setListings(progressListings);
+          }
+        );
+
         if (cancelled) return;
 
-        setListings(listingsData);
         setListingsError(null);
+        setHydratingListings(false);
+
         // Clear optimistic sold IDs when we get fresh data from indexer
-        // Only clear IDs that are no longer in the listings (indexer caught up)
         setSoldListingIds((prev) => {
-          const currentIds = new Set(listingsData.map((l) => l.listingId));
+          const currentIds = new Set(listedOrders.map((l) => l.identifier));
           const stillPending = new Set<string>();
           prev.forEach((id) => {
             if (currentIds.has(id)) {
-              // Listing still in response - indexer hasn't caught up yet
               stillPending.add(id);
             }
-            // If not in currentIds, indexer has caught up, don't add to stillPending
           });
           return stillPending;
         });
@@ -130,9 +137,6 @@ export function useMarketplaceListings(): UseMarketplaceListingsResult {
               "Failed to load marketplace listings. Please try again."
             );
           }
-        }
-      } finally {
-        if (!cancelled) {
           setHydratingListings(false);
         }
       }

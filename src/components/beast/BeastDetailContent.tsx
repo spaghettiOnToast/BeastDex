@@ -100,7 +100,7 @@ export function BeastDetailContent({
   summitData,
   summitLoading,
 }: BeastDetailContentProps) {
-  const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>("summit");
+  const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>("metadata");
   const attributes = Array.isArray(beast.attributes) ? beast.attributes : [];
 
   const ownerAddressLower = beast.owner ? beast.owner.toLowerCase() : "";
@@ -170,18 +170,6 @@ export function BeastDetailContent({
           <div className="flex rounded-lg border border-gray-800 bg-black/60 p-0.5">
             <button
               type="button"
-              onClick={() => setRightPanelTab("summit")}
-              className={cn(
-                "flex-1 rounded-md px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all",
-                rightPanelTab === "summit"
-                  ? "bg-[#39ff14]/20 text-[#39ff14] border border-[#39ff14]/30"
-                  : "text-gray-500 hover:text-[#39ff14]",
-              )}
-            >
-              Summit
-            </button>
-            <button
-              type="button"
               onClick={() => setRightPanelTab("metadata")}
               className={cn(
                 "flex-1 rounded-md px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all",
@@ -191,6 +179,18 @@ export function BeastDetailContent({
               )}
             >
               Metadata
+            </button>
+            <button
+              type="button"
+              onClick={() => setRightPanelTab("summit")}
+              className={cn(
+                "flex-1 rounded-md px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all",
+                rightPanelTab === "summit"
+                  ? "bg-[#39ff14]/20 text-[#39ff14] border border-[#39ff14]/30"
+                  : "text-gray-500 hover:text-[#39ff14]",
+              )}
+            >
+              Summit
             </button>
           </div>
 

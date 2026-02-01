@@ -39,13 +39,12 @@ export function useUserBeasts(
     setError(null);
 
     try {
-      const limit = 250;
+      const limit = 100; // Smaller batches for faster first paint
       let page = 1;
       let results: Beast[] = [];
       let total = Infinity;
 
-      // Paginate through all beasts with small delays between pages
-      // to avoid overwhelming the indexer
+      // Paginate through all beasts - update UI after each page for progressive loading
       while (results.length < total) {
         const { beasts: fetchedBeasts, total: totalCount } = await fetchBeasts({
           limit,
@@ -57,19 +56,20 @@ export function useUserBeasts(
         results = results.concat(fetchedBeasts);
         total = typeof totalCount === "number" ? totalCount : results.length;
 
+        // Update UI progressively after each page
+        setBeasts([...results]);
+
         if (fetchedBeasts.length < limit) {
           break;
         }
 
         // Small delay between pagination requests to avoid burst loading
         if (results.length < total) {
-          await new Promise((resolve) => setTimeout(resolve, 200));
+          await new Promise((resolve) => setTimeout(resolve, 100));
         }
 
         page += 1;
       }
-
-      setBeasts(results);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Failed to load beasts";
 

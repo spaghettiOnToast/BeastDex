@@ -12,6 +12,7 @@ import { formatPrice } from "../../utils/price";
 import { getPaymentTokenByAddress, CLIENT_FEE_BP } from "../../services/marketplace/constants";
 import { toBigIntSafe } from "../../utils/bigint";
 import TokenIcon from "../ui/TokenIcon";
+import { useSelectedToken, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
 
 type Props = {
   open: boolean;
@@ -30,6 +31,8 @@ export default function PurchaseConfirmDialog({
   onConfirm,
   isProcessing,
 }: Props) {
+  const { decimals: tokenDecimals, usdPrice } = useSelectedToken(listing?.paymentToken ?? undefined);
+
   if (!listing) return null;
 
   const priceBigInt = toBigIntSafe(listing.price);
@@ -41,6 +44,11 @@ export default function PurchaseConfirmDialog({
   const tokenSymbol = token?.symbol || "STRK";
   const buyerFeeLabel = formatPrice(buyerFeeBigInt, tokenSymbol);
   const totalLabel = formatPrice(totalBigInt, tokenSymbol);
+
+  // Calculate USD values
+  const priceUsd = usdPrice ? tokenAmountToUsd(priceBigInt, tokenDecimals, usdPrice) : null;
+  const feeUsd = usdPrice ? tokenAmountToUsd(buyerFeeBigInt, tokenDecimals, usdPrice) : null;
+  const totalUsd = usdPrice ? tokenAmountToUsd(totalBigInt, tokenDecimals, usdPrice) : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -73,15 +81,25 @@ export default function PurchaseConfirmDialog({
 
             <div className="flex justify-between">
               <span className="text-sm text-gray-400">Listing Price:</span>
-              <span className="text-sm font-medium">{priceLabel}</span>
+              <div className="text-right">
+                <span className="text-sm font-medium">{priceLabel}</span>
+                {priceUsd !== null && (
+                  <span className="text-xs text-gray-500 ml-2">${priceUsd.toFixed(2)}</span>
+                )}
+              </div>
             </div>
 
             {CLIENT_FEE_BP > 0 && (
               <div className="flex justify-between">
                 <span className="text-sm text-gray-400">Client Fee ({CLIENT_FEE_BP / 100}%):</span>
-                <span className="text-sm font-medium text-gray-400">
-                  +{buyerFeeLabel}
-                </span>
+                <div className="text-right">
+                  <span className="text-sm font-medium text-gray-400">
+                    +{buyerFeeLabel}
+                  </span>
+                  {feeUsd !== null && (
+                    <span className="text-xs text-gray-500 ml-2">${feeUsd.toFixed(2)}</span>
+                  )}
+                </div>
               </div>
             )}
 
@@ -89,9 +107,14 @@ export default function PurchaseConfirmDialog({
               <span className="text-sm font-semibold text-white">
                 Total to Pay:
               </span>
-              <span className="text-sm font-semibold text-lsGold">
-                {totalLabel}
-              </span>
+              <div className="text-right">
+                <span className="text-sm font-semibold text-lsGold">
+                  {totalLabel}
+                </span>
+                {totalUsd !== null && (
+                  <span className="text-sm text-gray-400 ml-2">${totalUsd.toFixed(2)}</span>
+                )}
+              </div>
             </div>
 
             <div className="flex justify-between">

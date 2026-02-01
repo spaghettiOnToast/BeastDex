@@ -85,20 +85,18 @@ export function useMarketplaceFilters({
    */
   const filteredListings = useMemo(() => {
     // Single pass: group by tokenId while filtering out invalid listings
-    const listingsByTokenId = new Map<string, Listing & { beast: Beast }>();
+    const listingsByTokenId = new Map<string, Listing & { beast: Beast | null }>();
 
     for (const listing of listings) {
       // Skip hidden listings
       if (hiddenListingIds.has(listing.listingId)) continue;
 
-      // Skip listings without beast data
-      if (!listing.beast) continue;
-
       // Skip expired if hideExpired is on
       if (hideExpired && listing.status === "expired") continue;
 
-      // Skip if doesn't match attribute filters
-      if (!matchesAttributeFilters(listing as Listing & { beast: Beast }, attributeFilters)) continue;
+      // Only apply attribute filters if beast data is loaded
+      // (allow listings without beast data to show as loading/skeleton)
+      if (listing.beast && !matchesAttributeFilters(listing as Listing & { beast: Beast }, attributeFilters)) continue;
 
       // Only consider active listings
       if (listing.status !== "active") continue;
@@ -108,13 +106,18 @@ export function useMarketplaceFilters({
 
       if (!existing) {
         // First listing for this tokenId
-        listingsByTokenId.set(tokenId, listing as Listing & { beast: Beast });
+        listingsByTokenId.set(tokenId, listing as Listing & { beast: Beast | null });
       } else {
-        // Keep the one with later expiration (more time left)
-        const existingExp = existing.expiration ?? 0;
-        const currentExp = listing.expiration ?? 0;
-        if (currentExp > existingExp) {
-          listingsByTokenId.set(tokenId, listing as Listing & { beast: Beast });
+        // Prefer listing with beast data over one without
+        if (!existing.beast && listing.beast) {
+          listingsByTokenId.set(tokenId, listing as Listing & { beast: Beast | null });
+        } else if (existing.beast && listing.beast) {
+          // Both have beast data - keep the one with later expiration
+          const existingExp = existing.expiration ?? 0;
+          const currentExp = listing.expiration ?? 0;
+          if (currentExp > existingExp) {
+            listingsByTokenId.set(tokenId, listing as Listing & { beast: Beast | null });
+          }
         }
       }
     }
