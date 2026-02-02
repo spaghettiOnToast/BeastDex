@@ -43,11 +43,11 @@ export function StatsPanel({
   // Show only one consolidated error message (first error encountered)
   const consolidatedError = globalError || mintedError || highlightsError;
   return (
-    <Card className="backdrop-blur-md bg-card/60 border-0 shadow-lg overflow-hidden mb-4 sm:mb-6">
+    <Card className="backdrop-blur-md bg-card/60 border-0 shadow-lg mb-4 sm:mb-6">
       <CardContent className="p-0">
         <div className="flex flex-col">
           {/* Mobile Layout: Stack vertically */}
-          <div className="flex flex-col lg:hidden px-2 py-2 gap-2 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
+          <div className="flex flex-col lg:hidden px-4 py-2 gap-2 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
             {/* Completion Tracker */}
             <div className="flex justify-center py-1">
               <CompletionTracker
@@ -86,7 +86,7 @@ export function StatsPanel({
           </div>
 
           {/* Desktop Layout: Horizontal with centered completion */}
-          <div className="hidden lg:flex relative items-center px-2 py-2 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent min-h-[90px]">
+          <div className="hidden lg:flex relative items-center px-4 py-2 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent min-h-[90px]">
             {/* Left: Carousel (narrower) */}
             <div className="order-1 max-w-sm flex-shrink w-full">
               <StatsCarousel
@@ -129,7 +129,7 @@ export function StatsPanel({
           {consolidatedError ? (
             <Alert
               variant="destructive"
-              className="mx-3 sm:mx-4 my-2 bg-destructive/10 border-destructive/30"
+              className="mx-4 sm:mx-6 mt-4 mb-3 bg-destructive/10 border-destructive/30"
             >
               <AlertDescription className="text-xs sm:text-sm font-medium text-center">
                 {consolidatedError}
