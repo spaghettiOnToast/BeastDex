@@ -361,11 +361,21 @@ export default function CartListDialog({
                     }`}
                   >
                     {beast.image && (
-                      <img
-                        src={beast.image}
-                        alt={beast.name}
-                        className="w-16 h-16 rounded object-cover flex-shrink-0"
-                      />
+                      <div className="relative group/img flex-shrink-0">
+                        <img
+                          src={beast.image}
+                          alt={beast.name}
+                          className="w-16 h-20 rounded object-contain bg-gray-800/50"
+                        />
+                        {/* Hover expand preview */}
+                        <div className="absolute left-0 top-0 z-50 opacity-0 group-hover/img:opacity-100 pointer-events-none transition-opacity duration-200">
+                          <img
+                            src={beast.image}
+                            alt={beast.name}
+                            className="w-32 h-40 rounded-lg object-contain bg-gray-900 border border-gray-700 shadow-xl -translate-x-2 -translate-y-2"
+                          />
+                        </div>
+                      </div>
                     )}
                     <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex items-center gap-2">
@@ -474,7 +484,7 @@ export default function CartListDialog({
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-400">Creator Royalty ({CREATOR_ROYALTY_BP / 100}%) (Survivor DAO):</span>
+                    <span className="text-sm text-gray-400">Creator Royalty (Survivor DAO) {CREATOR_ROYALTY_BP / 100}%:</span>
                     <span className="text-sm font-medium text-gray-400">-{fromWei(totalCreatorRoyalty, tokenDecimals)} {tokenSymbol}</span>
                   </div>
                   <div className="flex justify-between border-t border-gray-700 pt-2">

@@ -160,6 +160,7 @@ export default function MarketplacePage() {
   const [activityTypeFilter, setActivityTypeFilter] = useState<"listing" | "sale" | null>(null);
   const [activityPage, setActivityPage] = useState(1);
   const [recentViewMode, setRecentViewMode] = useState<"cards" | "table">("cards");
+  const [listingsViewMode, setListingsViewMode] = useState<"cards" | "table">("cards");
 
   // Hidden offers received state (persisted to localStorage)
   const [hiddenOfferIds, setHiddenOfferIds] = useState<Set<string>>(() => {
@@ -265,6 +266,7 @@ export default function MarketplacePage() {
     address,
     availableFilters: dataHook.availableFilters,
     userBeastsLoading: dataHook.userBeastsLoading,
+    hydratingListings: dataHook.hydratingListings,
   });
 
   // Cancel cart hook (list and purchase carts are in GlobalCartContext)
@@ -364,6 +366,20 @@ export default function MarketplacePage() {
     address,
     BEASTS_COLLECTION_ADDRESS
   );
+
+  // Poll for new offers when Offers tab is active (every 30 seconds)
+  // This ensures incoming offers from other users show up without manual refresh
+  useEffect(() => {
+    const isOffersTabActive = filtersHook.activeTab === "my" && myActivitySubTab === "offers";
+    if (!isOffersTabActive || !address) return;
+
+    const interval = setInterval(() => {
+      refetchOffersReceived();
+      refetchUserMadeOffers();
+    }, 30_000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [filtersHook.activeTab, myActivitySubTab, address, refetchOffersReceived, refetchUserMadeOffers]);
 
   // Cancel a made offer
   const handleCancelOffer = useCallback(async (offer: { id: bigint | number; collection: string; tokenId: bigint | number | string }) => {
@@ -1031,95 +1047,56 @@ export default function MarketplacePage() {
           <ViewToggle value={filtersHook.activeTab} onChange={filtersHook.setActiveTab} />
           <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
             {filterControls}
-            {filtersHook.activeTab === "my-beasts" && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-[10px] sm:text-xs h-7 sm:h-9 px-2 sm:px-4"
-                onClick={() => dataHook.reloadUserBeasts()}
-                disabled={dataHook.userBeastsLoading}
-              >
-                {dataHook.userBeastsLoading ? "…" : "Refresh"}
-              </Button>
-            )}
-            {filtersHook.activeTab === "my" && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-[10px] sm:text-xs h-7 sm:h-9 px-2 sm:px-4"
-                onClick={async () => {
+            {/* Refresh button - always in same position */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 sm:h-9 px-2 sm:px-3"
+              onClick={async () => {
+                if (filtersHook.activeTab === "my-beasts") {
+                  dataHook.reloadUserBeasts();
+                } else if (filtersHook.activeTab === "my") {
                   dataHook.reloadUserBeasts();
                   refetchOffers();
                   refetchOffersReceived();
                   refetchUserMadeOffers();
-                  // Use invalidation to force refetch even if data is "fresh"
                   await invalidateSales();
-                }}
-                disabled={dataHook.userBeastsLoading}
+                } else if (filtersHook.activeTab === "explore") {
+                  if (exploreSubTab === "recent-sold") {
+                    await invalidateRecentSales();
+                  } else {
+                    dataHook.refetchOrders();
+                  }
+                }
+              }}
+              disabled={
+                (filtersHook.activeTab === "my-beasts" && dataHook.userBeastsLoading) ||
+                (filtersHook.activeTab === "explore" && (dataHook.ordersLoading || dataHook.ordersFetching))
+              }
+              title="Refresh"
+            >
+              <svg
+                className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${
+                  (dataHook.ordersLoading || dataHook.ordersFetching || dataHook.userBeastsLoading) ? "animate-spin" : ""
+                }`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
               >
-                {dataHook.userBeastsLoading ? "…" : "Refresh"}
-              </Button>
-            )}
-            {filtersHook.activeTab === "explore" && (exploreSubTab === "browse" || exploreSubTab === "recent-listed") && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 sm:h-9 px-2 sm:px-3"
-                onClick={() => dataHook.refetchOrders()}
-                disabled={dataHook.ordersLoading || dataHook.ordersFetching}
-                title="Refresh listings"
-              >
-                <svg
-                  className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${(dataHook.ordersLoading || dataHook.ordersFetching) ? "animate-spin" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </Button>
-            )}
-            {filtersHook.activeTab === "explore" && exploreSubTab === "recent-sold" && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 sm:h-9 px-2 sm:px-3"
-                onClick={async () => {
-                  await invalidateRecentSales();
-                }}
-                title="Refresh sales"
-              >
-                <svg
-                  className="h-3.5 w-3.5 sm:h-4 sm:w-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </Button>
-            )}
-            {/* Sweep Control - dropdown style */}
-            {filtersHook.activeTab === "explore" && (exploreSubTab === "browse" || exploreSubTab === "recent-listed") && (
-              <SweepControl
-                listings={(exploreSubTab === "browse" ? filtersHook.sortedListings : filtersHook.namedRecentListings).filter(l => address?.toLowerCase() !== l.seller?.toLowerCase())}
-                onSweep={(listings) => requireToS(() => handleSweep(listings))}
-                isInCart={globalCart.isInPurchaseCart}
-                disabled={!address || marketplaceDisabled}
-                onSelectionChange={setSweepSelectionIds}
-                excludedIds={sweepExcludedIds}
-              />
-            )}
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </Button>
           </div>
         </div>
 
         {/* Main content area */}
         {filtersHook.activeTab === "explore" && (
           <section className="space-y-4">
-            <div className="overflow-x-auto -mx-2 px-2 scrollbar-hide">
-              <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-1 min-w-max">
+            {/* Sub-tabs and Sweep Control on same row */}
+            <div className="flex items-center justify-between gap-4">
+              <div className="overflow-x-auto scrollbar-hide">
+                <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-1 min-w-max">
                 <button
                   type="button"
                   onClick={() => {
@@ -1187,6 +1164,18 @@ export default function MarketplacePage() {
                   Activity
                 </button>
               </div>
+              </div>
+              {/* Sweep Control - on same row as sub-tabs, right side */}
+              {(exploreSubTab === "browse" || exploreSubTab === "recent-listed") && (
+                <SweepControl
+                  listings={(exploreSubTab === "browse" ? filtersHook.sortedListings : filtersHook.namedRecentListings).filter(l => address?.toLowerCase() !== l.seller?.toLowerCase())}
+                  onSweep={(listings) => requireToS(() => handleSweep(listings))}
+                  isInCart={globalCart.isInPurchaseCart}
+                  disabled={!address || marketplaceDisabled}
+                  onSelectionChange={setSweepSelectionIds}
+                  excludedIds={sweepExcludedIds}
+                />
+              )}
             </div>
 
             {exploreSubTab === "browse" ? (
@@ -1221,56 +1210,228 @@ export default function MarketplacePage() {
                     No active listings match your filters yet.
                   </p>
                 ) : (
-                  <>
-                    <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                      {filtersHook.listingsToRender.map((listing) => (
-                        <ListingCard
-                          key={`${listing.listingId}-${listing.tokenId}`}
-                          beast={listing.beast}
-                          tokenId={listing.tokenId}
-                          priceLabel={formatPriceLabel(listing)}
-                          subtitlePriceLabel={formatSubtitlePrice(listing)}
-                          tokenLogoUrl={getTokenLogoUrl(listing)}
-                          status={listing.status}
-                          buyDisabled={!listing.active || !address || marketplaceDisabled}
-                          inCart={globalCart.isInPurchaseCart(listing.listingId)}
-                          inSweepSelection={sweepSelectionIds.has(listing.listingId)}
-                          onRemoveFromSweep={() => {
-                            setSweepExcludedIds(prev => new Set([...prev, listing.listingId]));
-                          }}
-                          primaryActionLabel={globalCart.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
-                          onCardClick={() => handleCardClick(listing)}
-                          onBuyNow={() => requireToS(() => {
-                            setPurchasingListing(listing);
-                            setPurchaseConfirmOpen(true);
-                          })}
-                          onAddToCart={() => requireToS(() => globalCart.togglePurchaseCart(listing))}
-                          onMakeOffer={() => requireToS(() => {
-                            setOfferBeast(listing.beast ?? null);
-                            setOfferTokenId(listing.tokenId);
-                            setMakeOfferOpen(true);
-                          })}
-                          onViewOffers={() => {
-                            setSelectedListingForOffers(listing);
-                            setOffersDialogOpen(true);
-                          }}
-                          ownedByUser={address?.toLowerCase() === listing.seller?.toLowerCase()}
-                          onEdit={() => requireToS(() => {
-                            setEditingListing(listing);
-                            setEditDialogOpen(true);
-                          })}
-                          onCancel={listing.active ? () => requireToS(() => handleCancelListing(listing)) : undefined}
-                        />
-                      ))}
+                  <div className="space-y-3">
+                    {/* View Mode Toggle */}
+                    <div className="flex justify-end">
+                      <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setListingsViewMode("cards")}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                            listingsViewMode === "cards"
+                              ? "bg-lsGold/20 text-lsGold"
+                              : "text-gray-400 hover:text-lsGold"
+                          )}
+                        >
+                          <LayoutGrid className="h-3.5 w-3.5" />
+                          Cards
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setListingsViewMode("table")}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                            listingsViewMode === "table"
+                              ? "bg-lsGold/20 text-lsGold"
+                              : "text-gray-400 hover:text-lsGold"
+                          )}
+                        >
+                          <List className="h-3.5 w-3.5" />
+                          Table
+                        </button>
+                      </div>
                     </div>
-                    <Pagination
-                      currentPage={filtersHook.currentPage}
-                      totalPages={filtersHook.totalPages}
-                      totalItems={filtersHook.sortedListings.length}
-                      itemsPerPage={filtersHook.itemsPerPage}
-                      onPageChange={filtersHook.setCurrentPage}
-                    />
-                  </>
+
+                    {listingsViewMode === "cards" ? (
+                      <>
+                        <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                          {filtersHook.listingsToRender.map((listing) => (
+                            <ListingCard
+                              key={`${listing.listingId}-${listing.tokenId}`}
+                              beast={listing.beast}
+                              tokenId={listing.tokenId}
+                              priceLabel={formatPriceLabel(listing)}
+                              subtitlePriceLabel={formatSubtitlePrice(listing)}
+                              tokenLogoUrl={getTokenLogoUrl(listing)}
+                              status={listing.status}
+                              buyDisabled={!listing.active || !address || marketplaceDisabled || !listing.beast}
+                              inCart={globalCart.isInPurchaseCart(listing.listingId)}
+                              inSweepSelection={sweepSelectionIds.has(listing.listingId)}
+                              onRemoveFromSweep={() => {
+                                setSweepExcludedIds(prev => new Set([...prev, listing.listingId]));
+                              }}
+                              primaryActionLabel={globalCart.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
+                              onCardClick={() => handleCardClick(listing)}
+                              onBuyNow={() => requireToS(() => {
+                                setPurchasingListing(listing);
+                                setPurchaseConfirmOpen(true);
+                              })}
+                              onAddToCart={() => requireToS(() => globalCart.togglePurchaseCart(listing))}
+                              onMakeOffer={() => requireToS(() => {
+                                setOfferBeast(listing.beast ?? null);
+                                setOfferTokenId(listing.tokenId);
+                                setMakeOfferOpen(true);
+                              })}
+                              onViewOffers={() => {
+                                setSelectedListingForOffers(listing);
+                                setOffersDialogOpen(true);
+                              }}
+                              ownedByUser={address?.toLowerCase() === listing.seller?.toLowerCase()}
+                              onEdit={() => requireToS(() => {
+                                setEditingListing(listing);
+                                setEditDialogOpen(true);
+                              })}
+                              onCancel={listing.active ? () => requireToS(() => handleCancelListing(listing)) : undefined}
+                            />
+                          ))}
+                        </div>
+                        <Pagination
+                          currentPage={filtersHook.currentPage}
+                          totalPages={filtersHook.totalPages}
+                          totalItems={filtersHook.sortedListings.length}
+                          itemsPerPage={filtersHook.itemsPerPage}
+                          onPageChange={filtersHook.setCurrentPage}
+                        />
+                      </>
+                    ) : (
+                      /* Table View */
+                      <>
+                        <div className="rounded-lg border border-gray-800 bg-black/30 overflow-hidden overflow-x-auto">
+                          <table className="w-full text-xs min-w-[600px]">
+                            <thead className="bg-gray-900/50 border-b border-gray-800">
+                              <tr>
+                                <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Beast</th>
+                                <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Price</th>
+                                <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Seller</th>
+                                <th className="px-3 py-2.5 text-right font-semibold text-gray-300">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filtersHook.listingsToRender.map((listing) => {
+                                const isOwner = address?.toLowerCase() === listing.seller?.toLowerCase();
+                                const usdPrice = formatSubtitlePrice(listing);
+                                return (
+                                  <tr
+                                    key={`listings-table-${listing.listingId}`}
+                                    className="border-b border-gray-800/50 hover:bg-gray-900/30 transition-colors"
+                                  >
+                                    <td className="px-3 py-2.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCardClick(listing)}
+                                        className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                                      >
+                                        <div className="w-8 h-8 rounded overflow-hidden bg-gray-800 flex-shrink-0">
+                                          {listing.beast?.image ? (
+                                            <img
+                                              src={listing.beast.image}
+                                              alt={listing.beast.name || "Beast"}
+                                              className="w-full h-full object-contain"
+                                            />
+                                          ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-gray-600 text-[8px]">
+                                              ?
+                                            </div>
+                                          )}
+                                        </div>
+                                        <span className="text-white font-medium truncate max-w-[120px]">
+                                          {listing.beast?.name || `Beast #${listing.tokenId}`}
+                                        </span>
+                                      </button>
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <div className="flex flex-col">
+                                        <span className="text-lsGold font-semibold">{formatPriceLabel(listing)}</span>
+                                        {usdPrice && (
+                                          <span className="text-gray-500 text-[10px]">${usdPrice}</span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-gray-400">
+                                      {ownerUsernames[listing.seller?.toLowerCase()] ||
+                                        `${listing.seller?.slice(0, 6)}...${listing.seller?.slice(-4)}`}
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <div className="flex items-center justify-end gap-1.5">
+                                        {isOwner ? (
+                                          <>
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="h-7 px-2.5 text-[10px] font-semibold"
+                                              onClick={() => requireToS(() => {
+                                                setEditingListing(listing);
+                                                setEditDialogOpen(true);
+                                              })}
+                                            >
+                                              Edit
+                                            </Button>
+                                            {listing.active && (
+                                              <Button
+                                                variant="destructive"
+                                                size="sm"
+                                                className="h-7 px-2.5 text-[10px] font-semibold"
+                                                onClick={() => requireToS(() => handleCancelListing(listing))}
+                                              >
+                                                Cancel
+                                              </Button>
+                                            )}
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="h-7 px-2.5 text-[10px] font-semibold bg-lsGold/10 text-lsGold border-lsGold/50 hover:bg-lsGold/20"
+                                              onClick={() => requireToS(() => {
+                                                setPurchasingListing(listing);
+                                                setPurchaseConfirmOpen(true);
+                                              })}
+                                              disabled={!listing.active}
+                                            >
+                                              Buy
+                                            </Button>
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="h-7 px-2.5 text-[10px] font-semibold"
+                                              onClick={() => requireToS(() => globalCart.togglePurchaseCart(listing))}
+                                            >
+                                              {globalCart.isInPurchaseCart(listing.listingId) ? "In Cart" : "Cart"}
+                                            </Button>
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="h-7 px-2.5 text-[10px] font-semibold"
+                                              onClick={() => requireToS(() => {
+                                                setOfferBeast(listing.beast ?? null);
+                                                setOfferTokenId(listing.tokenId);
+                                                setMakeOfferOpen(true);
+                                              })}
+                                            >
+                                              Offer
+                                            </Button>
+                                          </>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        <Pagination
+                          currentPage={filtersHook.currentPage}
+                          totalPages={filtersHook.totalPages}
+                          totalItems={filtersHook.sortedListings.length}
+                          itemsPerPage={filtersHook.itemsPerPage}
+                          onPageChange={filtersHook.setCurrentPage}
+                        />
+                      </>
+                    )}
+                  </div>
                 )}
               </>
             ) : exploreSubTab === "recent-listed" ? (
@@ -1324,7 +1485,7 @@ export default function MarketplacePage() {
                             subtitlePriceLabel={formatSubtitlePrice(listing)}
                             tokenLogoUrl={getTokenLogoUrl(listing)}
                             status={listing.status}
-                            buyDisabled={!listing.active || !address || marketplaceDisabled}
+                            buyDisabled={!listing.active || !address || marketplaceDisabled || !listing.beast}
                             inCart={globalCart.isInPurchaseCart(listing.listingId)}
                             inSweepSelection={sweepSelectionIds.has(listing.listingId)}
                             onRemoveFromSweep={() => {
@@ -2062,7 +2223,7 @@ export default function MarketplacePage() {
                             status={listing.status}
                             ownedByUser={true}
                             inCart={inCancelCart}
-                            buyDisabled={marketplaceDisabled}
+                            buyDisabled={marketplaceDisabled || !listing.beast}
                             onCardClick={() => handleCardClick(listing)}
                             onEdit={() => requireToS(() => {
                               setEditingListing(listing);
@@ -2084,8 +2245,13 @@ export default function MarketplacePage() {
 
             {myActivitySubTab === "offers" && (
               <>
-                {/* Show loading if offers are actively loading, or if we're waiting for user beasts (which enables the offers query) */}
-                {(offersReceivedLoading || userMadeOffersLoading || (dataHook.userBeastsLoading && !offersReceived && !userMadeOffers)) ? (
+                {/* Show loading when:
+                    1. Offers are actively loading, OR
+                    2. User beasts are loading (needed to know which offers to show), OR
+                    3. User made offers are loading
+                    BUT only if we don't have any enriched offers to display */}
+                {(offersReceivedLoading || userMadeOffersLoading || dataHook.userBeastsLoading) &&
+                 enrichedOffersReceived.length === 0 && enrichedMadeOffers.length === 0 ? (
                   <p className="text-xs text-gray-400">Loading offers...</p>
                 ) : (enrichedOffersReceived.length === 0 && enrichedMadeOffers.length === 0) ? (
                   <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
@@ -2700,7 +2866,7 @@ export default function MarketplacePage() {
                     </div>
                   )}
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Creator Royalty ({CREATOR_ROYALTY_BP / 100}%) (Survivor DAO):</span>
+                    <span className="text-gray-400">Creator Royalty (Survivor DAO) {CREATOR_ROYALTY_BP / 100}%:</span>
                     <span className="text-gray-400">-{fromWei(creatorRoyalty, tokenDecimals)} {tokenSymbol}</span>
                   </div>
                   <div className="flex justify-between text-sm font-semibold border-t border-gray-700 pt-2">

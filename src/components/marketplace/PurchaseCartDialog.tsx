@@ -225,11 +225,21 @@ export default function PurchaseCartDialog({
                 }`}
               >
                 {listing.beast?.image && (
-                  <img
-                    src={listing.beast.image}
-                    alt={listing.beast.name}
-                    className={`w-16 h-16 rounded object-cover ${isInvalid ? "grayscale" : ""}`}
-                  />
+                  <div className="relative group/img flex-shrink-0">
+                    <img
+                      src={listing.beast.image}
+                      alt={listing.beast.name}
+                      className={`w-16 h-20 rounded object-contain bg-gray-800/50 ${isInvalid ? "grayscale" : ""}`}
+                    />
+                    {/* Hover expand preview */}
+                    <div className="absolute left-0 top-0 z-50 opacity-0 group-hover/img:opacity-100 pointer-events-none transition-opacity duration-200">
+                      <img
+                        src={listing.beast.image}
+                        alt={listing.beast.name}
+                        className={`w-32 h-40 rounded-lg object-contain bg-gray-900 border border-gray-700 shadow-xl -translate-x-2 -translate-y-2 ${isInvalid ? "grayscale" : ""}`}
+                      />
+                    </div>
+                  </div>
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">

@@ -1,8 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { Listing } from "../../../services/marketplace/types";
+import type { Listing, ListingStatus } from "../../../services/marketplace/types";
 import { hydrateOrdersProgressive } from "../../../services/marketplace";
 import { BEASTS_COLLECTION_ADDRESS } from "../../../services/marketplace/constants";
 import { useArcadeListedTokensForCollection, type ArcadeOrderWithTime } from "../../../hooks/useArcadeOrders";
+
+/** Check if an order is expired and return the appropriate status */
+function getSkeletonStatus(order: ArcadeOrderWithTime): ListingStatus {
+  const now = Math.floor(Date.now() / 1000);
+  const isExpired = order.expiration && order.expiration <= now;
+  return isExpired ? "expired" : "active";
+}
 
 export interface UseMarketplaceListingsResult {
   listings: Listing[];
@@ -52,42 +59,56 @@ export function useMarketplaceListings(): UseMarketplaceListingsResult {
     let cancelled = false;
 
     const hydrate = async () => {
-      // Check if orders have actually changed by comparing stringified version
-      const ordersString = JSON.stringify(
-        listedOrders.map((o) => ({
-          id: o.id,
-          identifier: o.identifier,
-          tokenId: o.tokenId.toString(),
-        }))
-      );
-
-      if (prevOrdersRef.current === ordersString) {
-        return; // Data hasn't changed, skip hydration
-      }
-
       // Don't hydrate if we're currently loading
       if (ordersLoading || ordersFetching) return;
 
-      prevOrdersRef.current = ordersString;
+      // Check if orders have actually changed by comparing IDs (sorted to ignore order changes)
+      const orderIds = listedOrders.map((o) => o.identifier).sort().join(",");
+
+      if (prevOrdersRef.current === orderIds) {
+        return; // Data hasn't changed, skip hydration
+      }
+
+      prevOrdersRef.current = orderIds;
       setHydratingListings(true);
       setListingsError(null);
 
-      // Show skeletons immediately with active: true so they pass filters
-      const skeletons = listedOrders.map((order: ArcadeOrderWithTime) => ({
-        listingId: order.identifier,
-        tokenId: order.tokenId.toString(),
-        seller: order.owner,
-        price: order.price.toString(),
-        paymentToken: order.currency,
-        active: true, // Mark as active so they show in filtered listings
-        status: "active" as const,
-        quantity: order.quantity,
-        expiration: order.expiration,
-        createdAt: order.listedAt,
-        beast: null,
-        orderId: order.id,
-      }));
-      setListings(skeletons);
+      // Merge new listings with existing hydrated data to prevent flicker
+      // while still allowing new listings to appear
+      setListings((currentListings) => {
+        // Build a map of existing hydrated listings by listingId
+        const existingMap = new Map<string, Listing>();
+        for (const listing of currentListings) {
+          if (listing.beast !== null) {
+            existingMap.set(listing.listingId, listing);
+          }
+        }
+
+        // Create new listings array, preserving hydrated data where available
+        return listedOrders.map((order: ArcadeOrderWithTime) => {
+          const existing = existingMap.get(order.identifier);
+          if (existing) {
+            // Keep existing hydrated listing
+            return existing;
+          }
+          // Create skeleton for new listing (check expiration for proper status)
+          const status = getSkeletonStatus(order);
+          return {
+            listingId: order.identifier,
+            tokenId: order.tokenId.toString(),
+            seller: order.owner,
+            price: order.price.toString(),
+            paymentToken: order.currency,
+            active: status === "active",
+            status,
+            quantity: order.quantity,
+            expiration: order.expiration,
+            createdAt: order.listedAt,
+            beast: null,
+            orderId: order.id,
+          };
+        });
+      });
 
       // Priority token IDs - first 50 items (covers first page on both mobile and desktop)
       const priorityTokenIds = listedOrders.slice(0, 50).map((o) => o.tokenId.toString());
@@ -107,6 +128,10 @@ export function useMarketplaceListings(): UseMarketplaceListingsResult {
 
         setListingsError(null);
         setHydratingListings(false);
+
+        if (import.meta.env.DEV) {
+          console.log("[Hydration] Complete - hydratingListings set to false");
+        }
 
         // Clear optimistic sold IDs when we get fresh data from indexer
         setSoldListingIds((prev) => {

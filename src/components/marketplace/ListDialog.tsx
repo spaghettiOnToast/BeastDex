@@ -234,7 +234,7 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
                         </div>
                       )}
                       <div className="flex justify-between">
-                        <span className="text-sm text-gray-400">Creator Royalty ({CREATOR_ROYALTY_BP / 100}%) (Survivor DAO):</span>
+                        <span className="text-sm text-gray-400">Creator Royalty (Survivor DAO) {CREATOR_ROYALTY_BP / 100}%:</span>
                         <span className="text-sm font-medium text-gray-400">-{fromWei(creatorRoyalty, tokenDecimals)} {tokenSymbol}</span>
                       </div>
                       <div className="flex justify-between border-t border-gray-700 pt-2">

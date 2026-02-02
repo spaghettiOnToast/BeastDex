@@ -14,6 +14,8 @@ export interface UseMarketplaceFiltersProps {
   address: string | undefined;
   availableFilters: BeastAttributeFilters;
   userBeastsLoading?: boolean;
+  /** When true, hydration is still in progress - show skeletons. When false, hide unmatched listings. */
+  hydratingListings?: boolean;
 }
 
 /**
@@ -26,6 +28,7 @@ export function useMarketplaceFilters({
   address,
   availableFilters,
   userBeastsLoading = false,
+  hydratingListings = false,
 }: UseMarketplaceFiltersProps) {
   // Filter and sort state
   const [attributeFilters, setAttributeFilters] = useState<BeastAttributeFilters>({});
@@ -89,6 +92,11 @@ export function useMarketplaceFilters({
     // Single pass: group by tokenId while filtering out invalid listings
     const listingsByTokenId = new Map<string, Listing & { beast: Beast | null }>();
 
+    if (import.meta.env.DEV) {
+      const withoutBeast = listings.filter(l => !l.beast).length;
+      console.log(`[Filter] Running filter: hydratingListings=${hydratingListings}, listings=${listings.length}, withoutBeast=${withoutBeast}`);
+    }
+
     for (const listing of listings) {
       // Skip hidden listings
       if (hiddenListingIds.has(listing.listingId)) continue;
@@ -97,8 +105,16 @@ export function useMarketplaceFilters({
       if (hideExpired && listing.status === "expired") continue;
 
       // Only apply attribute filters if beast data is loaded
-      // (allow listings without beast data to show as loading/skeleton)
       if (listing.beast && !matchesAttributeFilters(listing as Listing & { beast: Beast }, attributeFilters)) continue;
+
+      // Hide listings without beast data once hydration is complete
+      // (they couldn't be matched to beast metadata, so we can't verify ownership)
+      if (!hydratingListings && !listing.beast) {
+        if (import.meta.env.DEV) {
+          console.log(`[Filter] Hiding listing ${listing.listingId} - no beast data after hydration`);
+        }
+        continue;
+      }
 
       // Only consider active listings
       if (listing.status !== "active") continue;
@@ -125,7 +141,7 @@ export function useMarketplaceFilters({
     }
 
     return Array.from(listingsByTokenId.values());
-  }, [listings, attributeFilters, hiddenListingIds, hideExpired]);
+  }, [listings, attributeFilters, hiddenListingIds, hideExpired, hydratingListings]);
 
   /**
    * Sort filtered listings
@@ -161,13 +177,16 @@ export function useMarketplaceFilters({
   }, [attributeFilters, sortOption, hideExpired, activeTab]);
 
   /**
-   * Set default sort when switching to My Beasts tab
-   * Only changes sort when entering my-beasts, not when leaving
-   * This prevents unnecessary re-renders that cause offers to reload
+   * Set default sort based on active tab
+   * - Explore: price-asc (cheapest first for buying)
+   * - My Beasts: default (power descending)
+   * - My Activity: price-asc
    */
   useEffect(() => {
     if (activeTab === "my-beasts") {
       setSortOption("default"); // "default" sorts by power descending
+    } else if (activeTab === "explore" || activeTab === "my") {
+      setSortOption("price-asc"); // Price low to high for marketplace browsing
     }
   }, [activeTab]);
 

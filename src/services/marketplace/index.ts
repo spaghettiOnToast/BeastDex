@@ -72,15 +72,20 @@ export async function hydrateOrders(orders: ArcadeOrderWithTime[]): Promise<List
   const beastMap = new Map<string, Beast | null>();
   let cacheHits = 0;
 
-  // Prime map with cached entries
+  // Prime map with cached entries (only non-null - allow retry for previously failed)
   for (const tokenId of uniqueTokenIds) {
-    if (beastCache.has(tokenId)) {
-      beastMap.set(tokenId, beastCache.get(tokenId)!);
+    const cached = beastCache.get(tokenId);
+    if (cached !== undefined && cached !== null) {
+      beastMap.set(tokenId, cached);
       cacheHits++;
     }
   }
 
-  const idsToFetch = uniqueTokenIds.filter((id) => !beastCache.has(id));
+  // Fetch any that aren't in cache OR are cached as null (retry failed lookups)
+  const idsToFetch = uniqueTokenIds.filter((id) => {
+    const cached = beastCache.get(id);
+    return cached === undefined || cached === null;
+  });
   const cacheMisses = idsToFetch.length;
   const BATCH_SIZE = 100; // Batch size for SQL queries
   const HYDRATION_TIMEOUT = 90000; // 90 second total timeout (accounts for 60s SQL timeout + retries)
@@ -98,16 +103,20 @@ export async function hydrateOrders(orders: ArcadeOrderWithTime[]): Promise<List
 
         for (const identifier of chunk) {
           const beast = resolveBeastForIdentifier(identifier, indexes);
-          beastCache.set(identifier, beast);
+          // Only cache successful lookups - allow retry for missing beasts
+          if (beast !== null) {
+            beastCache.set(identifier, beast);
+          } else if (import.meta.env.DEV) {
+            // Log unmatched token IDs in dev mode to help debug
+            console.warn(`[Hydration] No beast found for tokenId: ${identifier}`);
+          }
           beastMap.set(identifier, beast);
         }
       } catch (error) {
         console.warn("[Hydration] Batch failed, continuing with nulls", error);
-        // Cache nulls for failed fetches to avoid retrying
+        // Don't cache failures - allow retry on next hydration
+        // Just set in local map so listings show (with skeleton)
         for (const identifier of chunk) {
-          if (!beastCache.has(identifier)) {
-            beastCache.set(identifier, null);
-          }
           if (!beastMap.has(identifier)) {
             beastMap.set(identifier, null);
           }
@@ -194,12 +203,15 @@ export async function hydrateOrdersProgressive(
   const skeletons = orders.map(toListingSkeleton);
   const beastMap = new Map<string, Beast | null>();
   const BATCH_SIZE = 50; // Smaller batches for faster incremental updates
+  const HYDRATION_TIMEOUT = 60000; // 60 second timeout for progressive hydration
+  const startTime = Date.now();
 
-  // Prime map with cached entries
+  // Prime map with cached entries (only non-null - allow retry for previously failed)
   const allTokenIds = Array.from(new Set(skeletons.map((l) => l.tokenId)));
   for (const tokenId of allTokenIds) {
-    if (beastCache.has(tokenId)) {
-      beastMap.set(tokenId, beastCache.get(tokenId)!);
+    const cached = beastCache.get(tokenId);
+    if (cached !== undefined && cached !== null) {
+      beastMap.set(tokenId, cached);
     }
   }
 
@@ -216,22 +228,36 @@ export async function hydrateOrdersProgressive(
 
   // Helper to hydrate a batch
   const hydrateBatch = async (tokenIds: string[]) => {
-    const toFetch = tokenIds.filter((id) => !beastCache.has(id));
+    // Fetch any not in cache OR cached as null (retry failed lookups)
+    const toFetch = tokenIds.filter((id) => {
+      const cached = beastCache.get(id);
+      return cached === undefined || cached === null;
+    });
     if (toFetch.length === 0) return;
 
     try {
       const beasts = await fetchBeastsByIds(toFetch);
       const indexes = buildBeastLookup(beasts);
 
+      if (import.meta.env.DEV) {
+        console.log(`[Progressive Hydration] Batch: requested ${toFetch.length}, got ${beasts.length} beasts`);
+      }
+
       for (const id of toFetch) {
         const beast = resolveBeastForIdentifier(id, indexes);
-        beastCache.set(id, beast);
+        // Only cache successful lookups - allow retry for missing beasts
+        if (beast !== null) {
+          beastCache.set(id, beast);
+        } else if (import.meta.env.DEV) {
+          console.warn(`[Hydration] No beast found for tokenId: ${id}`);
+        }
         beastMap.set(id, beast);
       }
     } catch (error) {
       console.warn("[Progressive Hydration] Batch failed", error);
+      // Don't cache failures - allow retry on next hydration
+      // Just set in local map so listings show (with skeleton)
       for (const id of toFetch) {
-        if (!beastCache.has(id)) beastCache.set(id, null);
         if (!beastMap.has(id)) beastMap.set(id, null);
       }
     }
@@ -239,9 +265,18 @@ export async function hydrateOrdersProgressive(
 
   // 1. Hydrate priority items first (visible page)
   const prioritySet = new Set(priorityTokenIds);
-  const priorityToHydrate = priorityTokenIds.filter((id) => !beastCache.has(id));
+  // Include items cached as null (retry failed lookups)
+  const priorityToHydrate = priorityTokenIds.filter((id) => {
+    const cached = beastCache.get(id);
+    return cached === undefined || cached === null;
+  });
 
   for (let i = 0; i < priorityToHydrate.length; i += BATCH_SIZE) {
+    // Check timeout
+    if (Date.now() - startTime > HYDRATION_TIMEOUT) {
+      console.warn(`[Progressive Hydration] Timeout after ${HYDRATION_TIMEOUT}ms - returning partial data`);
+      break;
+    }
     const chunk = priorityToHydrate.slice(i, i + BATCH_SIZE);
     await hydrateBatch(chunk);
   }
@@ -250,9 +285,19 @@ export async function hydrateOrdersProgressive(
   onProgress(buildListings());
 
   // 2. Hydrate remaining items in background
-  const remainingIds = allTokenIds.filter((id) => !prioritySet.has(id) && !beastCache.has(id));
+  // Include items cached as null (retry failed lookups)
+  const remainingIds = allTokenIds.filter((id) => {
+    if (prioritySet.has(id)) return false;
+    const cached = beastCache.get(id);
+    return cached === undefined || cached === null;
+  });
 
   for (let i = 0; i < remainingIds.length; i += BATCH_SIZE) {
+    // Check timeout
+    if (Date.now() - startTime > HYDRATION_TIMEOUT) {
+      console.warn(`[Progressive Hydration] Timeout after ${HYDRATION_TIMEOUT}ms - returning partial data`);
+      break;
+    }
     const chunk = remainingIds.slice(i, i + BATCH_SIZE);
     await hydrateBatch(chunk);
 

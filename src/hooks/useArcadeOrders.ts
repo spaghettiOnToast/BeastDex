@@ -252,9 +252,11 @@ export function useArcadeListedTokensForCollection(collectionAddress: string) {
   return useQuery({
     queryKey,
     enabled: !!collectionAddress,
-    staleTime: 60_000, // Consider data fresh for 60 seconds
-    refetchOnWindowFocus: false, // Prevent refetch on tab switch
+    staleTime: 5 * 60_000, // Consider data fresh for 5 minutes (prevents background refetches)
+    gcTime: 10 * 60_000, // Keep in cache for 10 minutes
+    refetchOnWindowFocus: false, // Prevent refetch on window focus
     refetchOnMount: false, // Don't refetch if data exists
+    refetchOnReconnect: false, // Don't refetch on reconnect
     queryFn: () => fetchArcadeOrdersGraphQL(collectionAddress, 1000),
   });
 }
@@ -479,9 +481,10 @@ export function useUserOffers(userAddress: string | undefined, collectionAddress
   const query = useQuery({
     queryKey,
     enabled: !!userAddress && !!collectionAddress,
-    staleTime: 15_000, // Consider data fresh for 15 seconds (offers change frequently)
-    refetchOnWindowFocus: true, // Refetch when user returns to window
-    refetchOnMount: true, // Refetch when component mounts to get latest offers
+    staleTime: 2 * 60_000, // Consider data fresh for 2 minutes
+    gcTime: 10 * 60_000, // Keep in cache for 10 minutes
+    refetchOnWindowFocus: false, // Don't refetch on window focus (prevents flicker)
+    refetchOnMount: false, // Don't refetch if data exists (prevents tab switch reload)
     queryFn: async () => {
       if (!userAddress) return [];
       return fetchUserOffersGraphQL(userAddress, collectionAddress, 100);
@@ -667,26 +670,41 @@ export function useOffersReceivedForListings(
   userListedTokenIds: string[],
   enabled: boolean = true
 ) {
+  // Use stable query key - just the collection address
+  // This prevents cache invalidation when token IDs change
+  // Filtering happens client-side via select
   const queryKey = useMemo(
-    () => ["arcadeOffersReceived", collectionAddress, userListedTokenIds.sort().join(",")],
-    [collectionAddress, userListedTokenIds]
+    () => ["arcadeAllOffers", collectionAddress],
+    [collectionAddress]
+  );
+
+  // Memoize token IDs set for client-side filtering
+  const tokenIdSet = useMemo(
+    () => new Set(userListedTokenIds.map(id => String(id))),
+    [userListedTokenIds]
   );
 
   const query = useQuery({
     queryKey,
-    enabled: enabled && !!collectionAddress && userListedTokenIds.length > 0,
-    staleTime: 30_000, // Consider data fresh for 30 seconds
+    // Only require collection address - don't depend on token IDs for enabling
+    // This allows cache to persist across tab switches
+    enabled: enabled && !!collectionAddress,
+    staleTime: 2 * 60_000, // Consider data fresh for 2 minutes
+    gcTime: 10 * 60_000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false,
+    refetchOnMount: false, // Don't refetch if data exists (prevents tab switch reload)
     queryFn: async () => {
-      if (userListedTokenIds.length === 0) return [];
+      // Fetch all offers for the collection (stable cache)
+      return fetchAllOffersForCollectionGraphQL(collectionAddress, 500);
+    },
+    // Client-side filtering based on user's token IDs
+    // This updates instantly when token IDs change without refetching
+    select: useCallback((allOffers: ArcadeOrderModelCompat[]) => {
+      if (tokenIdSet.size === 0) return [];
 
-      // Fetch all offers for the collection
-      const allOffers = await fetchAllOffersForCollectionGraphQL(collectionAddress, 500);
-
-      // Filter to only offers on user's listed tokens
-      const userTokenIdSet = new Set(userListedTokenIds.map(id => String(id)));
+      // Filter to only offers on user's tokens
       const offersReceived = allOffers.filter(offer =>
-        userTokenIdSet.has(String(offer.tokenId))
+        tokenIdSet.has(String(offer.tokenId))
       );
 
       // Sort by price descending (highest first) - compare as BigInt for precision
@@ -697,7 +715,7 @@ export function useOffersReceivedForListings(
         if (priceB < priceA) return -1;
         return 0;
       });
-    },
+    }, [tokenIdSet]),
   });
 
   return {
