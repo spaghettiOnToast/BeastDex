@@ -13,7 +13,10 @@ import {
   getPaymentTokenByAddress,
   BEASTS_COLLECTION_ADDRESS,
   CREATOR_ROYALTY_BP,
+  MARKETPLACE_ADDRESS,
 } from "../services/marketplace/constants";
+import { getProvider } from "../services/marketplace/approvals";
+import { toUint256Hex } from "../utils/uint256";
 import { useArcadeBookConfig } from "../hooks/useArcadeBookConfig";
 import { toBigIntSafe } from "../utils/bigint";
 import { fromWei } from "../utils/price";
@@ -178,6 +181,7 @@ export default function MarketplacePage() {
     }
   });
   const [showHiddenMadeOffers, setShowHiddenMadeOffers] = useState(false);
+  const [cancellingOfferId, setCancellingOfferId] = useState<string | null>(null);
 
   // Sweep selection state - tracks which listings are in the current sweep floor selection
   const [sweepSelectionIds, setSweepSelectionIds] = useState<Set<string>>(new Set());
@@ -355,6 +359,53 @@ export default function MarketplacePage() {
     BEASTS_COLLECTION_ADDRESS
   );
 
+  // Cancel a made offer
+  const handleCancelOffer = useCallback(async (offer: { id: bigint | number; collection: string; tokenId: bigint | number | string }) => {
+    if (!account || cancellingOfferId) return;
+
+    const offerId = String(offer.id);
+    setCancellingOfferId(offerId);
+    const toastId = toast.loading("Cancelling offer...");
+
+    try {
+      const tokenIdBigInt = typeof offer.tokenId === 'bigint' ? offer.tokenId : BigInt(String(offer.tokenId));
+      const tokenIdU256 = toUint256Hex(tokenIdBigInt);
+
+      const cancelCall = {
+        contractAddress: MARKETPLACE_ADDRESS,
+        entrypoint: "cancel",
+        calldata: [
+          String(offer.id),
+          offer.collection,
+          ...tokenIdU256,
+        ],
+      };
+
+      const result = await account.execute([cancelCall]);
+
+      if (result?.transaction_hash) {
+        const provider = getProvider(account);
+        await provider.waitForTransaction(result.transaction_hash, {
+          retryInterval: 2000,
+        });
+      }
+
+      toast.success("Offer cancelled successfully!", { id: toastId });
+
+      // Refetch offers to update the list
+      refetchUserMadeOffers();
+    } catch (error) {
+      if (isUserRejection(error)) {
+        toast.info("Cancellation cancelled", { id: toastId });
+      } else {
+        const errorMessage = (error as Error).message || "Failed to cancel offer";
+        toast.error(errorMessage, { id: toastId });
+      }
+    } finally {
+      setCancellingOfferId(null);
+    }
+  }, [account, cancellingOfferId, refetchUserMadeOffers]);
+
   // Enrich offers with beast names from listings or owned beasts, and hidden state
   // Also filter out offers made by the current user (you can't accept your own offers)
   // And filter out expired offers
@@ -391,9 +442,13 @@ export default function MarketplacePage() {
         beastName = matchingBeast?.name;
       }
 
+      // Check if beast is currently listed
+      const isListed = !!matchingListing && matchingListing.status === "active";
+
       return {
         ...offer,
         beastName,
+        isListed,
         isHidden: hiddenOfferIds.has(offer.id.toString()),
       };
     });
@@ -432,12 +487,16 @@ export default function MarketplacePage() {
       });
       const beastName = matchingListing?.beast?.name || matchingBeast?.name || `Beast #${offer.tokenId}`;
 
+      // Check if the listing is still active (beast hasn't been sold/delisted)
+      const listingActive = matchingListing?.status === "active";
+
       return {
         ...offer,
         beastName,
         isExpired,
         isCancelled,
         isExecuted,
+        listingActive,
         // Auto-hide expired, cancelled, or executed offers
         isHidden: hiddenMadeOfferIds.has(offer.id.toString()) || isExpired || isInactive,
       };
@@ -1992,7 +2051,8 @@ export default function MarketplacePage() {
 
             {myActivitySubTab === "offers" && (
               <>
-                {(offersReceivedLoading || userMadeOffersLoading) ? (
+                {/* Show loading if offers are actively loading, or if we're waiting for user beasts (which enables the offers query) */}
+                {(offersReceivedLoading || userMadeOffersLoading || (dataHook.userBeastsLoading && !offersReceived && !userMadeOffers)) ? (
                   <p className="text-xs text-gray-400">Loading offers...</p>
                 ) : (enrichedOffersReceived.length === 0 && enrichedMadeOffers.length === 0) ? (
                   <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
@@ -2067,6 +2127,14 @@ export default function MarketplacePage() {
                                         Highest
                                       </span>
                                     )}
+                                    <span className={cn(
+                                      "flex-shrink-0 text-[10px] px-2 py-0.5 rounded",
+                                      offer.isListed
+                                        ? "bg-blue-500/20 text-blue-400"
+                                        : "bg-gray-600/20 text-gray-400"
+                                    )}>
+                                      {offer.isListed ? "Listed" : "Unlisted"}
+                                    </span>
                                     {offer.isHidden && (
                                       <span className="flex-shrink-0 text-[10px] bg-gray-700/50 text-gray-400 px-2 py-0.5 rounded">
                                         Hidden
@@ -2205,6 +2273,11 @@ export default function MarketplacePage() {
                                         Expired
                                       </span>
                                     )}
+                                    {!offer.listingActive && !offer.isExpired && (
+                                      <span className="flex-shrink-0 text-[10px] bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded">
+                                        Listing Ended
+                                      </span>
+                                    )}
                                     {offer.isHidden && !offer.isExpired && (
                                       <span className="flex-shrink-0 text-[10px] bg-gray-700/50 text-gray-400 px-2 py-0.5 rounded">
                                         Hidden
@@ -2242,11 +2315,28 @@ export default function MarketplacePage() {
                                   >
                                     {hiddenMadeOfferIds.has(offer.id.toString()) ? "Unhide" : "Hide"}
                                   </Button>
+                                  {!offer.isExpired && !offer.isCancelled && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleCancelOffer({
+                                        id: offer.id,
+                                        collection: offer.collection,
+                                        tokenId: offer.tokenId,
+                                      })}
+                                      disabled={cancellingOfferId === offer.id.toString()}
+                                      className="text-red-400 border-red-500/50 hover:bg-red-500/10 text-xs px-3"
+                                    >
+                                      {cancellingOfferId === offer.id.toString() ? "Cancelling..." : "Cancel"}
+                                    </Button>
+                                  )}
                                   <span className={cn(
                                     "text-xs px-3 py-1.5 rounded-md font-medium",
-                                    offer.isExpired ? "bg-gray-700/50 text-gray-400" : "bg-purple-500/20 text-purple-300"
+                                    offer.isExpired ? "bg-gray-700/50 text-gray-400"
+                                      : offer.isCancelled ? "bg-red-500/20 text-red-400"
+                                      : "bg-purple-500/20 text-purple-300"
                                   )}>
-                                    {offer.isExpired ? "Expired" : "Pending"}
+                                    {offer.isExpired ? "Expired" : offer.isCancelled ? "Cancelled" : "Pending"}
                                   </span>
                                 </div>
                               </div>
@@ -2318,7 +2408,6 @@ export default function MarketplacePage() {
                             <th className="px-4 py-3 text-left font-semibold text-gray-300">Beast</th>
                             <th className="px-4 py-3 text-left font-semibold text-gray-300">Price</th>
                             <th className="px-4 py-3 text-left font-semibold text-gray-300">Status</th>
-                            <th className="px-4 py-3 text-left font-semibold text-gray-300">Tx</th>
                             <th className="px-4 py-3 text-left font-semibold text-gray-300">Expires</th>
                           </tr>
                         </thead>
@@ -2395,20 +2484,6 @@ export default function MarketplacePage() {
                                   <span className={cn("inline-block px-2 py-1 rounded text-[10px] font-semibold uppercase", statusBadgeClass)}>
                                     {tx.status}
                                   </span>
-                                ) : (
-                                  <span className="text-gray-500">-</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3">
-                                {tx.txHash ? (
-                                  <a
-                                    href={`https://voyager.online/tx/${tx.txHash}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-lsGold hover:text-lsGold/80 hover:underline font-mono text-[10px]"
-                                  >
-                                    {tx.txHash.slice(0, 6)}…{tx.txHash.slice(-4)}
-                                  </a>
                                 ) : (
                                   <span className="text-gray-500">-</span>
                                 )}

@@ -161,14 +161,13 @@ export function useMarketplaceFilters({
   }, [attributeFilters, sortOption, hideExpired, activeTab]);
 
   /**
-   * Set default sort based on active tab
-   * My Beasts tab defaults to power sort (descending), other tabs default to price sort
+   * Set default sort when switching to My Beasts tab
+   * Only changes sort when entering my-beasts, not when leaving
+   * This prevents unnecessary re-renders that cause offers to reload
    */
   useEffect(() => {
     if (activeTab === "my-beasts") {
       setSortOption("default"); // "default" sorts by power descending
-    } else {
-      setSortOption("price-asc");
     }
   }, [activeTab]);
 
