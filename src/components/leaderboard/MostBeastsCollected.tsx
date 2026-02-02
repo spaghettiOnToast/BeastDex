@@ -149,7 +149,7 @@ export function MostBeastsCollected() {
                 <div className="col-span-2 flex items-center">
                   {normalised ? (
                     <Link
-                      to={`/account/${encodeURIComponent(normalised)}`}
+                      to={`/collection/${encodeURIComponent(normalised)}`}
                       className={`
                         hover:text-[#8bff72] transition-all duration-200 group-hover:scale-105 font-medium
                         ${getDisplayClass(entry.owner)}

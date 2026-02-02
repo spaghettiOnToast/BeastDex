@@ -71,7 +71,7 @@ const BeastCard = memo(function BeastCard({
       <div className="flex items-center justify-center gap-1 text-xs">
         <span className="text-muted-foreground text-xs">Owner:</span>
         <Link
-          to={`/account/${encodeURIComponent(accountIdentifier)}`}
+          to={`/collection/${encodeURIComponent(accountIdentifier)}`}
           className="text-primary hover:text-primary/80 font-medium underline underline-offset-2 decoration-primary/50 hover:decoration-primary transition-all truncate text-xs"
           onClick={(event) => event.stopPropagation()}
         >

@@ -25,7 +25,6 @@ import {
 } from "../services/beast";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { lookupControllerAddresses } from "../services/controller";
-import { starknetIdService } from "../services/starknetId";
 import { getUserFriendlyErrorMessage } from "../utils/error";
 import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
 import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
@@ -139,20 +138,7 @@ function AccountPage() {
           return;
         }
 
-        // If no Cartridge username found, try Starknet.id
-        try {
-          const starknetIdAddress =
-            await starknetIdService.getAddressFromStarkName(trimmedIdentifier);
-          if (starknetIdAddress && !cancelled) {
-            setResolvedAddress(starknetIdAddress);
-            setIdentifierError(null);
-            return;
-          }
-        } catch (starknetIdError) {
-          console.warn("Failed to resolve Starknet.id:", starknetIdError);
-        }
-
-        // If neither worked
+        // If no Cartridge username found
         if (!cancelled) {
           setResolvedAddress("");
           setIdentifierError(
