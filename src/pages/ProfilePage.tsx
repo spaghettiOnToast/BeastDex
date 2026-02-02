@@ -9,7 +9,7 @@ import { BeastTableView } from "../components/beast/BeastTableView";
 import PaginationControls from "../components/pagination/PaginationControls";
 import { FiltersButton } from "../components/filters/FiltersButton";
 import { FiltersDrawer } from "../components/filters/FiltersDrawer";
-import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
+import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { useBeasts } from "../hooks/useBeasts";
 import {
@@ -27,7 +27,7 @@ import {
   TOTAL_BEAST_VARIETIES,
 } from "../utils/beastCollection";
 import { normaliseStarknetAddress } from "../utils/address";
-import { getErrorMessage } from "../utils/error";
+import { getUserFriendlyErrorMessage } from "../utils/error";
 import { Grid, Table } from "lucide-react";
 import { Button } from "../components/ui/button";
 
@@ -70,7 +70,7 @@ function ProfilePage() {
     attributeFilters,
     ownerAddresses,
     page,
-    sort: sortOption,
+    sort: sortOptionToBeastSortField(sortOption),
   });
 
   const loadAdditionalData = useCallback(async () => {
@@ -123,11 +123,12 @@ function ProfilePage() {
     [beasts]
   );
 
+  // Defer username lookups to allow beasts to render first
   const {
     usernames: ownerUsernames,
     loading: usernamesLoading,
     error: usernamesError,
-  } = useControllerUsernames(ownerLookupAddresses);
+  } = useControllerUsernames(ownerLookupAddresses, { delayMs: 300 });
 
   const selectedBeast = useMemo(
     () => beasts.find((beast) => beast.id === selectedBeastId) ?? null,
@@ -146,7 +147,7 @@ function ProfilePage() {
         setAvailableFilters(filters);
       } catch (error) {
         if (mounted) {
-          setFiltersError(getErrorMessage(error, "Failed to load filters"));
+          setFiltersError(getUserFriendlyErrorMessage(error, "Failed to load filters"));
         }
       } finally {
         if (mounted) {

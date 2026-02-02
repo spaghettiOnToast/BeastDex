@@ -27,9 +27,12 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
   const [isSearching, setIsSearching] = useState(false);
   const navigate = useNavigate();
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Use ref to access searchValue without adding it as a dependency
+  const searchValueRef = useRef(searchValue);
+  searchValueRef.current = searchValue;
 
   const handleSearch = useCallback(async (query?: string) => {
-    const searchQuery = (query ?? searchValue).trim();
+    const searchQuery = (query ?? searchValueRef.current).trim();
     if (!searchQuery) return;
 
     setIsSearching(true);
@@ -71,7 +74,7 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsSearching(false);
     }
-  }, [searchValue, navigate]);
+  }, [navigate]);
 
   const debouncedSearch = useCallback((query: string) => {
     if (debounceTimeoutRef.current) {

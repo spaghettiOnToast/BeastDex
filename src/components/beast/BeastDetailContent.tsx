@@ -1,9 +1,10 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { Beast, BeastAttribute } from "../../services/beast";
 import type { SummitBeastData } from "../../services/summit";
 import CometCard from "../ui/CometCard";
 import SummitStats from "./SummitStats";
+import { cn } from "../../lib/utils";
 
 type BeastDetailContentProps = {
   beast: Beast;
@@ -17,6 +18,80 @@ type BeastDetailContentProps = {
 const BOOLEAN_ATTRIBUTES = new Set(["shiny", "animated", "genesis"]);
 const UNIX_TIMESTAMP_ATTRIBUTES = new Set(["last death timestamp"]);
 
+type RightPanelTab = "summit" | "metadata";
+
+// Color mapping for different attribute types
+const getAttributeStyle = (trait: string | undefined) => {
+  if (!trait)
+    return {
+      bg: "bg-gray-800/60",
+      border: "border-gray-700/50",
+      text: "text-gray-300",
+    };
+  const t = trait.toLowerCase();
+
+  if (t === "tier")
+    return {
+      bg: "bg-yellow-500/10",
+      border: "border-yellow-500/30",
+      text: "text-yellow-300",
+    };
+  if (t === "level")
+    return {
+      bg: "bg-blue-500/10",
+      border: "border-blue-500/30",
+      text: "text-blue-300",
+    };
+  if (t === "type")
+    return {
+      bg: "bg-purple-500/10",
+      border: "border-purple-500/30",
+      text: "text-purple-300",
+    };
+  if (t === "power")
+    return {
+      bg: "bg-orange-500/10",
+      border: "border-orange-500/30",
+      text: "text-orange-300",
+    };
+  if (t === "health")
+    return {
+      bg: "bg-pink-500/10",
+      border: "border-pink-500/30",
+      text: "text-pink-300",
+    };
+  if (t === "rank")
+    return {
+      bg: "bg-emerald-500/10",
+      border: "border-emerald-500/30",
+      text: "text-emerald-300",
+    };
+  if (t === "prefix" || t === "suffix")
+    return {
+      bg: "bg-cyan-500/10",
+      border: "border-cyan-500/30",
+      text: "text-cyan-300",
+    };
+  if (t === "adventurers killed")
+    return {
+      bg: "bg-red-500/10",
+      border: "border-red-500/30",
+      text: "text-red-300",
+    };
+  if (t === "shiny" || t === "animated" || t === "genesis")
+    return {
+      bg: "bg-[#39ff14]/10",
+      border: "border-[#39ff14]/30",
+      text: "text-[#39ff14]",
+    };
+
+  return {
+    bg: "bg-gray-800/60",
+    border: "border-gray-700/50",
+    text: "text-gray-300",
+  };
+};
+
 export function BeastDetailContent({
   beast,
   ownerUsername,
@@ -25,6 +100,7 @@ export function BeastDetailContent({
   summitData,
   summitLoading,
 }: BeastDetailContentProps) {
+  const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>("metadata");
   const attributes = Array.isArray(beast.attributes) ? beast.attributes : [];
 
   const ownerAddressLower = beast.owner ? beast.owner.toLowerCase() : "";
@@ -35,12 +111,12 @@ export function BeastDetailContent({
   const ownerLabel = ownerUsername
     ? ownerUsername
     : beast.owner
-    ? `${beast.owner.slice(0, 6)}…${beast.owner.slice(-4)}`
-    : "";
+      ? `${beast.owner.slice(0, 6)}…${beast.owner.slice(-4)}`
+      : "";
 
   const formatAttributeValue = (
     trait: string | undefined,
-    value: BeastAttribute["value"]
+    value: BeastAttribute["value"],
   ) => {
     if (!trait) return String(value);
     const t = trait.toLowerCase();
@@ -61,63 +137,138 @@ export function BeastDetailContent({
     return String(value);
   };
 
-  const imageClasses =
-    imageSize === "detail"
-      ? "block h-[30rem] w-auto max-w-[520px] object-contain sm:h-[32rem]"
-      : "block h-[32rem] w-auto object-contain";
+  // Fixed dimensions to match beast card
+  const cardHeight = "h-[520px]";
+  const cardWidth = "w-[380px]";
 
+  const imageClasses = "block h-full w-full object-contain";
   const fallbackBoxClasses =
-    imageSize === "detail"
-      ? "flex h-[30rem] w-[520px] items-center justify-center bg-black/70 px-6 text-gray-600 sm:h-[32rem]"
-      : "flex h-[32rem] w-72 items-center justify-center bg-black/70 px-6 text-gray-600";
-
-  const summitStatsHeightClasses =
-    imageSize === "detail"
-      ? "h-[30rem] sm:h-[32rem]"
-      : "h-[32rem]";
+    "flex h-full w-full items-center justify-center bg-black/70 px-6 text-gray-600";
 
   return (
-    <div className="space-y-6">
-      {/* Top row: Image + Summit Stats */}
-      <div className="grid gap-4 md:grid-cols-5">
-        <div className="md:col-span-3 flex flex-col items-center gap-3">
+    <div className="flex flex-col gap-4">
+      {/* Main Content: Image + Right Panel */}
+      <div className="flex flex-col lg:flex-row gap-28 justify-center items-start">
+        {/* Left: Beast Card */}
+        <div className={`${cardWidth} ${cardHeight} flex-shrink-0`}>
           <CometCard>
             {beast.image ? (
-              <img src={beast.image} alt={beast.name} className={imageClasses} />
+              <img
+                src={beast.image}
+                alt={beast.name}
+                className={imageClasses}
+              />
             ) : (
               <div className={fallbackBoxClasses}>No image available</div>
             )}
           </CometCard>
         </div>
 
-        <div className="md:col-span-2 flex w-full flex-col gap-3">
-          {/* Summit Stats - static card with glow */}
-          <div className={`relative ${summitStatsHeightClasses}`}>
-            <div className="absolute inset-0 overflow-hidden rounded-2xl bg-black/60">
-              <span className="pointer-events-none absolute left-1/2 top-1/2 h-56 w-56 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br from-[#39ff14]/60 via-transparent to-transparent blur-3xl" />
-            </div>
-            <div className="relative z-10 h-full rounded-2xl border border-gray-800 bg-black/80 shadow-[0_20px_45px_-20px_rgba(57,255,20,0.45)]">
-              <SummitStats
-                beast={beast}
-                summitData={summitData ?? null}
-                loading={summitLoading}
-                size={imageSize}
-              />
-            </div>
+        {/* Right: Tabs + Content - Same dimensions as card */}
+        <div className={`${cardWidth} flex flex-col gap-2 flex-shrink-0`}>
+          {/* Tab Buttons - Compact */}
+          <div className="flex rounded-lg border border-gray-800 bg-black/60 p-0.5">
+            <button
+              type="button"
+              onClick={() => setRightPanelTab("metadata")}
+              className={cn(
+                "flex-1 rounded-md px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all",
+                rightPanelTab === "metadata"
+                  ? "bg-lsGold/20 text-lsGold border border-lsGold/30"
+                  : "text-gray-500 hover:text-lsGold",
+              )}
+            >
+              Metadata
+            </button>
+            <button
+              type="button"
+              onClick={() => setRightPanelTab("summit")}
+              className={cn(
+                "flex-1 rounded-md px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all",
+                rightPanelTab === "summit"
+                  ? "bg-[#39ff14]/20 text-[#39ff14] border border-[#39ff14]/30"
+                  : "text-gray-500 hover:text-[#39ff14]",
+              )}
+            >
+              Summit
+            </button>
+          </div>
+
+          {/* Panel Content - Height to match card minus tabs */}
+          <div className="h-[480px] rounded-xl border border-gray-800 bg-black/60 overflow-hidden">
+            {rightPanelTab === "summit" ? (
+              /* Summit Stats Panel */
+              <div className="h-full">
+                <SummitStats
+                  beast={beast}
+                  summitData={summitData ?? null}
+                  loading={summitLoading}
+                  size={imageSize}
+                />
+              </div>
+            ) : (
+              /* Metadata Panel */
+              <div className="h-full flex flex-col">
+                {/* Compact Header */}
+                <div className="flex-shrink-0 px-3 py-2 border-b border-gray-800/50 bg-black/30">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-lsGold uppercase tracking-wider">
+                      Attributes
+                    </span>
+                    <span className="text-[9px] text-gray-500">
+                      {attributes.length}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Scrollable Attributes - Compact Grid */}
+                <div className="flex-1 overflow-y-auto p-2">
+                  {attributes.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {attributes.map((attr, idx) => {
+                        const style = getAttributeStyle(attr.trait_type);
+                        return (
+                          <div
+                            key={`${attr.trait_type}-${attr.value}-${idx}`}
+                            className={`rounded border ${style.border} ${style.bg} px-2 py-1.5`}
+                          >
+                            <p className="text-[8px] uppercase tracking-wide text-gray-500 font-medium">
+                              {attr.trait_type}
+                            </p>
+                            <p
+                              className={`text-[11px] font-bold ${style.text} truncate`}
+                            >
+                              {formatAttributeValue(
+                                attr.trait_type,
+                                attr.value,
+                              )}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="flex h-full items-center justify-center">
+                      <p className="text-[10px] text-gray-500">No metadata</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Bottom row: Owned by + Actions */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        {/* Owned by - compact */}
-        <section className="rounded-lg border border-gray-800 bg-black/40 px-4 py-2 text-xs text-gray-400">
+      {/* Footer: Owner + Actions - Always Visible */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-gray-800/50">
+        {/* Owned by */}
+        <div className="rounded-lg border border-gray-800 bg-black/40 px-4 py-2.5 text-sm text-gray-400">
           {beast.owner ? (
             <span>
               Owned by{" "}
               <Link
                 to={`/collection/${encodeURIComponent(accountIdentifier)}`}
-                className="text-lsGold hover:underline"
+                className="text-lsGold font-medium hover:underline"
               >
                 {ownerLabel}
               </Link>
@@ -125,39 +276,11 @@ export function BeastDetailContent({
           ) : (
             <span>Not owned</span>
           )}
-        </section>
+        </div>
 
-        {/* Actions - right aligned */}
-        {actionSlot && <div>{actionSlot}</div>}
+        {/* Action Buttons */}
+        {actionSlot && <div className="flex flex-wrap gap-2">{actionSlot}</div>}
       </div>
-
-      {/* Bottom row: NFT Metadata */}
-      <section className="rounded-xl border border-gray-800 bg-black/40 p-4">
-        <h2 className="mb-3 text-sm font-semibold text-lsGold uppercase tracking-wide">
-          NFT Metadata
-        </h2>
-        {attributes.length > 0 ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-            {attributes.map((attr, idx) => (
-              <div
-                key={`${attr.trait_type}-${attr.value}-${idx}`}
-                className="rounded-md border border-gray-800 bg-black/50 px-2 py-1.5"
-              >
-                <p className="text-[9px] uppercase tracking-wide text-gray-500">
-                  {attr.trait_type}
-                </p>
-                <p className="truncate text-[12px] text-gray-200">
-                  {formatAttributeValue(attr.trait_type, attr.value)}
-                </p>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-gray-500">
-            No metadata attributes available for this beast.
-          </p>
-        )}
-      </section>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import BeastDetailContent from "../components/beast/BeastDetailContent";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { fetchBeastById, type Beast } from "../services/beast";
 import { fetchSummitBeastData, type SummitBeastData } from "../services/summit";
-import { getErrorMessage } from "../utils/error";
+import { getUserFriendlyErrorMessage } from "../utils/error";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import { normaliseStarknetAddress } from "../utils/address";
@@ -45,7 +45,7 @@ function BeastDetailPage() {
         }
       } catch (error: unknown) {
         if (cancelled) return;
-        setError(getErrorMessage(error, "Failed to load beast details"));
+        setError(getUserFriendlyErrorMessage(error, "Failed to load beast details"));
         setBeast(null);
       } finally {
         if (!cancelled) setLoading(false);
@@ -96,11 +96,12 @@ function BeastDetailPage() {
     return [beast.owner];
   }, [beast?.owner]);
 
+  // Defer username lookups to allow beast to render first
   const {
     usernames: ownerUsernames,
     loading: ownerLookupLoading,
     error: ownerLookupError,
-  } = useControllerUsernames(ownerLookupAddresses);
+  } = useControllerUsernames(ownerLookupAddresses, { delayMs: 200 });
 
   const normalizedOwner = beast?.owner ? normaliseStarknetAddress(beast.owner) : null;
   const ownerUsername = normalizedOwner

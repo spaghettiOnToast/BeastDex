@@ -355,14 +355,23 @@ export function buildBeastByIdQuery(id: string, tokenHex?: string) {
 
   const idClause = hasId ? `LOWER(t.id) = '${escapedIdLower}'` : "";
 
-  const hexClause = normalisedHex
-    ? `LOWER(
+  // For numeric IDs, also generate the padded version for comparison
+  let hexClause = "";
+  if (normalisedHex) {
+    const hexVariants = [escapedHex];
+    // If it's an unpadded hex, also include the padded version
+    if (normalisedHex.startsWith("0x") && normalisedHex.length < 66) {
+      const paddedHex = `0x${normalisedHex.slice(2).padStart(64, "0")}`;
+      hexVariants.push(escapeSqlLiteral(paddedHex));
+    }
+    const hexList = hexVariants.map(h => `'${h}'`).join(", ");
+    hexClause = `LOWER(
           CASE
             WHEN instr(t.id, ':') > 0 THEN substr(t.id, instr(t.id, ':') + 1)
             ELSE t.token_id
           END
-        ) = '${escapedHex}'`
-    : "";
+        ) IN (${hexList})`;
+  }
 
   const whereClauses = [idClause, hexClause].filter(
     (clause) => clause.length > 0
@@ -395,6 +404,72 @@ export function buildBeastByIdQuery(id: string, tokenHex?: string) {
       AND json_valid(t.metadata) = 1
       AND (${filter})
     LIMIT 1;
+  `;
+}
+
+export function buildBeastsByIdListQuery({
+  identifiers,
+  tokenHexes,
+}: {
+  identifiers: string[];
+  tokenHexes: string[];
+}) {
+  const escapedIds = identifiers
+    .map((identifier) => identifier?.trim()?.toLowerCase())
+    .filter((value): value is string => Boolean(value))
+    .map((value) => `'${escapeSqlLiteral(value)}'`);
+
+  const escapedHexes = tokenHexes
+    .map((hex) => hex?.trim()?.toLowerCase())
+    .filter((value): value is string => Boolean(value))
+    .map((value) => `'${escapeSqlLiteral(value)}'`);
+
+  const clauses: string[] = [];
+
+  if (escapedIds.length > 0) {
+    clauses.push(`LOWER(t.id) IN (${escapedIds.join(", ")})`);
+  }
+
+  if (escapedHexes.length > 0) {
+    clauses.push(`
+      LOWER(
+        CASE
+          WHEN instr(t.id, ':') > 0 THEN substr(t.id, instr(t.id, ':') + 1)
+          ELSE t.token_id
+        END
+      ) IN (${escapedHexes.join(", ")})
+    `);
+  }
+
+  if (clauses.length === 0) {
+    throw new Error("No valid beast identifiers provided");
+  }
+
+  return `
+    WITH current_owners AS (
+      SELECT
+        token_id,
+        contract_address,
+        account_address,
+        balance,
+        ROW_NUMBER() OVER (PARTITION BY token_id, contract_address ORDER BY balance DESC) as rn
+      FROM token_balances
+      WHERE contract_address = '${CONTRACT_ADDRESS}'
+        AND balance > '${ZERO_BALANCE}'
+    )
+    SELECT
+      t.id,
+      t.metadata,
+      b.account_address,
+      ${POWER_SELECT_FRAGMENT}
+    FROM tokens t
+    JOIN current_owners b
+      ON t.id = b.token_id
+      AND t.contract_address = b.contract_address
+      AND b.rn = 1
+    WHERE t.contract_address = '${CONTRACT_ADDRESS}'
+      AND json_valid(t.metadata) = 1
+      AND (${clauses.join(" OR ")});
   `;
 }
 

@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
-import CompletionTracker from "../CompletionTracker";
-import StatsCarousel from "../StatsCarousel";
+import CompletionTracker from "./CompletionTracker";
+import StatsCarousel from "./StatsCarousel";
 import { TOTAL_BEAST_SUPPLY } from "../../services/beast";
 import { Card, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
@@ -23,6 +23,8 @@ type StatsPanelProps = {
   onRefresh: () => void;
   refreshing: boolean;
   filtersControl?: ReactNode;
+  /** Additional error to display (e.g., from beast fetching) */
+  globalError?: string | null;
 };
 
 export function StatsPanel({
@@ -36,7 +38,10 @@ export function StatsPanel({
   onRefresh,
   refreshing,
   filtersControl,
+  globalError,
 }: StatsPanelProps) {
+  // Show only one consolidated error message (first error encountered)
+  const consolidatedError = globalError || mintedError || highlightsError;
   return (
     <Card className="backdrop-blur-md bg-card/60 border-0 shadow-lg overflow-hidden mb-4 sm:mb-6">
       <CardContent className="p-0">
@@ -49,7 +54,6 @@ export function StatsPanel({
                 owned={mintedCount}
                 total={TOTAL_BEAST_SUPPLY}
                 loading={mintedLoading}
-                error={mintedError}
                 align="center"
                 uniqueOwners={uniqueOwners}
               />
@@ -97,7 +101,6 @@ export function StatsPanel({
                 owned={mintedCount}
                 total={TOTAL_BEAST_SUPPLY}
                 loading={mintedLoading}
-                error={mintedError}
                 align="center"
                 className="mt-12"
                 uniqueOwners={uniqueOwners}
@@ -122,26 +125,14 @@ export function StatsPanel({
             </div>
           </div>
 
-          {/* Error display for minted */}
-          {!mintedLoading && mintedError ? (
+          {/* Single consolidated error display */}
+          {consolidatedError ? (
             <Alert
               variant="destructive"
-              className="mx-3 sm:mx-4 mt-2 bg-destructive/10 border-destructive/30"
+              className="mx-3 sm:mx-4 my-2 bg-destructive/10 border-destructive/30"
             >
-              <AlertDescription className="text-xs font-medium">
-                {mintedError}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-
-          {/* Error display for highlights */}
-          {highlightsError ? (
-            <Alert
-              variant="destructive"
-              className="mx-3 sm:mx-4 mb-3 bg-destructive/10 border-destructive/30"
-            >
-              <AlertDescription className="font-medium text-xs sm:text-sm">
-                {highlightsError}
+              <AlertDescription className="text-xs sm:text-sm font-medium text-center">
+                {consolidatedError}
               </AlertDescription>
             </Alert>
           ) : null}

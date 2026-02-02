@@ -64,7 +64,7 @@ class UsernameCache {
   private async fetchUsernames(addresses: string[]): Promise<Record<string, string>> {
     const result: Record<string, string> = {};
 
-    // 1. First, try to get Cartridge usernames
+    // 1. Get Cartridge usernames (fast, single API call)
     try {
       const cartridgeUsernames = await lookupControllerUsernames(addresses);
       Object.assign(result, cartridgeUsernames);
@@ -73,6 +73,7 @@ class UsernameCache {
     }
 
     // 2. For addresses without Cartridge usernames, use truncated wallet address
+    // Note: Starknet.id lookups removed for performance - still available via search/account pages
     addresses.forEach(address => {
       const normalizedAddress = address.toLowerCase();
       if (!result[normalizedAddress]) {

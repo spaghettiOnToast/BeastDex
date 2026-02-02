@@ -9,16 +9,31 @@ export type ControllerUsernamesState = {
   error: string | null;
 };
 
-export function useControllerUsernames(addresses: Array<string | null | undefined>) {
+export type ControllerUsernamesOptions = {
+  /** Delay in ms before fetching usernames (allows UI to render first) */
+  delayMs?: number;
+};
+
+export function useControllerUsernames(
+  addresses: Array<string | null | undefined>,
+  options: ControllerUsernamesOptions = {}
+) {
+  const { delayMs = 0 } = options;
+
   const [state, setState] = useState<ControllerUsernamesState>({
     usernames: {},
     loading: false,
     error: null,
   });
 
+  // Stringify addresses to create a stable dependency key
+  // (arrays change reference on every render even if values are the same)
+  const addressesKey = addresses.filter(Boolean).join(",");
+
   const uniqueAddresses = useMemo(() => {
     return normaliseStarknetAddresses(addresses);
-  }, [addresses]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addressesKey is a stable string representation of addresses
+  }, [addressesKey]);
 
   useEffect(() => {
     if (uniqueAddresses.length === 0) {
@@ -27,6 +42,7 @@ export function useControllerUsernames(addresses: Array<string | null | undefine
     }
 
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     async function run() {
       setState((prev) => ({ ...prev, loading: true, error: null }));
@@ -44,12 +60,21 @@ export function useControllerUsernames(addresses: Array<string | null | undefine
       }
     }
 
-    run();
+    if (delayMs > 0) {
+      // Defer username lookup to allow UI to render first
+      timeoutId = setTimeout(() => {
+        if (!cancelled) run();
+      }, delayMs);
+    } else {
+      run();
+    }
 
     return () => {
       cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [uniqueAddresses]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addressesKey captures when uniqueAddresses changes
+  }, [addressesKey, delayMs]);
 
   return state;
 }

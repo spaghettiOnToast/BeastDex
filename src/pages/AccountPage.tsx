@@ -25,8 +25,8 @@ import {
 } from "../services/beast";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { lookupControllerAddresses } from "../services/controller";
-import { getErrorMessage } from "../utils/error";
-import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
+import { getUserFriendlyErrorMessage } from "../utils/error";
+import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
 import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
 import { Grid, Table } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -149,7 +149,7 @@ function AccountPage() {
       .catch((err: unknown) => {
         if (cancelled) return;
         setResolvedAddress("");
-        setIdentifierError(getErrorMessage(err, "Failed to resolve username"));
+        setIdentifierError(getUserFriendlyErrorMessage(err, "Failed to resolve username"));
       })
       .finally(() => {
         if (!cancelled) {
@@ -173,7 +173,7 @@ function AccountPage() {
     attributeFilters,
     ownerAddresses,
     page,
-    sort: sortOption,
+    sort: sortOptionToBeastSortField(sortOption),
     enabled: Boolean(resolvedAddress),
   });
 
@@ -190,11 +190,12 @@ function AccountPage() {
     return Array.from(unique).filter(Boolean);
   }, [resolvedAddress, beasts]);
 
+  // Defer username lookups to allow beasts to render first
   const {
     usernames: ownerUsernames,
     loading: usernamesLoading,
     error: usernamesError,
-  } = useControllerUsernames(ownerLookupAddresses);
+  } = useControllerUsernames(ownerLookupAddresses, { delayMs: 300 });
 
   useEffect(() => {
     let cancelled = false;
@@ -216,7 +217,7 @@ function AccountPage() {
         });
       } catch (error: unknown) {
         if (cancelled) return;
-        setFiltersError(getErrorMessage(error, "Failed to load filters"));
+        setFiltersError(getUserFriendlyErrorMessage(error, "Failed to load filters"));
       } finally {
         if (!cancelled) {
           setFiltersLoading(false);
@@ -359,7 +360,7 @@ function AccountPage() {
       setAllBeasts([]);
       setAccountRanking(null);
       setHealthRanking(null);
-      setSummaryError(getErrorMessage(err, "Failed to load account summary"));
+      setSummaryError(getUserFriendlyErrorMessage(err, "Failed to load account summary"));
     } finally {
       if (summaryRequestRef.current === requestId) {
         setSummaryLoading(false);

@@ -2,7 +2,6 @@ type Props = {
   owned: number;
   total: number;
   loading?: boolean;
-  error?: string | null;
   align?: "left" | "center";
   className?: string;
   uniqueOwners?: number;
@@ -12,7 +11,6 @@ export default function CompletionTracker({
   owned,
   total,
   loading = false,
-  error = null,
   align = "center",
   className = "",
   uniqueOwners,
@@ -44,8 +42,6 @@ export default function CompletionTracker({
       <p className="mt-1 sm:mt-2 text-xs sm:text-sm text-gray-400">
         {loading
           ? "Loading minted beasts..."
-          : error
-          ? error
           : `${remaining.toLocaleString()} beasts remaining`}
       </p>
       {typeof uniqueOwners === "number" && (

@@ -1,8 +1,8 @@
 import { type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Trophy } from "lucide-react";
-import Logo from "../Logo";
-import SearchBar from "../SearchBar";
+import { Trophy, Store } from "lucide-react";
+import Logo from "../common/Logo";
+import SearchBar from "../common/SearchBar";
 import WalletButton from "../wallet/WalletButton";
 import MobileNav from "../layout/MobileNav";
 import { Button } from "../ui/button";
@@ -31,6 +31,15 @@ export default function TopBar({ filtersControl, onLogoClick }: Props) {
 
       {/* Desktop Navigation - hidden on mobile */}
       <div className="hidden md:flex items-center gap-2 lg:gap-4 flex-shrink-0">
+        <Button
+          asChild
+          className="bg-[#0ef] text-black text-xs font-semibold uppercase tracking-wide hover:bg-[#0bc] hover:text-black h-9 px-3 lg:px-4 lg:min-w-[130px]"
+        >
+          <Link to="/marketplace">
+            <Store className="h-4 w-4" />
+            <span className="hidden lg:inline">Marketplace</span>
+          </Link>
+        </Button>
         <Button
           asChild
           className="bg-[#39ff14] text-black text-xs font-semibold uppercase tracking-wide hover:bg-[#2ecc10] hover:text-black h-9 px-3 lg:px-4 lg:min-w-[130px]"

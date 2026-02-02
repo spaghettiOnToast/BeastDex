@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import SortDropdown, { type SortOption } from "../components/sort/SortDropdown";
+import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
 import { useSearchParams } from "react-router-dom";
+import { useAccount } from "@starknet-react/core";
 import TopBar from "../components/header/TopBar";
 import StatsPanel from "../components/stats/StatsPanel";
 import BeastGrid from "../components/beast/BeastGrid";
@@ -9,6 +10,7 @@ import PaginationControls from "../components/pagination/PaginationControls";
 import { FiltersButton } from "../components/filters/FiltersButton";
 import { FiltersDrawer } from "../components/filters/FiltersDrawer";
 import { AppLayout } from "../components/layout/AppLayout";
+import { Button } from "../components/ui/button";
 import { useBeasts } from "../hooks/useBeasts";
 import {
   fetchBeastAttributeFilters,
@@ -21,8 +23,20 @@ import {
   type Beast,
 } from "../services/beast";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
-import { getErrorMessage } from "../utils/error";
+import { getUserFriendlyErrorMessage } from "../utils/error";
 import { config } from "../config";
+import { useMarketplaceListings } from "./marketplace/hooks/useMarketplaceListings";
+import { useGlobalCart } from "../contexts/GlobalCartContext";
+import { formatPrice } from "../utils/price";
+import { getPaymentTokenByAddress, BEASTS_COLLECTION_ADDRESS, CLIENT_FEE_BP, CLIENT_FEE_RECEIVER, ROYALTIES_ENABLED } from "../services/marketplace/constants";
+import { useTokenMap, tokenAmountToUsd } from "../hooks/useEkuboTokens";
+import { toBigIntSafe } from "../utils/bigint";
+import MakeOfferDialog from "../components/marketplace/MakeOfferDialog";
+import PurchaseConfirmDialog from "../components/marketplace/PurchaseConfirmDialog";
+import type { Listing } from "../services/marketplace/types";
+import { executePurchaseWithApproval } from "../services/marketplace/approvals";
+import { toast } from "sonner";
+import { isUserRejection } from "../utils/transaction";
 
 const HIDDEN_FILTER_TRAITS = new Set<string>([
   "adventurerkilledcount",
@@ -56,13 +70,23 @@ function HomePage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [searchParams] = useSearchParams();
 
+  // Marketplace state
+  const { address, account } = useAccount();
+  const globalCart = useGlobalCart();
+  const { listings } = useMarketplaceListings();
+  const { getToken } = useTokenMap();
+  const [makeOfferOpen, setMakeOfferOpen] = useState(false);
+  const [purchaseConfirmOpen, setPurchaseConfirmOpen] = useState(false);
+  const [purchasingListing, setPurchasingListing] = useState<Listing | null>(null);
+  const [purchaseProcessing, setPurchaseProcessing] = useState(false);
+
   const { beasts, loading, error, reload, total } = useBeasts({
     limit: PAGE_SIZE,
     search,
     attributeFilters,
     ownerAddresses: ownerAddressFilters,
     page,
-    sort: sortOption,
+    sort: sortOptionToBeastSortField(sortOption),
   });
 
   const ownerAddresses = useMemo(
@@ -70,15 +94,21 @@ function HomePage() {
     [beasts]
   );
 
-  const { usernames: ownerUsernames } = useControllerUsernames(ownerAddresses);
+  // Defer username lookups to allow beasts to render first
+  const { usernames: ownerUsernames } = useControllerUsernames(ownerAddresses, {
+    delayMs: 300,
+  });
 
   useEffect(() => {
     const searchQuery = searchParams.get("search") ?? "";
     setSearch(searchQuery);
   }, [searchParams]);
 
+  // Staggered data loading to avoid overwhelming the indexer
+  // Filters load first (needed for UI), then stats and highlights after a delay
   useEffect(() => {
     let mounted = true;
+
     async function loadFilters() {
       try {
         setFiltersLoading(true);
@@ -101,23 +131,15 @@ function HomePage() {
           return Object.fromEntries(nextEntries) as BeastAttributeFilters;
         });
       } catch (error: unknown) {
-        console.error("❌ Failed to load beast filters", error);
+        console.error("Failed to load beast filters", error);
         if (!mounted) return;
-        setFiltersError(getErrorMessage(error, "Failed to load filters"));
+        setFiltersError(getUserFriendlyErrorMessage(error, "Failed to load filters"));
       } finally {
         if (!mounted) return;
         setFiltersLoading(false);
       }
     }
 
-    loadFilters();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
     async function loadBeastStats() {
       try {
         setMintedLoading(true);
@@ -126,23 +148,15 @@ function HomePage() {
         if (!mounted) return;
         setBeastStats(stats);
       } catch (error: unknown) {
-        console.error("❌ Failed to load minted beast count", error);
+        console.error("Failed to load minted beast count", error);
         if (!mounted) return;
-        setMintedError(getErrorMessage(error, "Failed to load beast stats"));
+        setMintedError(getUserFriendlyErrorMessage(error, "Failed to load beast stats"));
       } finally {
         if (!mounted) return;
         setMintedLoading(false);
       }
     }
 
-    loadBeastStats();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
     async function loadHighlights() {
       try {
         setHighlightsLoading(true);
@@ -151,10 +165,10 @@ function HomePage() {
         if (!mounted) return;
         setHighlights(highlightsData);
       } catch (error: unknown) {
-        console.error("❌ Failed to load beast highlights", error);
+        console.error("Failed to load beast highlights", error);
         if (!mounted) return;
         setHighlightsError(
-          getErrorMessage(error, "Failed to load beast highlights")
+          getUserFriendlyErrorMessage(error, "Failed to load beast highlights")
         );
       } finally {
         if (!mounted) return;
@@ -162,9 +176,22 @@ function HomePage() {
       }
     }
 
-    loadHighlights();
+    // Load filters first (needed for UI interaction)
+    loadFilters();
+
+    // Stagger secondary data loading to reduce initial burst
+    const statsTimer = setTimeout(() => {
+      if (mounted) loadBeastStats();
+    }, 500);
+
+    const highlightsTimer = setTimeout(() => {
+      if (mounted) loadHighlights();
+    }, 1000);
+
     return () => {
       mounted = false;
+      clearTimeout(statsTimer);
+      clearTimeout(highlightsTimer);
     };
   }, []);
 
@@ -250,6 +277,152 @@ function HomePage() {
     return items;
   }, [highlights, formatOwner]);
 
+  // Find listing for selected beast (if any)
+  const selectedBeastListing = useMemo(() => {
+    if (!selectedBeast) return null;
+    // Get the token ID from the beast
+    const beastTokenId = selectedBeast.numericId?.toString() || selectedBeast.id.split(":").pop() || "";
+    // Find active listing for this beast
+    return listings.find(
+      (l) => l.status === "active" && l.active && String(l.tokenId) === beastTokenId
+    ) || null;
+  }, [selectedBeast, listings]);
+
+  // Format price with USD for the listing
+  const formatPriceWithUsd = useCallback((listing: Listing) => {
+    const token = getPaymentTokenByAddress(listing.paymentToken);
+    const symbol = token?.symbol || "STRK";
+    const priceFormatted = formatPrice(listing.price, symbol);
+
+    // Calculate USD
+    const tokenInfo = getToken(listing.paymentToken || "0x0");
+    if (tokenInfo?.usdPrice) {
+      try {
+        const priceBigInt = toBigIntSafe(listing.price);
+        const usdValue = tokenAmountToUsd(priceBigInt, tokenInfo.decimals, tokenInfo.usdPrice);
+        return `${priceFormatted} ($${usdValue.toFixed(2)})`;
+      } catch {
+        return priceFormatted;
+      }
+    }
+    return priceFormatted;
+  }, [getToken]);
+
+  // Handle direct purchase execution
+  const handleDirectPurchase = useCallback(async (listing: Listing) => {
+    if (!account || !listing) return;
+
+    setPurchaseProcessing(true);
+    const toastId = toast.loading("Processing purchase...");
+
+    try {
+      await executePurchaseWithApproval(
+        account,
+        listing.orderId,
+        BEASTS_COLLECTION_ADDRESS,
+        listing.tokenId,
+        1, // quantity
+        ROYALTIES_ENABLED,
+        listing.paymentToken || "0x0",
+        listing.price,
+        CLIENT_FEE_BP,
+        CLIENT_FEE_RECEIVER
+      );
+
+      toast.success("Purchase successful!", { id: toastId });
+      setPurchaseConfirmOpen(false);
+      setPurchasingListing(null);
+    } catch (e) {
+      if (isUserRejection(e)) {
+        toast.info("Purchase cancelled", { id: toastId });
+      } else {
+        const errorMessage = (e as Error).message || "Failed to complete purchase";
+        toast.error(errorMessage, { id: toastId });
+      }
+    } finally {
+      setPurchaseProcessing(false);
+    }
+  }, [account]);
+
+  // Custom action slot for BeastModal - shows actions for both listed and unlisted beasts
+  const beastModalActionSlot = useMemo(() => {
+    if (!selectedBeast) return undefined;
+
+    const listing = selectedBeastListing;
+    const isOwner = listing && address?.toLowerCase() === listing.seller?.toLowerCase();
+
+    // Owner shouldn't see buy/offer buttons on homepage modal
+    if (isOwner) {
+      return undefined;
+    }
+
+    // Beast is not listed - show only "Make Offer" button
+    if (!listing) {
+      return (
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button
+            variant="outline"
+            size="default"
+            onClick={() => {
+              handleCloseModal();
+              setMakeOfferOpen(true);
+            }}
+            disabled={!address}
+            className="w-full sm:w-auto font-semibold tracking-wide border-gray-600 hover:border-gray-500"
+          >
+            Make Offer
+          </Button>
+        </div>
+      );
+    }
+
+    // Beast is listed - show Buy, Cart, and Offer buttons
+    return (
+      <div className="flex flex-col sm:flex-row gap-2">
+        <Button
+          variant="outline"
+          size="default"
+          onClick={() => {
+            handleCloseModal();
+            setPurchasingListing(listing);
+            setPurchaseConfirmOpen(true);
+          }}
+          disabled={!listing.active || !address}
+          className="w-full sm:w-auto font-semibold tracking-wide bg-lsGold/20 text-lsGold border border-lsGold hover:bg-lsGold/30"
+        >
+          Buy Now - {formatPriceWithUsd(listing)}
+        </Button>
+        <Button
+          variant="outline"
+          size="default"
+          onClick={() => {
+            globalCart.togglePurchaseCart(listing);
+          }}
+          disabled={!listing.active || !address}
+          className={`w-full sm:w-auto font-semibold tracking-wide ${
+            globalCart.isInPurchaseCart(listing.listingId)
+              ? "bg-[#39ff14]/20 text-[#39ff14] border-[#39ff14]"
+              : "border-gray-600 hover:border-gray-500"
+          }`}
+        >
+          {globalCart.isInPurchaseCart(listing.listingId) ? "In Cart" : "Add to Cart"}
+        </Button>
+        <Button
+          variant="outline"
+          size="default"
+          onClick={() => {
+            handleCloseModal();
+            setMakeOfferOpen(true);
+          }}
+          disabled={!address}
+          className="w-full sm:w-auto font-semibold tracking-wide border-gray-600 hover:border-gray-500"
+        >
+          Make Offer
+        </Button>
+      </div>
+    );
+  }, [selectedBeast, selectedBeastListing, address, globalCart, formatPriceWithUsd, handleCloseModal]);
+
   const topBar = <TopBar onLogoClick={handleResetFilters} />;
 
   const filtersControl = (
@@ -279,6 +452,7 @@ function HomePage() {
         onRefresh={() => reload()}
         refreshing={loading}
         filtersControl={filtersAndSortControls}
+        globalError={error}
       />
 
       <BeastGrid
@@ -288,19 +462,6 @@ function HomePage() {
         loading={loading}
         emptyMessage={config.ui.emptyMessages.beasts}
       />
-
-      {error && (
-        <div className="text-center text-red-400">
-          <p>❌ {error}</p>
-          <button
-            onClick={() => reload()}
-            type="button"
-            className="mt-2 text-lsGold hover:underline"
-          >
-            Try again
-          </button>
-        </div>
-      )}
 
       {/* Pagination at bottom */}
       <div className="flex justify-center">
@@ -320,6 +481,34 @@ function HomePage() {
         beast={selectedBeast}
         ownerUsernames={ownerUsernames}
         onClose={handleCloseModal}
+        customActionSlot={beastModalActionSlot}
+        listingExpiration={selectedBeastListing?.expiration}
+      />
+
+      {/* Marketplace Dialogs */}
+      <MakeOfferDialog
+        open={makeOfferOpen}
+        onOpenChange={setMakeOfferOpen}
+        beast={selectedBeast}
+        tokenId={selectedBeast?.numericId?.toString() || selectedBeast?.id.split(":").pop() || ""}
+      />
+
+      <PurchaseConfirmDialog
+        open={purchaseConfirmOpen}
+        onOpenChange={(open) => {
+          if (!purchaseProcessing) {
+            setPurchaseConfirmOpen(open);
+            if (!open) setPurchasingListing(null);
+          }
+        }}
+        listing={purchasingListing}
+        priceLabel={purchasingListing ? formatPriceWithUsd(purchasingListing) : ""}
+        onConfirm={() => {
+          if (purchasingListing) {
+            handleDirectPurchase(purchasingListing);
+          }
+        }}
+        isProcessing={purchaseProcessing}
       />
 
       <FiltersDrawer

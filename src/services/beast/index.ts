@@ -1,6 +1,7 @@
 import { mapBeastRow, type BeastRow } from "./helpers";
 import {
   buildAttributeFiltersQuery,
+  buildBeastsByIdListQuery,
   buildBeastsQuery,
   buildBeastByIdQuery,
   buildOwnerBeastStatsQuery,
@@ -73,6 +74,7 @@ export async function fetchBeasts({
     const query = buildBeastsQuery(params);
     const rows = await runBeastSql<BeastRow[]>(query, "fetchBeasts");
     const beasts = rows.map(mapBeastRow);
+
     const total =
       rows.length > 0 ? Number(rows[0]?.total_count ?? beasts.length) : 0;
 
@@ -80,41 +82,50 @@ export async function fetchBeasts({
   });
 }
 
-function deriveTokenHex(identifier: string): string | null {
+/**
+ * Derives hex token ID(s) from an identifier.
+ * Returns both padded (64-char) and unpadded versions for numeric IDs
+ * to handle different storage formats in the database.
+ */
+export function deriveTokenHex(identifier: string): string[] {
   const trimmed = identifier.trim();
   if (trimmed.length === 0) {
-    return null;
+    return [];
   }
 
   const numericMatch = /^\d+$/.test(trimmed);
   if (numericMatch) {
     try {
       const hex = BigInt(trimmed).toString(16);
-      return `0x${hex.padStart(64, "0")}`;
+      const unpadded = `0x${hex}`;
+      const padded = `0x${hex.padStart(64, "0")}`;
+      // Return both formats to handle different database storage
+      return [unpadded, padded];
     } catch (error) {
       console.warn(
         "⚠️ Failed to derive token hex from numeric id",
         error,
         trimmed
       );
-      return null;
+      return [];
     }
   }
 
   if (trimmed.includes(":")) {
     const tail = trimmed.slice(trimmed.lastIndexOf(":") + 1);
     if (/^0x[0-9a-f]+$/i.test(tail)) {
-      return tail.toLowerCase().startsWith("0x")
+      const hex = tail.toLowerCase().startsWith("0x")
         ? tail.toLowerCase()
         : `0x${tail.toLowerCase()}`;
+      return [hex];
     }
   }
 
   if (/^0x[0-9a-f]+$/i.test(trimmed)) {
-    return trimmed.toLowerCase();
+    return [trimmed.toLowerCase()];
   }
 
-  return null;
+  return [];
 }
 
 export async function fetchBeastById(
@@ -123,16 +134,54 @@ export async function fetchBeastById(
   const identifier = String(id);
 
   return apiCache.get("beast-by-id", { id: identifier }, async () => {
-    const tokenHex = deriveTokenHex(identifier);
-    const query = buildBeastByIdQuery(identifier, tokenHex ?? undefined);
+    const tokenHexes = deriveTokenHex(identifier);
+    // Use the first hex variant for the single-ID query
+    const query = buildBeastByIdQuery(identifier, tokenHexes[0]);
     const rows = await runBeastSql<BeastRow[]>(query, "fetchBeastById");
 
     if (!rows || rows.length === 0) {
       return null;
     }
 
-    return mapBeastRow(rows[0]);
+    const beast = mapBeastRow(rows[0]);
+
+    return beast;
   });
+}
+
+export async function fetchBeastsByIds(
+  ids: Array<string | number>
+): Promise<Beast[]> {
+  const identifiers = Array.from(
+    new Set(
+      ids
+        .map((value) => String(value).trim())
+        .filter((value) => value.length > 0)
+        .map((value) => value.toLowerCase())
+    )
+  );
+
+  if (identifiers.length === 0) {
+    return [];
+  }
+
+  // Flatten hex arrays and deduplicate
+  const tokenHexes = Array.from(
+    new Set(
+      identifiers
+        .flatMap((identifier) => deriveTokenHex(identifier))
+        .map((hex) => hex.toLowerCase())
+    )
+  );
+
+  const query = buildBeastsByIdListQuery({
+    identifiers,
+    tokenHexes,
+  });
+  const rows = await runBeastSql<BeastRow[]>(query, "fetchBeastsByIds", {
+    timeoutMs: 20_000,
+  });
+  return rows.map(mapBeastRow);
 }
 
 export async function fetchBeastAttributeFilters(): Promise<BeastAttributeFilters> {

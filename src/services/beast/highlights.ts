@@ -9,49 +9,44 @@ import {
 import type { BeastHighlights } from "./types";
 import { normaliseStarknetAddress } from "../../utils/address";
 
-const BOOLEAN_TRUE_VALUES = ["1", "true", "True", "TRUE"]; // coarse normalization
+const BOOLEAN_TRUE_VALUES = ["1", "true", "True", "TRUE"];
 
-function buildBaseCte() {
-  return `
-    WITH base AS (
-      SELECT
-        t.id,
-        LOWER(b.account_address) AS owner,
-        json_extract(attr.value, '$.trait_type') AS trait,
-        json_extract(attr.value, '$.value') AS value
-      FROM tokens t
-      JOIN token_balances b
-        ON t.id = b.token_id
-       AND t.contract_address = b.contract_address
-      JOIN json_each(
-        CASE
-          WHEN json_valid(t.metadata) = 1 THEN t.metadata
-          ELSE '{"attributes":[]}'
-        END,
-        '$.attributes'
-      ) attr
-      WHERE t.contract_address = '${CONTRACT_ADDRESS}'
-        AND b.balance > '${ZERO_BALANCE}'
-        AND json_valid(t.metadata) = 1
-        AND json_extract(attr.value, '$.trait_type') IS NOT NULL
-        AND json_extract(attr.value, '$.value') IS NOT NULL
-        AND LOWER(b.account_address) != '${EXCLUDED_OWNER_ADDRESS.toLowerCase()}'
-    ),
-    normalized AS (
-      SELECT
-        id,
-        owner,
-        MAX(CASE WHEN LOWER(trait) LIKE 'shiny%' AND value IN ('${BOOLEAN_TRUE_VALUES.join(
-          "','"
-        )}') THEN 1 ELSE 0 END) AS is_shiny,
-        MAX(CASE WHEN LOWER(trait) LIKE 'animated%' AND value IN ('${BOOLEAN_TRUE_VALUES.join(
-          "','"
-        )}') THEN 1 ELSE 0 END) AS is_animated
-      FROM base
-      GROUP BY id, owner
-    )
-  `;
-}
+// Base CTE for normalized beast data
+const baseCte = `
+  WITH base AS (
+    SELECT
+      t.id,
+      LOWER(b.account_address) AS owner,
+      json_extract(attr.value, '$.trait_type') AS trait,
+      json_extract(attr.value, '$.value') AS value
+    FROM tokens t
+    JOIN token_balances b
+      ON t.id = b.token_id
+     AND t.contract_address = b.contract_address
+    JOIN json_each(
+      CASE
+        WHEN json_valid(t.metadata) = 1 THEN t.metadata
+        ELSE '{"attributes":[]}'
+      END,
+      '$.attributes'
+    ) attr
+    WHERE t.contract_address = '${CONTRACT_ADDRESS}'
+      AND b.balance > '${ZERO_BALANCE}'
+      AND json_valid(t.metadata) = 1
+      AND json_extract(attr.value, '$.trait_type') IS NOT NULL
+      AND json_extract(attr.value, '$.value') IS NOT NULL
+      AND LOWER(b.account_address) != '${EXCLUDED_OWNER_ADDRESS.toLowerCase()}'
+  ),
+  normalized AS (
+    SELECT
+      id,
+      owner,
+      MAX(CASE WHEN LOWER(trait) LIKE 'shiny%' AND value IN ('${BOOLEAN_TRUE_VALUES.join("','")}') THEN 1 ELSE 0 END) AS is_shiny,
+      MAX(CASE WHEN LOWER(trait) LIKE 'animated%' AND value IN ('${BOOLEAN_TRUE_VALUES.join("','")}') THEN 1 ELSE 0 END) AS is_animated
+    FROM base
+    GROUP BY id, owner
+  )
+`;
 
 let highlightsCache: { data: BeastHighlights; expiresAt: number } | null = null;
 
@@ -60,8 +55,6 @@ export async function fetchBeastHighlights(forceRefresh = false): Promise<BeastH
   if (!forceRefresh && highlightsCache && highlightsCache.expiresAt > now) {
     return highlightsCache.data;
   }
-
-  const baseCte = buildBaseCte();
 
   const countsQuery = `
     ${baseCte}
@@ -127,17 +120,18 @@ export async function fetchBeastHighlights(forceRefresh = false): Promise<BeastH
     standard_count: 0,
   };
 
-  const leaders = leaderboardRows ?? [];
-  const leaderMap = leaders.reduce<Record<string, { owner: string | null; value: number }>>((acc, row) => {
-    if (!acc[row.category]) {
+  // Parse leaders from leaderboard rows
+  const leaderMap = (leaderboardRows ?? []).reduce<Record<string, { owner: string | null; value: number }>>((acc, row) => {
+    if (row.category && !acc[row.category]) {
       acc[row.category] = { owner: row.owner ?? null, value: row.value ?? 0 };
     }
     return acc;
   }, {});
 
+  // Lookup usernames for leaders
   const uniqueAddresses = Array.from(
     new Set(
-      leaders
+      (leaderboardRows ?? [])
         .map((row) => row.owner)
         .filter((owner): owner is string => typeof owner === "string" && owner.length > 0)
     )

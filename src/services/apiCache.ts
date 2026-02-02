@@ -14,23 +14,25 @@ class ApiCache {
 
   constructor() {
     // Set default cache configurations for different API endpoints
-    // Note: Reduced TTLs to ensure fresher data, especially after beast updates/purchases
+    // Longer TTLs reduce load on the indexer while still providing reasonably fresh data
     this.cacheConfigs.set("beast-filters", { ttl: 30 * 60 * 1000 }); // 30 minutes (static data)
-    this.cacheConfigs.set("beast-by-id", { ttl: 30 * 1000 }); // 30 seconds (frequently updated data)
-    this.cacheConfigs.set("beast-query", { ttl: 30 * 1000 }); // 30 seconds (frequently updated data)
-    this.cacheConfigs.set("adventurer-deaths", { ttl: 2 * 60 * 1000 }); // 2 minutes
-    this.cacheConfigs.set("beast-power-rank", { ttl: 2 * 60 * 1000 }); // 2 minutes
-    this.cacheConfigs.set("beast-stats", { ttl: 3 * 60 * 1000 }); // 3 minutes
-    this.cacheConfigs.set("beast-highlights", { ttl: 3 * 60 * 1000 }); // 3 minutes
-    this.cacheConfigs.set("beast-collection-leaderboard", { ttl: 2 * 60 * 1000 }); // 2 minutes
-    this.cacheConfigs.set("most-collected-beast", { ttl: 3 * 60 * 1000 }); // 3 minutes
-    this.cacheConfigs.set("beast-of-the-day", { ttl: 1 * 60 * 1000 }); // 1 minute
-    this.cacheConfigs.set("beast-rarity-leaderboard", { ttl: 2 * 60 * 1000 }); // 2 minutes
-    this.cacheConfigs.set("beast-slayer-leaderboard", { ttl: 2 * 60 * 1000 }); // 2 minutes
-    this.cacheConfigs.set("power-rank-leaderboard", { ttl: 2 * 60 * 1000 }); // 2 minutes
-    this.cacheConfigs.set("most-collected-beast-leaderboard", { ttl: 2 * 60 * 1000 }); // 2 minutes
-    this.cacheConfigs.set("beast-of-the-day-leaderboard", { ttl: 1 * 60 * 1000 }); // 1 minute
-    this.cacheConfigs.set("beast-slayer-leaderboard", { ttl: 2 * 60 * 1000 }); // 2 minutes
+    this.cacheConfigs.set("beast-by-id", { ttl: 2 * 60 * 1000 }); // 2 minutes
+    this.cacheConfigs.set("beast-query", { ttl: 2 * 60 * 1000 }); // 2 minutes
+    this.cacheConfigs.set("adventurer-deaths", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("beast-power-rank", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("beast-stats", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("beast-highlights", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("beast-collection-leaderboard", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("most-collected-beast", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("beast-of-the-day", { ttl: 3 * 60 * 1000 }); // 3 minutes
+    this.cacheConfigs.set("beast-rarity-leaderboard", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("beast-slayer-leaderboard", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("power-rank-leaderboard", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("most-collected-beast-leaderboard", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("beast-of-the-day-leaderboard", { ttl: 3 * 60 * 1000 }); // 3 minutes
+    this.cacheConfigs.set("beast-combined-ranks", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("beast-health-rank", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("owner-beast-stats", { ttl: 5 * 60 * 1000 }); // 5 minutes
   }
 
   private getCacheKey(endpoint: string, params: any): string {

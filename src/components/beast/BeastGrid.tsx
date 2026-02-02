@@ -1,7 +1,7 @@
 import { memo } from "react";
 import type { Beast } from "../../services/beast";
-import BeastCard from "../BeastCard";
-import BeastCardSkeleton from "../BeastCardSkeleton";
+import BeastCard from "./BeastCard";
+import BeastCardSkeleton from "./BeastCardSkeleton";
 import { Alert, AlertDescription } from "../ui/alert";
 import { normaliseStarknetAddress } from "../../utils/address";
 
