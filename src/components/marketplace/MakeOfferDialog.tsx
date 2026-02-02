@@ -23,7 +23,7 @@ import {
   CLIENT_FEE_BP,
   MARKETPLACE_ADDRESS,
 } from "../../services/marketplace/constants";
-import { ensureErc20Allowance, getProvider } from "../../services/marketplace/approvals";
+import { getErc20ApprovalCallIfNeeded, getProvider } from "../../services/marketplace/approvals";
 import { toWei, fromWei } from "../../utils/price";
 import { toast } from "sonner";
 import TokenSelect from "./TokenSelect";
@@ -161,14 +161,28 @@ export default function MakeOfferDialog({
       // Build token ID as Uint256
       const tokenIdU256 = toUint256Hex(tokenIdBigInt);
 
-      // Ensure ERC20 approval for total amount (price + fee)
+      // Build calls array for multicall
+      const calls: Array<{
+        contractAddress: string;
+        entrypoint: string;
+        calldata: string[];
+      }> = [];
+
+      // Check if ERC20 approval is needed for total amount (price + fee)
       toast.loading("Checking token approval...", { id: toastId });
-      await ensureErc20Allowance(account, currencyAddress, feeDetails.totalAmount.toString());
+      const approvalCall = await getErc20ApprovalCallIfNeeded(
+        account,
+        currencyAddress,
+        feeDetails.totalAmount.toString()
+      );
+      if (approvalCall) {
+        calls.push(approvalCall);
+      }
 
       // Build offer call
       // Contract signature: offer(collection, token_id: u256, quantity: u128, price: u128, currency, expiration: u64)
       // Note: offer does NOT have a royalties parameter
-      const offerCall = {
+      calls.push({
         contractAddress: MARKETPLACE_ADDRESS,
         entrypoint: "offer",
         calldata: [
@@ -179,10 +193,10 @@ export default function MakeOfferDialog({
           currencyAddress,
           expirationSeconds.toString(), // expiration: u64
         ],
-      };
+      });
 
       toast.loading("Making offer...", { id: toastId });
-      const result = await account.execute([offerCall]);
+      const result = await account.execute(calls);
 
       if (result?.transaction_hash) {
         const provider = getProvider(account);

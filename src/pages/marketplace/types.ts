@@ -25,6 +25,7 @@ export type TxEntry = {
   expiration?: number; // Unix timestamp in seconds
   txHash?: string;
   timestamp: number;
+  orderId?: number; // For offers/listings - used as secondary sort when timestamp is 0
   note?: string;
   status?: "active" | "expired" | "cancelled" | "completed" | "sold"; // For offers/listings status
 };

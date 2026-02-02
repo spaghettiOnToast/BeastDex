@@ -65,6 +65,7 @@ export function useUserTransactions({ address, listings }: UseUserTransactionsPr
           paymentToken: listing.paymentToken ?? undefined,
           expiration: listing.expiration,
           timestamp: listing.createdAt ? listing.createdAt * 1000 : 0,
+          orderId: listing.orderId, // For secondary sort when timestamp is 0
           status: listing.status,
         });
       }
@@ -80,7 +81,9 @@ export function useUserTransactions({ address, listings }: UseUserTransactionsPr
         price: String(offer.price),
         paymentToken: offer.currency,
         expiration: offer.expiration,
-        timestamp: 0,
+        // Use createdAt from arcadeOfferModels if available, otherwise fallback to orderId
+        timestamp: offer.createdAt ? offer.createdAt * 1000 : 0,
+        orderId: offer.id, // Fallback for secondary sort if timestamp is 0
         status: getOfferStatus(offer),
       });
     });
@@ -118,11 +121,19 @@ export function useUserTransactions({ address, listings }: UseUserTransactionsPr
       }
     });
 
-    // Sort: items with timestamps first, then by timestamp descending
+    // Sort by recency: timestamp descending, then orderId descending for items without timestamp
     result.sort((a, b) => {
-      if (a.timestamp === 0 && b.timestamp !== 0) return 1;
-      if (b.timestamp === 0 && a.timestamp !== 0) return -1;
-      return b.timestamp - a.timestamp;
+      // Both have timestamps - sort by timestamp descending
+      if (a.timestamp !== 0 && b.timestamp !== 0) {
+        return b.timestamp - a.timestamp;
+      }
+      // Both have no timestamp - use orderId as proxy (higher = more recent)
+      if (a.timestamp === 0 && b.timestamp === 0) {
+        return (b.orderId ?? 0) - (a.orderId ?? 0);
+      }
+      // One has timestamp, one doesn't - timestamp wins
+      if (a.timestamp === 0) return 1;
+      return -1;
     });
 
     return result;
