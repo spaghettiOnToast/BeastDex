@@ -62,9 +62,38 @@ export type ArcadeOrderWithTime = ArcadeOrderModelCompat & {
   listedAt?: number; // Unix timestamp when listed
 };
 
+/**
+ * Helper for making GraphQL requests with abort signal support
+ * Prevents memory leaks when components unmount during requests
+ */
+async function graphqlFetch<T>(
+  query: string,
+  variables: Record<string, unknown>,
+  signal?: AbortSignal
+): Promise<T> {
+  const response = await fetch(ARCADE_GRAPHQL_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, variables }),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  if (result.errors) {
+    throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
+  }
+
+  return result.data as T;
+}
+
 async function fetchArcadeOrdersGraphQL(
   collectionAddress: string,
-  limit: number = 1000
+  limit: number = 1000,
+  signal?: AbortSignal
 ): Promise<ArcadeOrderWithTime[]> {
   // Query current active orders first
   const ordersQuery = `
@@ -114,7 +143,7 @@ async function fetchArcadeOrdersGraphQL(
     }
   `;
 
-  // Fetch both in parallel
+  // Fetch both in parallel with abort signal
   const [ordersResponse, listingsResponse] = await Promise.all([
     fetch(ARCADE_GRAPHQL_ENDPOINT, {
       method: "POST",
@@ -123,6 +152,7 @@ async function fetchArcadeOrdersGraphQL(
         query: ordersQuery,
         variables: { collection: collectionAddress, limit },
       }),
+      signal,
     }),
     fetch(ARCADE_GRAPHQL_ENDPOINT, {
       method: "POST",
@@ -131,6 +161,7 @@ async function fetchArcadeOrdersGraphQL(
         query: listingsQuery,
         variables: { limit: limit * 2 }, // Fetch more to ensure coverage
       }),
+      signal,
     }),
   ]);
 
@@ -183,7 +214,8 @@ async function fetchArcadeOrdersGraphQL(
 
 async function fetchArcadeOrderByTokenGraphQL(
   collectionAddress: string,
-  tokenId: string
+  tokenId: string,
+  signal?: AbortSignal
 ): Promise<ArcadeOrderModelCompat | null> {
   const tokenIdHex = `0x${parseInt(tokenId, 10).toString(16)}`;
 
@@ -216,31 +248,14 @@ async function fetchArcadeOrderByTokenGraphQL(
     }
   `;
 
-  const response = await fetch(ARCADE_GRAPHQL_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      query,
-      variables: {
-        collection: collectionAddress,
-        tokenId: tokenIdHex,
-      },
-    }),
-  });
+  type Response = { arcadeOrderModels?: { edges?: Array<{ node: any }> } };
+  const data = await graphqlFetch<Response>(
+    query,
+    { collection: collectionAddress, tokenId: tokenIdHex },
+    signal
+  );
 
-  if (!response.ok) {
-    throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
-  }
-
-  const result = await response.json();
-
-  if (result.errors) {
-    throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
-  }
-
-  const edges = result.data?.arcadeOrderModels?.edges ?? [];
+  const edges = data?.arcadeOrderModels?.edges ?? [];
   if (edges.length === 0) return null;
 
   return parseGraphQLOrder(edges[0].node);
@@ -257,7 +272,7 @@ export function useArcadeListedTokensForCollection(collectionAddress: string) {
     refetchOnWindowFocus: false, // Prevent refetch on window focus
     refetchOnMount: false, // Don't refetch if data exists
     refetchOnReconnect: false, // Don't refetch on reconnect
-    queryFn: () => fetchArcadeOrdersGraphQL(collectionAddress, 1000),
+    queryFn: ({ signal }) => fetchArcadeOrdersGraphQL(collectionAddress, 1000, signal),
   });
 }
 
@@ -269,8 +284,8 @@ export function useArcadeIsTokenListed(collectionAddress: string, tokenId: strin
     enabled: !!collectionAddress && !!tokenId,
     staleTime: 30_000, // Consider data fresh for 30 seconds
     refetchOnWindowFocus: false, // Prevent refetch on tab switch
-    queryFn: async () => {
-      const listing = await fetchArcadeOrderByTokenGraphQL(collectionAddress, tokenId);
+    queryFn: async ({ signal }) => {
+      const listing = await fetchArcadeOrderByTokenGraphQL(collectionAddress, tokenId, signal);
       return { isListed: listing !== null, listing };
     },
     initialData: { isListed: false, listing: null } as { isListed: boolean; listing: ArcadeOrderModelCompat | null },
@@ -307,7 +322,8 @@ function parseGraphQLSale(node: any): ArcadeSaleCompat | null {
 
 async function fetchArcadeSalesGraphQL(
   collectionAddress: string,
-  limit: number = 100
+  limit: number = 100,
+  signal?: AbortSignal
 ): Promise<ArcadeSaleCompat[]> {
   const query = `
     query GetArcadeSales($limit: Int!) {
@@ -339,30 +355,10 @@ async function fetchArcadeSalesGraphQL(
     }
   `;
 
-  const response = await fetch(ARCADE_GRAPHQL_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      query,
-      variables: {
-        limit,
-      },
-    }),
-  });
+  type Response = { arcadeSaleModels?: { edges?: Array<{ node: any }> } };
+  const data = await graphqlFetch<Response>(query, { limit }, signal);
 
-  if (!response.ok) {
-    throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
-  }
-
-  const result = await response.json();
-
-  if (result.errors) {
-    throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
-  }
-
-  const edges = result.data?.arcadeSaleModels?.edges ?? [];
+  const edges = data?.arcadeSaleModels?.edges ?? [];
   const sales = edges
     .map((edge: any) => parseGraphQLSale(edge.node))
     .filter(Boolean) as ArcadeSaleCompat[];
@@ -383,7 +379,7 @@ export function useArcadeSalesForCollection(collectionAddress: string, limit: nu
     staleTime: 60_000, // Consider data fresh for 60 seconds
     refetchOnWindowFocus: false, // Prevent refetch on tab switch
     refetchOnMount: false, // Don't refetch if data exists
-    queryFn: () => fetchArcadeSalesGraphQL(collectionAddress, limit),
+    queryFn: ({ signal }) => fetchArcadeSalesGraphQL(collectionAddress, limit, signal),
   });
 
   // Force invalidate and refetch (bypasses staleTime)
@@ -403,7 +399,8 @@ export function useArcadeSalesForCollection(collectionAddress: string, limit: nu
 async function fetchUserOffersGraphQL(
   userAddress: string,
   collectionAddress: string,
-  limit: number = 100
+  limit: number = 100,
+  signal?: AbortSignal
 ): Promise<ArcadeOrderModelCompat[]> {
   // Pad address to 64 hex chars to match GraphQL storage format
   const normalizedOwner = padStarknetAddress(userAddress) ?? userAddress.toLowerCase();
@@ -437,31 +434,14 @@ async function fetchUserOffersGraphQL(
     }
   `;
 
-  const response = await fetch(ARCADE_GRAPHQL_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      query,
-      variables: {
-        owner: normalizedOwner,
-        limit,
-      },
-    }),
-  });
+  type Response = { arcadeOrderModels?: { edges?: Array<{ node: any }> } };
+  const data = await graphqlFetch<Response>(
+    query,
+    { owner: normalizedOwner, limit },
+    signal
+  );
 
-  if (!response.ok) {
-    throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
-  }
-
-  const result = await response.json();
-
-  if (result.errors) {
-    throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
-  }
-
-  const edges = result.data?.arcadeOrderModels?.edges ?? [];
+  const edges = data?.arcadeOrderModels?.edges ?? [];
   const offers = edges
     .map((edge: any) => parseGraphQLOrder(edge.node))
     .filter(Boolean) as ArcadeOrderModelCompat[];
@@ -485,9 +465,9 @@ export function useUserOffers(userAddress: string | undefined, collectionAddress
     gcTime: 10 * 60_000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false, // Don't refetch on window focus (prevents flicker)
     refetchOnMount: false, // Don't refetch if data exists (prevents tab switch reload)
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!userAddress) return [];
-      return fetchUserOffersGraphQL(userAddress, collectionAddress, 100);
+      return fetchUserOffersGraphQL(userAddress, collectionAddress, 100, signal);
     },
   });
 
@@ -503,7 +483,8 @@ export function useUserOffers(userAddress: string | undefined, collectionAddress
 async function fetchOffersForTokenGraphQL(
   collectionAddress: string,
   tokenId: string,
-  limit: number = 50
+  limit: number = 50,
+  signal?: AbortSignal
 ): Promise<ArcadeOrderModelCompat[]> {
   const tokenIdHex = `0x${parseInt(tokenId, 10).toString(16)}`;
 
@@ -536,32 +517,14 @@ async function fetchOffersForTokenGraphQL(
     }
   `;
 
-  const response = await fetch(ARCADE_GRAPHQL_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      query,
-      variables: {
-        collection: collectionAddress,
-        tokenId: tokenIdHex,
-        limit,
-      },
-    }),
-  });
+  type Response = { arcadeOrderModels?: { edges?: Array<{ node: any }> } };
+  const data = await graphqlFetch<Response>(
+    query,
+    { collection: collectionAddress, tokenId: tokenIdHex, limit },
+    signal
+  );
 
-  if (!response.ok) {
-    throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
-  }
-
-  const result = await response.json();
-
-  if (result.errors) {
-    throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
-  }
-
-  const edges = result.data?.arcadeOrderModels?.edges ?? [];
+  const edges = data?.arcadeOrderModels?.edges ?? [];
   const offers = edges
     .map((edge: any) => parseGraphQLOrder(edge.node))
     .filter(Boolean) as ArcadeOrderModelCompat[];
@@ -582,9 +545,9 @@ export function useOffersForToken(collectionAddress: string, tokenId: string | u
     enabled: enabled && !!collectionAddress && !!tokenId,
     staleTime: 15_000, // Consider data fresh for 15 seconds (offers change frequently)
     refetchOnWindowFocus: false,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!tokenId) return [];
-      return fetchOffersForTokenGraphQL(collectionAddress, tokenId, 50);
+      return fetchOffersForTokenGraphQL(collectionAddress, tokenId, 50, signal);
     },
   });
 }
@@ -595,7 +558,8 @@ export function useOffersForToken(collectionAddress: string, tokenId: string | u
  */
 async function fetchAllOffersForCollectionGraphQL(
   collectionAddress: string,
-  limit: number = 500
+  limit: number = 500,
+  signal?: AbortSignal
 ): Promise<ArcadeOrderModelCompat[]> {
   const query = `
     query GetAllOffersForCollection($collection: String!, $limit: Int!) {
@@ -625,31 +589,14 @@ async function fetchAllOffersForCollectionGraphQL(
     }
   `;
 
-  const response = await fetch(ARCADE_GRAPHQL_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      query,
-      variables: {
-        collection: collectionAddress,
-        limit,
-      },
-    }),
-  });
+  type Response = { arcadeOrderModels?: { edges?: Array<{ node: any }> } };
+  const data = await graphqlFetch<Response>(
+    query,
+    { collection: collectionAddress, limit },
+    signal
+  );
 
-  if (!response.ok) {
-    throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`);
-  }
-
-  const result = await response.json();
-
-  if (result.errors) {
-    throw new Error(`GraphQL errors: ${result.errors.map((e: any) => e.message).join(", ")}`);
-  }
-
-  const edges = result.data?.arcadeOrderModels?.edges ?? [];
+  const edges = data?.arcadeOrderModels?.edges ?? [];
   const offers = edges
     .map((edge: any) => parseGraphQLOrder(edge.node))
     .filter(Boolean) as ArcadeOrderModelCompat[];
@@ -693,9 +640,9 @@ export function useOffersReceivedForListings(
     gcTime: 10 * 60_000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false,
     refetchOnMount: false, // Don't refetch if data exists (prevents tab switch reload)
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       // Fetch all offers for the collection (stable cache)
-      return fetchAllOffersForCollectionGraphQL(collectionAddress, 500);
+      return fetchAllOffersForCollectionGraphQL(collectionAddress, 500, signal);
     },
     // Client-side filtering based on user's token IDs
     // This updates instantly when token IDs change without refetching
@@ -744,11 +691,11 @@ export function useUserSales(
     staleTime: 30_000, // Consider data fresh for 30 seconds
     refetchOnWindowFocus: false,
     refetchOnMount: true,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!userAddress) return [];
 
       // Fetch recent sales for the collection
-      const sales = await fetchArcadeSalesGraphQL(collectionAddress, 200);
+      const sales = await fetchArcadeSalesGraphQL(collectionAddress, 200, signal);
 
       // Filter to only sales where user is buyer or seller
       const userSales = sales.filter(sale =>

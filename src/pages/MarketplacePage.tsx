@@ -428,6 +428,42 @@ export default function MarketplacePage() {
     }
   }, [account, cancellingOfferId, refetchUserMadeOffers]);
 
+  // Pre-compute lookup maps for O(1) beast name lookups (avoids O(n*m) in enrichment)
+  const beastNameByTokenId = useMemo(() => {
+    const map = new Map<string, string>();
+
+    // Add from user's beasts
+    for (const beast of dataHook.userBeasts) {
+      const rawTokenId = beast.id.split(":").pop() || beast.id;
+      const tokenId = rawTokenId.startsWith("0x")
+        ? BigInt(rawTokenId).toString()
+        : rawTokenId;
+      if (beast.name) {
+        map.set(tokenId, beast.name);
+      }
+    }
+
+    // Add from listings (may override with more accurate data)
+    for (const listing of dataHook.listings) {
+      if (listing.beast?.name) {
+        map.set(listing.tokenId, listing.beast.name);
+      }
+    }
+
+    return map;
+  }, [dataHook.userBeasts, dataHook.listings]);
+
+  // Pre-compute set of listed token IDs for O(1) lookup
+  const listedTokenIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const listing of filtersHook.myActiveListings) {
+      if (listing.status === "active") {
+        set.add(listing.tokenId);
+      }
+    }
+    return set;
+  }, [filtersHook.myActiveListings]);
+
   // Enrich offers with beast names from listings or owned beasts, and hidden state
   // Also filter out offers made by the current user (you can't accept your own offers)
   // And filter out expired offers
@@ -435,11 +471,12 @@ export default function MarketplacePage() {
     if (!offersReceived || offersReceived.length === 0) return [];
 
     const now = Math.floor(Date.now() / 1000);
+    const addressLower = address?.toLowerCase();
 
     // Filter out offers made by the current user and expired offers
     const filteredOffers = offersReceived.filter(offer => {
       // Filter out own offers
-      if (address && offer.owner.toLowerCase() === address.toLowerCase()) return false;
+      if (addressLower && offer.owner.toLowerCase() === addressLower) return false;
       // Filter out expired offers
       if (offer.expiration && offer.expiration < now) return false;
       return true;
@@ -448,33 +485,14 @@ export default function MarketplacePage() {
     return filteredOffers.map(offer => {
       const tokenId = String(offer.tokenId);
 
-      // First try to find beast name from active listings
-      const matchingListing = filtersHook.myActiveListings.find(l => l.tokenId === tokenId);
-      let beastName = matchingListing?.beast?.name;
-
-      // If not found in listings, try to find from owned beasts
-      if (!beastName) {
-        const matchingBeast = dataHook.userBeasts.find(beast => {
-          const rawTokenId = beast.id.split(":").pop() || beast.id;
-          const beastTokenId = rawTokenId.startsWith("0x")
-            ? BigInt(rawTokenId).toString()
-            : rawTokenId;
-          return beastTokenId === tokenId;
-        });
-        beastName = matchingBeast?.name;
-      }
-
-      // Check if beast is currently listed
-      const isListed = !!matchingListing && matchingListing.status === "active";
-
       return {
         ...offer,
-        beastName,
-        isListed,
+        beastName: beastNameByTokenId.get(tokenId),
+        isListed: listedTokenIds.has(tokenId),
         isHidden: hiddenOfferIds.has(offer.id.toString()),
       };
     });
-  }, [offersReceived, filtersHook.myActiveListings, dataHook.userBeasts, hiddenOfferIds, address]);
+  }, [offersReceived, beastNameByTokenId, listedTokenIds, hiddenOfferIds, address]);
 
   // Filter offers based on visibility
   const visibleOffersReceived = useMemo(() => {
@@ -484,6 +502,15 @@ export default function MarketplacePage() {
     return enrichedOffersReceived.filter(offer => !offer.isHidden);
   }, [enrichedOffersReceived, showHiddenOffers]);
 
+  // Pre-compute listing status by tokenId for O(1) lookup
+  const listingStatusByTokenId = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const listing of dataHook.listings) {
+      map.set(listing.tokenId, listing.status === "active");
+    }
+    return map;
+  }, [dataHook.listings]);
+
   // Enrich made offers with hidden state and filter expired/cancelled by default
   const enrichedMadeOffers = useMemo(() => {
     if (!userMadeOffers || userMadeOffers.length === 0) return [];
@@ -491,6 +518,7 @@ export default function MarketplacePage() {
     const now = Math.floor(Date.now() / 1000);
 
     return userMadeOffers.map(offer => {
+      const tokenId = String(offer.tokenId);
       const isExpired = offer.expiration && offer.expiration < now;
       // Check if offer is cancelled (status index 2) or executed (status index 3)
       const statusIndex = offer.status?.into?.() ?? 1;
@@ -498,19 +526,9 @@ export default function MarketplacePage() {
       const isExecuted = statusIndex === 3;
       const isInactive = isCancelled || isExecuted;
 
-      // Try to find beast name from listings first, then from user's beasts
-      const matchingListing = dataHook.listings.find(l => l.tokenId === String(offer.tokenId));
-      const matchingBeast = dataHook.userBeasts.find(b => {
-        const beastTokenId = b.id.split(":").pop() || b.id;
-        const normalizedBeastId = beastTokenId.startsWith("0x")
-          ? BigInt(beastTokenId).toString()
-          : beastTokenId;
-        return normalizedBeastId === String(offer.tokenId);
-      });
-      const beastName = matchingListing?.beast?.name || matchingBeast?.name || `Beast #${offer.tokenId}`;
-
-      // Check if the listing is still active (beast hasn't been sold/delisted)
-      const listingActive = matchingListing?.status === "active";
+      // Use pre-computed lookup (O(1) instead of O(n))
+      const beastName = beastNameByTokenId.get(tokenId) || `Beast #${tokenId}`;
+      const listingActive = listingStatusByTokenId.get(tokenId) ?? false;
 
       return {
         ...offer,
@@ -523,7 +541,7 @@ export default function MarketplacePage() {
         isHidden: hiddenMadeOfferIds.has(offer.id.toString()) || isExpired || isInactive,
       };
     });
-  }, [userMadeOffers, dataHook.listings, dataHook.userBeasts, hiddenMadeOfferIds]);
+  }, [userMadeOffers, beastNameByTokenId, listingStatusByTokenId, hiddenMadeOfferIds]);
 
   // Filter made offers based on visibility
   const visibleMadeOffers = useMemo(() => {

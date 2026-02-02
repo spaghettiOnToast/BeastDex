@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { BeastAttributeFilters } from "../services/beast";
 import { fetchBeastAttributeFilters } from "../services/beast";
 
@@ -18,56 +19,36 @@ export interface UseBeastFiltersResult {
 
 /**
  * Hook for fetching available beast attribute filters
+ * Uses React Query for caching - filters are static data that rarely changes
  * Automatically filters out traits that shouldn't be shown in the UI
  */
 export function useBeastFilters(): UseBeastFiltersResult {
-  const [filters, setFilters] = useState<BeastAttributeFilters>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["beastAttributeFilters"],
+    queryFn: fetchBeastAttributeFilters,
+    staleTime: 30 * 60 * 1000, // 30 minutes - filters rarely change
+    gcTime: 60 * 60 * 1000, // Keep in cache for 1 hour
+    refetchOnWindowFocus: false,
+    refetchOnMount: false, // Use cached data, don't refetch on every mount
+  });
 
-  useEffect(() => {
-    let cancelled = false;
+  // Memoize the cleaned filters to avoid recalculating on every render
+  const filters = useMemo(() => {
+    if (!data) return {};
 
-    const loadFilters = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+    // Remove hidden traits from filter options
+    const cleanedEntries = (
+      Array.isArray(Object.entries(data))
+        ? (Object.entries(data) as Array<[string, string[]]>)
+        : []
+    ).filter(([trait]) => !HIDDEN_FILTER_TRAITS.has(trait.toLowerCase()));
 
-        const fetchedFilters = await fetchBeastAttributeFilters();
-        if (cancelled) return;
-
-        // Remove hidden traits from filter options
-        const cleanedEntries = (
-          Array.isArray(Object.entries(fetchedFilters))
-            ? (Object.entries(fetchedFilters) as Array<[string, string[]]>)
-            : []
-        ).filter(([trait]) => !HIDDEN_FILTER_TRAITS.has(trait.toLowerCase()));
-
-        const cleaned = Object.fromEntries(
-          cleanedEntries
-        ) as BeastAttributeFilters;
-
-        setFilters(cleaned);
-      } catch (err) {
-        if (!cancelled) {
-          setError("Unable to load filters");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadFilters();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    return Object.fromEntries(cleanedEntries) as BeastAttributeFilters;
+  }, [data]);
 
   return {
     filters,
-    loading,
-    error,
+    loading: isLoading,
+    error: error ? "Unable to load filters" : null,
   };
 }

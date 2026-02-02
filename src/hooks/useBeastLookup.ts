@@ -41,7 +41,10 @@ export function useBeastLookup(
   const { data: fetchedBeasts = [], isLoading } = useQuery({
     queryKey: ["beastLookup", missingTokenIds.sort().join(",")],
     enabled: missingTokenIds.length > 0,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 10 * 60 * 1000, // 10 minutes - beast metadata is relatively stable
+    gcTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
+    refetchOnWindowFocus: false,
+    refetchOnMount: false, // Use cached data when available
     queryFn: () => fetchBeastsByIds(missingTokenIds),
   });
 
