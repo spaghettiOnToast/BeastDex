@@ -174,6 +174,33 @@ export async function ensureCollectionApproval(account: AccountInterface) {
   }
 }
 
+/**
+ * Get collection approval call if needed (for multicall batching)
+ * Returns null if already approved, otherwise returns the approval call
+ */
+export async function getCollectionApprovalCallIfNeeded(
+  account: AccountInterface
+): Promise<Call | null> {
+  if (!account.address) {
+    throw new Error("Wallet address not available");
+  }
+  const provider = getProvider(account);
+  const alreadyApproved = await callIsApprovedForAll(
+    provider,
+    account.address,
+    MARKETPLACE_ADDRESS
+  );
+  if (alreadyApproved) {
+    return null;
+  }
+
+  return {
+    contractAddress: BEASTS_COLLECTION_ADDRESS,
+    entrypoint: "set_approval_for_all",
+    calldata: [MARKETPLACE_ADDRESS, "0x1"],
+  };
+}
+
 export async function ensureErc20Allowance(
   account: AccountInterface,
   tokenAddress: string | undefined,

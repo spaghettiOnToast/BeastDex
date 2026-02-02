@@ -94,12 +94,15 @@ export { CONTRACT_ADDRESS as BEASTS_COLLECTION_ADDRESS } from "../beast/constant
 // FEE STRUCTURE
 // =============================================================================
 // SELLER PAYS (deducted from listing price by contract):
-//   - Platform Fee (Cartridge): 2.5%
+//   - Platform Fee (Cartridge): 0% (currently disabled on arcade-main)
 //   - Creator Royalty: 5%
-//   - Total seller deduction: 7.5%
+//   - Total seller deduction: 5%
 //
 // BUYER PAYS (added on top of listing price):
 //   - Client Fee (BeastDex): 5%
+//
+// Verified via Torii query on 2026-02-01:
+// Book model: { fee_num: 0, royalties: true }
 // =============================================================================
 
 // Client fee configuration (paid by BUYER, added on top of listing price)
@@ -109,9 +112,9 @@ export const CLIENT_FEE_RECEIVER = "0x0495fc00f87ab20ae908dd24c763c9553b67955e63
 
 // Seller fee constants (for display purposes - handled by contract)
 // These are deducted from the seller's proceeds by the marketplace contract
-export const PLATFORM_FEE_BP = 250; // 2.5% Cartridge platform fee
+export const PLATFORM_FEE_BP = 0; // 0% Cartridge platform fee (currently disabled)
 export const CREATOR_ROYALTY_BP = 500; // 5% creator royalty
-export const TOTAL_SELLER_FEE_BP = PLATFORM_FEE_BP + CREATOR_ROYALTY_BP; // 7.5% total
+export const TOTAL_SELLER_FEE_BP = PLATFORM_FEE_BP + CREATOR_ROYALTY_BP; // 5% total
 
 // Royalties configuration - must be true for creator royalties to be enforced
 export const ROYALTIES_ENABLED = true;

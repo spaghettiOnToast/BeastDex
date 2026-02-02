@@ -1,6 +1,7 @@
 import { useState, useCallback, lazy, Suspense } from "react";
 import { useAccount } from "@starknet-react/core";
 import { useGlobalCart } from "../../contexts/GlobalCartContext";
+import { useTermsOfService } from "../../contexts/TermsOfServiceContext";
 import { toast } from "sonner";
 import {
   MARKETPLACE_ADDRESS,
@@ -20,6 +21,7 @@ const PurchaseCartDialog = lazy(() => import("./PurchaseCartDialog"));
 export function GlobalCartDialogs() {
   const { account } = useAccount();
   const globalCart = useGlobalCart();
+  const { hasAcceptedToS, openToSDialog } = useTermsOfService();
   const {
     listDialogOpen,
     purchaseDialogOpen,
@@ -27,6 +29,20 @@ export function GlobalCartDialogs() {
     closePurchaseDialog,
   } = globalCart;
   const [isPurchasing, setIsPurchasing] = useState(false);
+
+  // Helper to check ToS acceptance before allowing marketplace actions
+  const requireToS = useCallback((action: () => void | Promise<void>) => {
+    if (!hasAcceptedToS) {
+      toast.error("Please accept the Terms of Service to use the marketplace", {
+        action: {
+          label: "View Terms",
+          onClick: openToSDialog,
+        },
+      });
+      return;
+    }
+    action();
+  }, [hasAcceptedToS, openToSDialog]);
 
   /**
    * Handle batch purchase of listings
@@ -161,8 +177,8 @@ export function GlobalCartDialogs() {
           listings={globalCart.purchaseCart}
           onRemove={globalCart.removeFromPurchaseCart}
           onClearAll={globalCart.clearPurchaseCart}
-          onPurchaseAll={handlePurchaseAll}
-          isProcessing={isPurchasing}
+          onPurchaseAll={(validListings) => requireToS(() => handlePurchaseAll(validListings))}
+          isProcessing={isPurchasing || !hasAcceptedToS}
         />
       )}
     </Suspense>

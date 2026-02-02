@@ -17,7 +17,7 @@ export type ArcadeOrderModelCompat = {
   collection: string;
   tokenId: number;
   quantity: number;
-  price: number;
+  price: string; // Keep as string to avoid precision loss with large numbers
   currency: string;
   owner: string;
 };
@@ -29,7 +29,9 @@ function parseGraphQLOrder(node: any): ArcadeOrderModelCompat | null {
   const expiration = parseInt(node.expiration ?? "0", 16);
   const tokenId = parseInt(node.token_id ?? "0", 16);
   const quantity = parseInt(node.quantity ?? "1", 16);
-  const price = parseInt(node.price ?? "0", 16);
+  // Keep price as string to avoid precision loss - convert hex to decimal string
+  const priceHex = node.price ?? "0x0";
+  const price = BigInt(priceHex).toString();
   const collection = getChecksumAddress(node.collection ?? "0x0");
   const currency = getChecksumAddress(node.currency ?? "0x0");
   const owner = getChecksumAddress(node.owner ?? "0x0");
@@ -404,13 +406,14 @@ async function fetchUserOffersGraphQL(
   // Pad address to 64 hex chars to match GraphQL storage format
   const normalizedOwner = padStarknetAddress(userAddress) ?? userAddress.toLowerCase();
 
+  // Fetch all user offers (category: 1 = Buy order/offer)
+  // Don't filter by status so we can show expired offers in the Hidden section
   const query = `
     query GetUserOffers($owner: String!, $limit: Int!) {
       arcadeOrderModels(
         where: {
           owner: $owner,
-          category: 1,
-          status: 1
+          category: 1
         },
         limit: $limit
       ) {
@@ -686,8 +689,14 @@ export function useOffersReceivedForListings(
         userTokenIdSet.has(String(offer.tokenId))
       );
 
-      // Sort by price descending (highest first)
-      return offersReceived.sort((a, b) => b.price - a.price);
+      // Sort by price descending (highest first) - compare as BigInt for precision
+      return offersReceived.sort((a, b) => {
+        const priceA = BigInt(a.price);
+        const priceB = BigInt(b.price);
+        if (priceB > priceA) return 1;
+        if (priceB < priceA) return -1;
+        return 0;
+      });
     },
   });
 

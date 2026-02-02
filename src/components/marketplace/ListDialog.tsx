@@ -17,14 +17,14 @@ import {
   DEFAULT_PAYMENT_TOKEN,
   MARKETPLACE_ADDRESS,
   ROYALTIES_ENABLED,
-  PLATFORM_FEE_BP,
   CREATOR_ROYALTY_BP,
 } from "../../services/marketplace/constants";
+import { useArcadeBookConfig } from "../../hooks/useArcadeBookConfig";
 import { toWei, fromWei } from "../../utils/price";
 import { toast } from "sonner";
 import TokenSelect from "./TokenSelect";
 import { useSelectedToken, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
-import { ensureCollectionApproval, getProvider } from "../../services/marketplace/approvals";
+import { getCollectionApprovalCallIfNeeded, getProvider } from "../../services/marketplace/approvals";
 import { isUserRejection } from "../../utils/transaction";
 import { toUint256Hex } from "../../utils/uint256";
 import {
@@ -48,6 +48,9 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
   // Token selection - default to LORDS
   const [currencyAddress, setCurrencyAddress] = useState(DEFAULT_PAYMENT_TOKEN.address);
   const { decimals: tokenDecimals, symbol: tokenSymbol, usdPrice } = useSelectedToken(currencyAddress);
+
+  // Fetch dynamic platform fee from Arcade Book config
+  const { platformFeeBP } = useArcadeBookConfig();
 
 
   // Use shared expiration hook with max expiration enforcement
@@ -117,10 +120,6 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
         throw new Error("Invalid expiration selected");
       }
 
-      // Ensure collection approval first
-      toast.loading("Checking NFT approval...", { id: toastId });
-      await ensureCollectionApproval(account);
-
       // Build token ID as Uint256
       const tokenIdU256 = toUint256Hex(tokenIdBigInt);
 
@@ -140,10 +139,16 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
         ],
       };
 
-      toast.loading("Submitting listing...", { id: toastId });
+      // Build multicall with approval (if needed) + list
+      toast.loading("Checking NFT approval...", { id: toastId });
+      const approvalCall = await getCollectionApprovalCallIfNeeded(account);
 
-      // Execute listing (free to list - buyer pays fees on purchase)
-      const result = await account.execute([listCall]);
+      const calls = approvalCall ? [approvalCall, listCall] : [listCall];
+
+      toast.loading(approvalCall ? "Approving & listing..." : "Submitting listing...", { id: toastId });
+
+      // Execute in single transaction (approval + list combined if needed)
+      const result = await account.execute(calls);
 
       if (result?.transaction_hash) {
         const provider = getProvider(account);
@@ -205,7 +210,8 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
               )}
               {priceBigInt && priceBigInt > 0n && (() => {
                 // Calculate seller fees (deducted from proceeds)
-                const platformFee = (priceBigInt * BigInt(PLATFORM_FEE_BP)) / 10000n;
+                // platformFeeBP is fetched dynamically from Arcade Book config
+                const platformFee = (priceBigInt * BigInt(platformFeeBP)) / 10000n;
                 const creatorRoyalty = (priceBigInt * BigInt(CREATOR_ROYALTY_BP)) / 10000n;
                 const sellerReceives = priceBigInt - platformFee - creatorRoyalty;
 
@@ -221,12 +227,14 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
                         <span className="text-sm text-gray-400">Listing Price:</span>
                         <span className="text-sm font-medium">{fromWei(priceBigInt, tokenDecimals)} {tokenSymbol}</span>
                       </div>
+                      {platformFeeBP > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-400">Platform Fee ({platformFeeBP / 100}%):</span>
+                          <span className="text-sm font-medium text-gray-400">-{fromWei(platformFee, tokenDecimals)} {tokenSymbol}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between">
-                        <span className="text-sm text-gray-400">Platform Fee ({PLATFORM_FEE_BP / 100}%):</span>
-                        <span className="text-sm font-medium text-gray-400">-{fromWei(platformFee, tokenDecimals)} {tokenSymbol}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-400">Creator Royalty ({CREATOR_ROYALTY_BP / 100}%):</span>
+                        <span className="text-sm text-gray-400">Creator Royalty ({CREATOR_ROYALTY_BP / 100}%) (Survivor DAO):</span>
                         <span className="text-sm font-medium text-gray-400">-{fromWei(creatorRoyalty, tokenDecimals)} {tokenSymbol}</span>
                       </div>
                       <div className="flex justify-between border-t border-gray-700 pt-2">

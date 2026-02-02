@@ -10,8 +10,10 @@ import { connectors } from "./wallet/controller";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import { GlobalSearchProvider } from "./hooks/useGlobalSearch";
 import { GlobalCartProvider } from "./contexts/GlobalCartContext";
+import { TermsOfServiceProvider } from "./contexts/TermsOfServiceContext";
 import { FloatingCarts } from "./components/marketplace/FloatingCarts";
 import { GlobalCartDialogs } from "./components/marketplace/GlobalCartDialogs";
+import { TermsOfServiceDialog } from "./components/legal/TermsOfServiceDialog";
 import { Toaster } from "sonner";
 
 // Lazy load pages for better performance
@@ -47,6 +49,7 @@ function App() {
     >
       <GlobalSearchProvider>
         <GlobalCartProvider>
+          <TermsOfServiceProvider>
           <ErrorBoundary>
             <Toaster
               position="top-right"
@@ -90,7 +93,10 @@ function App() {
               <FloatingCarts />
               <GlobalCartDialogs />
             </Suspense>
+            {/* Terms of Service dialog */}
+            <TermsOfServiceDialog />
           </ErrorBoundary>
+          </TermsOfServiceProvider>
         </GlobalCartProvider>
       </GlobalSearchProvider>
     </StarknetConfig>

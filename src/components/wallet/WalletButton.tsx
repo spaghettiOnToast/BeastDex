@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { ControllerConnector } from "@cartridge/connector";
+import { useTermsOfService } from "../../contexts/TermsOfServiceContext";
 
 type ControllerProfile = {
   username?: string | null;
@@ -27,6 +28,7 @@ export function WalletButton() {
   const { disconnectAsync } = useDisconnect();
   const navigate = useNavigate();
   const [username, setUsername] = useState<string | null>(null);
+  const { promptToSAcceptance, hasAcceptedToS } = useTermsOfService();
 
   const activeConnector = useMemo(() => {
     return (
@@ -75,6 +77,21 @@ export function WalletButton() {
     };
   }, [address, activeConnector]);
 
+  // Show ToS prompt if wallet is connected but ToS not accepted (e.g., on page refresh)
+  useEffect(() => {
+    if (address && username && !hasAcceptedToS) {
+      promptToSAcceptance(async () => {
+        try {
+          await disconnectAsync();
+          await (activeConnector as any).disconnect?.();
+        } catch (error) {
+          console.error("Failed to disconnect on ToS decline", error);
+        }
+        setUsername(null);
+      });
+    }
+  }, [address, username, hasAcceptedToS, promptToSAcceptance, disconnectAsync, activeConnector]);
+
   if (!username) {
     return (
       <Button
@@ -86,6 +103,14 @@ export function WalletButton() {
               activeConnector as ControllerConnector
             ).username?.();
             setUsername(name ?? null);
+
+            // Prompt ToS acceptance after wallet connects
+            // If declined, disconnect the wallet
+            promptToSAcceptance(async () => {
+              await disconnectAsync();
+              await (activeConnector as any).disconnect?.();
+              setUsername(null);
+            });
           } catch (error) {
             console.error("Failed to connect Starknet wallet", error);
           }

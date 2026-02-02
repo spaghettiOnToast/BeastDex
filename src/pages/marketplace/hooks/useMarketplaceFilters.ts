@@ -13,6 +13,7 @@ export interface UseMarketplaceFiltersProps {
   priceRates?: RatesInSTRK | null | undefined;
   address: string | undefined;
   availableFilters: BeastAttributeFilters;
+  userBeastsLoading?: boolean;
 }
 
 /**
@@ -24,10 +25,11 @@ export function useMarketplaceFilters({
   recentListings,
   address,
   availableFilters,
+  userBeastsLoading = false,
 }: UseMarketplaceFiltersProps) {
   // Filter and sort state
   const [attributeFilters, setAttributeFilters] = useState<BeastAttributeFilters>({});
-  const [sortOption, setSortOption] = useState<SortOption>("default");
+  const [sortOption, setSortOption] = useState<SortOption>("price-asc");
   const [hideExpired, setHideExpired] = useState(true);
   const [hiddenListingIds, setHiddenListingIds] = useState<Set<string>>(new Set());
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
@@ -273,16 +275,20 @@ export function useMarketplaceFilters({
     // Use pre-computed token IDs for owned beasts
     const ownedTokenIds = new Set(normalizedBeastTokenIds.values());
 
-    // Filter to listings where:
-    // 1. The seller is the current user
-    // 2. The user still owns the NFT (prevents stale listings from showing)
+    // Filter to listings where the seller is the current user
+    // Only apply ownership check if userBeasts has finished loading
+    // (prevents flicker where listings disappear then reappear)
     return base.filter((listing) => {
       if (listing.seller.toLowerCase() !== lower) return false;
+
+      // Skip ownership check while beasts are loading to prevent flicker
+      if (userBeastsLoading) return true;
+
       // Check if user still owns this NFT
       const normalizedTokenId = String(listing.tokenId).trim();
       return ownedTokenIds.has(normalizedTokenId);
     });
-  }, [sortedListings, listings, address, showAllMyListings, normalizedBeastTokenIds]);
+  }, [sortedListings, listings, address, showAllMyListings, normalizedBeastTokenIds, userBeastsLoading]);
 
   /**
    * Track which token IDs are already actively listed

@@ -3,6 +3,7 @@ import { useAccount } from "@starknet-react/core";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import { useGlobalCart } from "../contexts/GlobalCartContext";
+import { useTermsOfService } from "../contexts/TermsOfServiceContext";
 import { Button } from "../components/ui/button";
 import ListingCard from "../components/marketplace/ListingCard";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
@@ -11,9 +12,9 @@ import type { Listing } from "../services/marketplace/types";
 import {
   getPaymentTokenByAddress,
   BEASTS_COLLECTION_ADDRESS,
-  PLATFORM_FEE_BP,
   CREATOR_ROYALTY_BP,
 } from "../services/marketplace/constants";
+import { useArcadeBookConfig } from "../hooks/useArcadeBookConfig";
 import { toBigIntSafe } from "../utils/bigint";
 import { fromWei } from "../utils/price";
 import { cancelListingFlow } from "../services/marketplace/flows";
@@ -106,6 +107,27 @@ export default function MarketplacePage() {
   const { address, account } = useAccount();
   const { getToken } = useTokenMap();
   const globalCart = useGlobalCart();
+  const { hasAcceptedToS, openToSDialog } = useTermsOfService();
+
+  // Fetch dynamic platform fee from Arcade Book config
+  const { platformFeeBP } = useArcadeBookConfig();
+
+  // Helper to check ToS acceptance before allowing marketplace actions
+  const requireToS = useCallback((action: () => void) => {
+    if (!hasAcceptedToS) {
+      toast.error("Please accept the Terms of Service to use the marketplace", {
+        action: {
+          label: "View Terms",
+          onClick: openToSDialog,
+        },
+      });
+      return;
+    }
+    action();
+  }, [hasAcceptedToS, openToSDialog]);
+
+  // Whether marketplace actions should be disabled (ToS not accepted)
+  const marketplaceDisabled = !hasAcceptedToS;
 
   // Dialog states
   const [exploreSubTab, setExploreSubTab] = useState<ExploreSubTab>("browse");
@@ -232,6 +254,7 @@ export default function MarketplacePage() {
     recentListings: dataHook.recentListings,
     address,
     availableFilters: dataHook.availableFilters,
+    userBeastsLoading: dataHook.userBeastsLoading,
   });
 
   // Cancel cart hook (list and purchase carts are in GlobalCartContext)
@@ -384,7 +407,7 @@ export default function MarketplacePage() {
     return enrichedOffersReceived.filter(offer => !offer.isHidden);
   }, [enrichedOffersReceived, showHiddenOffers]);
 
-  // Enrich made offers with hidden state and filter expired by default
+  // Enrich made offers with hidden state and filter expired/cancelled by default
   const enrichedMadeOffers = useMemo(() => {
     if (!userMadeOffers || userMadeOffers.length === 0) return [];
 
@@ -392,18 +415,34 @@ export default function MarketplacePage() {
 
     return userMadeOffers.map(offer => {
       const isExpired = offer.expiration && offer.expiration < now;
-      // Try to find beast name from listings
+      // Check if offer is cancelled (status index 2) or executed (status index 3)
+      const statusIndex = offer.status?.into?.() ?? 1;
+      const isCancelled = statusIndex === 2;
+      const isExecuted = statusIndex === 3;
+      const isInactive = isCancelled || isExecuted;
+
+      // Try to find beast name from listings first, then from user's beasts
       const matchingListing = dataHook.listings.find(l => l.tokenId === String(offer.tokenId));
-      const beastName = matchingListing?.beast?.name || `Beast #${offer.tokenId}`;
+      const matchingBeast = dataHook.userBeasts.find(b => {
+        const beastTokenId = b.id.split(":").pop() || b.id;
+        const normalizedBeastId = beastTokenId.startsWith("0x")
+          ? BigInt(beastTokenId).toString()
+          : beastTokenId;
+        return normalizedBeastId === String(offer.tokenId);
+      });
+      const beastName = matchingListing?.beast?.name || matchingBeast?.name || `Beast #${offer.tokenId}`;
 
       return {
         ...offer,
         beastName,
         isExpired,
-        isHidden: hiddenMadeOfferIds.has(offer.id.toString()) || isExpired, // Auto-hide expired
+        isCancelled,
+        isExecuted,
+        // Auto-hide expired, cancelled, or executed offers
+        isHidden: hiddenMadeOfferIds.has(offer.id.toString()) || isExpired || isInactive,
       };
     });
-  }, [userMadeOffers, dataHook.listings, hiddenMadeOfferIds]);
+  }, [userMadeOffers, dataHook.listings, dataHook.userBeasts, hiddenMadeOfferIds]);
 
   // Filter made offers based on visibility
   const visibleMadeOffers = useMemo(() => {
@@ -925,7 +964,7 @@ export default function MarketplacePage() {
         {/* View toggle and controls */}
         <div className="flex flex-col gap-2 sm:gap-4 lg:flex-row lg:items-center lg:justify-between">
           <ViewToggle value={filtersHook.activeTab} onChange={filtersHook.setActiveTab} />
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
             {filterControls}
             {filtersHook.activeTab === "my-beasts" && (
               <Button
@@ -956,17 +995,57 @@ export default function MarketplacePage() {
                 {dataHook.userBeastsLoading ? "…" : "Refresh"}
               </Button>
             )}
+            {filtersHook.activeTab === "explore" && (exploreSubTab === "browse" || exploreSubTab === "recent-listed") && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 sm:h-9 px-2 sm:px-3"
+                onClick={() => dataHook.refetchOrders()}
+                disabled={dataHook.ordersLoading || dataHook.ordersFetching}
+                title="Refresh listings"
+              >
+                <svg
+                  className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${(dataHook.ordersLoading || dataHook.ordersFetching) ? "animate-spin" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </Button>
+            )}
             {filtersHook.activeTab === "explore" && exploreSubTab === "recent-sold" && (
               <Button
                 variant="outline"
                 size="sm"
-                className="text-[10px] sm:text-xs h-7 sm:h-9 px-2 sm:px-4"
+                className="h-7 sm:h-9 px-2 sm:px-3"
                 onClick={async () => {
                   await invalidateRecentSales();
                 }}
+                title="Refresh sales"
               >
-                Refresh
+                <svg
+                  className="h-3.5 w-3.5 sm:h-4 sm:w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
               </Button>
+            )}
+            {/* Sweep Control - dropdown style */}
+            {filtersHook.activeTab === "explore" && (exploreSubTab === "browse" || exploreSubTab === "recent-listed") && (
+              <SweepControl
+                listings={(exploreSubTab === "browse" ? filtersHook.sortedListings : filtersHook.namedRecentListings).filter(l => address?.toLowerCase() !== l.seller?.toLowerCase())}
+                onSweep={(listings) => requireToS(() => handleSweep(listings))}
+                isInCart={globalCart.isInPurchaseCart}
+                disabled={!address || marketplaceDisabled}
+                onSelectionChange={setSweepSelectionIds}
+                excludedIds={sweepExcludedIds}
+              />
             )}
           </div>
         </div>
@@ -980,7 +1059,7 @@ export default function MarketplacePage() {
                   type="button"
                   onClick={() => {
                     setExploreSubTab("browse");
-                    filtersHook.setSortOption("default");
+                    filtersHook.setSortOption("price-asc");
                     setSweepSelectionIds(new Set());
                     setSweepExcludedIds(new Set());
                   }}
@@ -1088,7 +1167,7 @@ export default function MarketplacePage() {
                           subtitlePriceLabel={formatSubtitlePrice(listing)}
                           tokenLogoUrl={getTokenLogoUrl(listing)}
                           status={listing.status}
-                          buyDisabled={!listing.active || !address}
+                          buyDisabled={!listing.active || !address || marketplaceDisabled}
                           inCart={globalCart.isInPurchaseCart(listing.listingId)}
                           inSweepSelection={sweepSelectionIds.has(listing.listingId)}
                           onRemoveFromSweep={() => {
@@ -1096,26 +1175,26 @@ export default function MarketplacePage() {
                           }}
                           primaryActionLabel={globalCart.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
                           onCardClick={() => handleCardClick(listing)}
-                          onBuyNow={() => {
+                          onBuyNow={() => requireToS(() => {
                             setPurchasingListing(listing);
                             setPurchaseConfirmOpen(true);
-                          }}
-                          onAddToCart={() => globalCart.togglePurchaseCart(listing)}
-                          onMakeOffer={() => {
+                          })}
+                          onAddToCart={() => requireToS(() => globalCart.togglePurchaseCart(listing))}
+                          onMakeOffer={() => requireToS(() => {
                             setOfferBeast(listing.beast ?? null);
                             setOfferTokenId(listing.tokenId);
                             setMakeOfferOpen(true);
-                          }}
+                          })}
                           onViewOffers={() => {
                             setSelectedListingForOffers(listing);
                             setOffersDialogOpen(true);
                           }}
                           ownedByUser={address?.toLowerCase() === listing.seller?.toLowerCase()}
-                          onEdit={() => {
+                          onEdit={() => requireToS(() => {
                             setEditingListing(listing);
                             setEditDialogOpen(true);
-                          }}
-                          onCancel={listing.active ? () => handleCancelListing(listing) : undefined}
+                          })}
+                          onCancel={listing.active ? () => requireToS(() => handleCancelListing(listing)) : undefined}
                         />
                       ))}
                     </div>
@@ -1125,16 +1204,6 @@ export default function MarketplacePage() {
                       totalItems={filtersHook.sortedListings.length}
                       itemsPerPage={filtersHook.itemsPerPage}
                       onPageChange={filtersHook.setCurrentPage}
-                    />
-
-                    {/* Sweep Control */}
-                    <SweepControl
-                      listings={filtersHook.sortedListings.filter(l => address?.toLowerCase() !== l.seller?.toLowerCase())}
-                      onSweep={handleSweep}
-                      isInCart={globalCart.isInPurchaseCart}
-                      disabled={!address}
-                      onSelectionChange={setSweepSelectionIds}
-                      excludedIds={sweepExcludedIds}
                     />
                   </>
                 )}
@@ -1190,7 +1259,7 @@ export default function MarketplacePage() {
                             subtitlePriceLabel={formatSubtitlePrice(listing)}
                             tokenLogoUrl={getTokenLogoUrl(listing)}
                             status={listing.status}
-                            buyDisabled={!listing.active || !address}
+                            buyDisabled={!listing.active || !address || marketplaceDisabled}
                             inCart={globalCart.isInPurchaseCart(listing.listingId)}
                             inSweepSelection={sweepSelectionIds.has(listing.listingId)}
                             onRemoveFromSweep={() => {
@@ -1198,26 +1267,26 @@ export default function MarketplacePage() {
                             }}
                             primaryActionLabel={globalCart.isInPurchaseCart(listing.listingId) ? "In Cart" : undefined}
                             onCardClick={() => handleCardClick(listing)}
-                            onBuyNow={() => {
+                            onBuyNow={() => requireToS(() => {
                               setPurchasingListing(listing);
                               setPurchaseConfirmOpen(true);
-                            }}
-                            onAddToCart={() => globalCart.togglePurchaseCart(listing)}
-                            onMakeOffer={() => {
+                            })}
+                            onAddToCart={() => requireToS(() => globalCart.togglePurchaseCart(listing))}
+                            onMakeOffer={() => requireToS(() => {
                               setOfferBeast(listing.beast ?? null);
                               setOfferTokenId(listing.tokenId);
                               setMakeOfferOpen(true);
-                            }}
+                            })}
                             onViewOffers={() => {
                               setSelectedListingForOffers(listing);
                               setOffersDialogOpen(true);
                             }}
                             ownedByUser={address?.toLowerCase() === listing.seller?.toLowerCase()}
-                            onEdit={() => {
+                            onEdit={() => requireToS(() => {
                               setEditingListing(listing);
                               setEditDialogOpen(true);
-                            }}
-                            onCancel={listing.active ? () => handleCancelListing(listing) : undefined}
+                            })}
+                            onCancel={listing.active ? () => requireToS(() => handleCancelListing(listing)) : undefined}
                           />
                         ))}
                       </div>
@@ -1349,16 +1418,6 @@ export default function MarketplacePage() {
                         </table>
                       </div>
                     )}
-
-                    {/* Sweep Control */}
-                    <SweepControl
-                      listings={filtersHook.namedRecentListings.filter(l => address?.toLowerCase() !== l.seller?.toLowerCase())}
-                      onSweep={handleSweep}
-                      isInCart={globalCart.isInPurchaseCart}
-                      disabled={!address}
-                      onSelectionChange={setSweepSelectionIds}
-                      excludedIds={sweepExcludedIds}
-                    />
                   </div>
                 )}
               </>
@@ -1746,11 +1805,12 @@ export default function MarketplacePage() {
                         inCart={inCart}
                         isAlreadyListed={isListed}
                         showSelectionOverlay={!isListed}
-                        onCardClick={() => !isListed && globalCart.toggleListCart(beast)}
-                        onListSingle={() => {
+                        buyDisabled={marketplaceDisabled}
+                        onCardClick={() => !isListed && requireToS(() => globalCart.toggleListCart(beast))}
+                        onListSingle={() => requireToS(() => {
                           setSingleBeastToList(beast);
                           setListDialogOpen(true);
-                        }}
+                        })}
                       />
                     );
                   })}
@@ -1830,9 +1890,9 @@ export default function MarketplacePage() {
                       {cartsHook.cancelCart.length > 0 ? (
                         <>
                           <Button
-                            variant="destructive"
+                            variant="outline"
                             size="sm"
-                            className="text-xs"
+                            className="text-xs text-white border-white"
                             onClick={handleBatchCancel}
                           >
                             Cancel {cartsHook.cancelCart.length} Listing{cartsHook.cancelCart.length > 1 ? "s" : ""}
@@ -1874,12 +1934,13 @@ export default function MarketplacePage() {
                             status={listing.status}
                             ownedByUser={true}
                             inCart={inCancelCart}
+                            buyDisabled={marketplaceDisabled}
                             onCardClick={() => handleCardClick(listing)}
-                            onEdit={() => {
+                            onEdit={() => requireToS(() => {
                               setEditingListing(listing);
                               setEditDialogOpen(true);
-                            }}
-                            onCancel={listing.active ? () => cartsHook.handleToggleCancelCart(listing) : undefined}
+                            })}
+                            onCancel={listing.active ? () => requireToS(() => cartsHook.handleToggleCancelCart(listing)) : undefined}
                             onViewOffers={() => {
                               setSelectedListingForOffers(listing);
                               setOffersDialogOpen(true);
@@ -2006,7 +2067,7 @@ export default function MarketplacePage() {
                                     {offer.isHidden ? "Unhide" : "Hide"}
                                   </Button>
                                   <Button
-                                    onClick={() => {
+                                    onClick={() => requireToS(() => {
                                       // Convert to OrderModel format and open confirmation dialog
                                       const orderModel = {
                                         id: offer.id,
@@ -2028,8 +2089,8 @@ export default function MarketplacePage() {
                                         buyerAddress: offer.owner,
                                       });
                                       setAcceptOfferConfirmOpen(true);
-                                    }}
-                                    disabled={!!actionsHook.acceptingOfferId}
+                                    })}
+                                    disabled={!!actionsHook.acceptingOfferId || marketplaceDisabled}
                                     className="bg-green-600 hover:bg-green-500 text-white font-semibold px-6 py-2"
                                   >
                                     Accept Offer
@@ -2433,12 +2494,12 @@ export default function MarketplacePage() {
                 address.toLowerCase() === selectedListingForOffers.seller.toLowerCase()
               }
               isLoading={offersLoading}
-              onAcceptOffer={(order) => {
+              onAcceptOffer={(order) => requireToS(() => {
                 actionsHook.handleAcceptOffer(order).then((success) => {
                   if (success) setOffersDialogOpen(false);
                 });
-              }}
-              isAccepting={!!actionsHook.acceptingOfferId}
+              })}
+              isAccepting={!!actionsHook.acceptingOfferId || marketplaceDisabled}
             />
           )}
         </Suspense>
@@ -2454,11 +2515,12 @@ export default function MarketplacePage() {
             </DialogHeader>
             {offerToAccept && (() => {
               // Calculate fees from offer price
+              // platformFeeBP is fetched dynamically from Arcade Book config
               const token = getPaymentTokenByAddress(offerToAccept.offer.currency);
               const tokenSymbol = token?.symbol ?? "STRK";
               const tokenDecimals = token?.decimals ?? 18;
               const priceBigInt = toBigIntSafe(offerToAccept.offer.price as any);
-              const platformFee = (priceBigInt * BigInt(PLATFORM_FEE_BP)) / 10000n;
+              const platformFee = (priceBigInt * BigInt(platformFeeBP)) / 10000n;
               const creatorRoyalty = (priceBigInt * BigInt(CREATOR_ROYALTY_BP)) / 10000n;
               const youReceive = priceBigInt - platformFee - creatorRoyalty;
 
@@ -2487,12 +2549,14 @@ export default function MarketplacePage() {
                     <span className="text-gray-400">Offer Amount:</span>
                     <span className="text-white">{fromWei(priceBigInt, tokenDecimals)} {tokenSymbol}</span>
                   </div>
+                  {platformFeeBP > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">Platform Fee ({platformFeeBP / 100}%):</span>
+                      <span className="text-gray-400">-{fromWei(platformFee, tokenDecimals)} {tokenSymbol}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Platform Fee ({PLATFORM_FEE_BP / 100}%):</span>
-                    <span className="text-gray-400">-{fromWei(platformFee, tokenDecimals)} {tokenSymbol}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Creator Royalty ({CREATOR_ROYALTY_BP / 100}%):</span>
+                    <span className="text-gray-400">Creator Royalty ({CREATOR_ROYALTY_BP / 100}%) (Survivor DAO):</span>
                     <span className="text-gray-400">-{fromWei(creatorRoyalty, tokenDecimals)} {tokenSymbol}</span>
                   </div>
                   <div className="flex justify-between text-sm font-semibold border-t border-gray-700 pt-2">

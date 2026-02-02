@@ -28,12 +28,15 @@ import { config } from "../config";
 import { useMarketplaceListings } from "./marketplace/hooks/useMarketplaceListings";
 import { useGlobalCart } from "../contexts/GlobalCartContext";
 import { formatPrice } from "../utils/price";
-import { getPaymentTokenByAddress } from "../services/marketplace/constants";
+import { getPaymentTokenByAddress, BEASTS_COLLECTION_ADDRESS, CLIENT_FEE_BP, CLIENT_FEE_RECEIVER, ROYALTIES_ENABLED } from "../services/marketplace/constants";
 import { useTokenMap, tokenAmountToUsd } from "../hooks/useEkuboTokens";
 import { toBigIntSafe } from "../utils/bigint";
 import MakeOfferDialog from "../components/marketplace/MakeOfferDialog";
 import PurchaseConfirmDialog from "../components/marketplace/PurchaseConfirmDialog";
 import type { Listing } from "../services/marketplace/types";
+import { executePurchaseWithApproval } from "../services/marketplace/approvals";
+import { toast } from "sonner";
+import { isUserRejection } from "../utils/transaction";
 
 const HIDDEN_FILTER_TRAITS = new Set<string>([
   "adventurerkilledcount",
@@ -68,13 +71,14 @@ function HomePage() {
   const [searchParams] = useSearchParams();
 
   // Marketplace state
-  const { address } = useAccount();
+  const { address, account } = useAccount();
   const globalCart = useGlobalCart();
   const { listings } = useMarketplaceListings();
   const { getToken } = useTokenMap();
   const [makeOfferOpen, setMakeOfferOpen] = useState(false);
   const [purchaseConfirmOpen, setPurchaseConfirmOpen] = useState(false);
   const [purchasingListing, setPurchasingListing] = useState<Listing | null>(null);
+  const [purchaseProcessing, setPurchaseProcessing] = useState(false);
 
   const { beasts, loading, error, reload, total } = useBeasts({
     limit: PAGE_SIZE,
@@ -304,18 +308,75 @@ function HomePage() {
     return priceFormatted;
   }, [getToken]);
 
-  // Custom action slot for BeastModal when beast is listed
+  // Handle direct purchase execution
+  const handleDirectPurchase = useCallback(async (listing: Listing) => {
+    if (!account || !listing) return;
+
+    setPurchaseProcessing(true);
+    const toastId = toast.loading("Processing purchase...");
+
+    try {
+      await executePurchaseWithApproval(
+        account,
+        listing.orderId,
+        BEASTS_COLLECTION_ADDRESS,
+        listing.tokenId,
+        1, // quantity
+        ROYALTIES_ENABLED,
+        listing.paymentToken || "0x0",
+        listing.price,
+        CLIENT_FEE_BP,
+        CLIENT_FEE_RECEIVER
+      );
+
+      toast.success("Purchase successful!", { id: toastId });
+      setPurchaseConfirmOpen(false);
+      setPurchasingListing(null);
+    } catch (e) {
+      if (isUserRejection(e)) {
+        toast.info("Purchase cancelled", { id: toastId });
+      } else {
+        const errorMessage = (e as Error).message || "Failed to complete purchase";
+        toast.error(errorMessage, { id: toastId });
+      }
+    } finally {
+      setPurchaseProcessing(false);
+    }
+  }, [account]);
+
+  // Custom action slot for BeastModal - shows actions for both listed and unlisted beasts
   const beastModalActionSlot = useMemo(() => {
-    if (!selectedBeastListing) return undefined;
+    if (!selectedBeast) return undefined;
 
     const listing = selectedBeastListing;
-    const isOwner = address?.toLowerCase() === listing.seller?.toLowerCase();
+    const isOwner = listing && address?.toLowerCase() === listing.seller?.toLowerCase();
 
+    // Owner shouldn't see buy/offer buttons on homepage modal
     if (isOwner) {
-      // Owner shouldn't see buy buttons on homepage modal
       return undefined;
     }
 
+    // Beast is not listed - show only "Make Offer" button
+    if (!listing) {
+      return (
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button
+            variant="outline"
+            size="default"
+            onClick={() => {
+              handleCloseModal();
+              setMakeOfferOpen(true);
+            }}
+            disabled={!address}
+            className="w-full sm:w-auto font-semibold tracking-wide border-gray-600 hover:border-gray-500"
+          >
+            Make Offer
+          </Button>
+        </div>
+      );
+    }
+
+    // Beast is listed - show Buy, Cart, and Offer buttons
     return (
       <div className="flex flex-col sm:flex-row gap-2">
         <Button
@@ -360,7 +421,7 @@ function HomePage() {
         </Button>
       </div>
     );
-  }, [selectedBeastListing, address, globalCart, formatPriceWithUsd, handleCloseModal]);
+  }, [selectedBeast, selectedBeastListing, address, globalCart, formatPriceWithUsd, handleCloseModal]);
 
   const topBar = <TopBar onLogoClick={handleResetFilters} />;
 
@@ -434,18 +495,20 @@ function HomePage() {
 
       <PurchaseConfirmDialog
         open={purchaseConfirmOpen}
-        onOpenChange={setPurchaseConfirmOpen}
+        onOpenChange={(open) => {
+          if (!purchaseProcessing) {
+            setPurchaseConfirmOpen(open);
+            if (!open) setPurchasingListing(null);
+          }
+        }}
         listing={purchasingListing}
         priceLabel={purchasingListing ? formatPriceWithUsd(purchasingListing) : ""}
         onConfirm={() => {
           if (purchasingListing) {
-            globalCart.addToPurchaseCart(purchasingListing);
-            globalCart.openPurchaseDialog();
+            handleDirectPurchase(purchasingListing);
           }
-          setPurchaseConfirmOpen(false);
-          setPurchasingListing(null);
         }}
-        isProcessing={false}
+        isProcessing={purchaseProcessing}
       />
 
       <FiltersDrawer

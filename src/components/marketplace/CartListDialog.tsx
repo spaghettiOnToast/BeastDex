@@ -16,10 +16,10 @@ import {
   BEASTS_COLLECTION_ADDRESS,
   MARKETPLACE_ADDRESS,
   ROYALTIES_ENABLED,
-  PLATFORM_FEE_BP,
   CREATOR_ROYALTY_BP,
 } from "../../services/marketplace/constants";
-import { ensureCollectionApproval, getProvider } from "../../services/marketplace/approvals";
+import { useArcadeBookConfig } from "../../hooks/useArcadeBookConfig";
+import { getCollectionApprovalCallIfNeeded, getProvider } from "../../services/marketplace/approvals";
 import { toWei, fromWei } from "../../utils/price";
 import { X, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
@@ -68,6 +68,9 @@ export default function CartListDialog({
 
   // Get token info from Ekubo
   const { decimals: tokenDecimals, symbol: tokenSymbol, usdPrice } = useSelectedToken(currencyAddress);
+
+  // Fetch dynamic platform fee from Arcade Book config
+  const { platformFeeBP } = useArcadeBookConfig();
 
   // Use shared expiration hook with max expiration enforcement
   const {
@@ -166,9 +169,9 @@ export default function CartListDialog({
         throw new Error("Invalid expiration selected");
       }
 
-      // Ensure collection approval first (once for all beasts)
+      // Check if we need approval (will be added to multicall if needed)
       toast.loading("Checking NFT approval...", { id: toastId });
-      await ensureCollectionApproval(account);
+      const approvalCall = await getCollectionApprovalCallIfNeeded(account);
 
       // Build all calls for batching into a single multicall transaction
       const allCalls: Array<{
@@ -176,6 +179,15 @@ export default function CartListDialog({
         entrypoint: string;
         calldata: string[];
       }> = [];
+
+      // Add approval call first if needed
+      if (approvalCall) {
+        allCalls.push({
+          contractAddress: approvalCall.contractAddress,
+          entrypoint: approvalCall.entrypoint,
+          calldata: approvalCall.calldata as string[],
+        });
+      }
 
       for (let i = 0; i < availableToList.length; i++) {
         const beast = availableToList[i];
@@ -249,8 +261,9 @@ export default function CartListDialog({
       // Execute all listings in a single multicall transaction
       if (allCalls.length > 0) {
         try {
-          toast.loading("Submitting listings...", { id: toastId });
-          console.log(`🚀 Executing multicall with ${allCalls.length} calls for ${successfulBeasts.length} beasts...`);
+          const hasApproval = approvalCall !== null;
+          toast.loading(hasApproval ? "Approving & listing..." : "Submitting listings...", { id: toastId });
+          console.log(`🚀 Executing multicall with ${allCalls.length} calls (${hasApproval ? 'incl. approval' : 'no approval'}) for ${successfulBeasts.length} beasts...`);
           const result = await account.execute(allCalls);
 
           // Extract transaction hash
@@ -387,7 +400,8 @@ export default function CartListDialog({
                         if (Number.isFinite(priceNum) && priceNum > 0) {
                           const priceBigInt = toWei(priceStr, tokenDecimals);
                           // Seller fees (deducted from proceeds)
-                          const platformFee = (priceBigInt * BigInt(PLATFORM_FEE_BP)) / 10000n;
+                          // platformFeeBP is fetched dynamically from Arcade Book config
+                          const platformFee = (priceBigInt * BigInt(platformFeeBP)) / 10000n;
                           const creatorRoyalty = (priceBigInt * BigInt(CREATOR_ROYALTY_BP)) / 10000n;
                           const sellerReceives = priceBigInt - platformFee - creatorRoyalty;
                           return (
@@ -459,7 +473,8 @@ export default function CartListDialog({
 
               if (validCount === 0) return null;
 
-              const totalPlatformFee = (totalListingPrice * BigInt(PLATFORM_FEE_BP)) / 10000n;
+              // platformFeeBP is fetched dynamically from Arcade Book config
+              const totalPlatformFee = (totalListingPrice * BigInt(platformFeeBP)) / 10000n;
               const totalCreatorRoyalty = (totalListingPrice * BigInt(CREATOR_ROYALTY_BP)) / 10000n;
               const totalYouReceive = totalListingPrice - totalPlatformFee - totalCreatorRoyalty;
 
@@ -469,12 +484,14 @@ export default function CartListDialog({
                     <span className="text-sm text-gray-400">Total Listing Price:</span>
                     <span className="text-sm font-medium">{fromWei(totalListingPrice, tokenDecimals)} {tokenSymbol}</span>
                   </div>
+                  {platformFeeBP > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-400">Platform Fee ({platformFeeBP / 100}%):</span>
+                      <span className="text-sm font-medium text-gray-400">-{fromWei(totalPlatformFee, tokenDecimals)} {tokenSymbol}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-400">Platform Fee ({PLATFORM_FEE_BP / 100}%):</span>
-                    <span className="text-sm font-medium text-gray-400">-{fromWei(totalPlatformFee, tokenDecimals)} {tokenSymbol}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-400">Creator Royalty ({CREATOR_ROYALTY_BP / 100}%):</span>
+                    <span className="text-sm text-gray-400">Creator Royalty ({CREATOR_ROYALTY_BP / 100}%) (Survivor DAO):</span>
                     <span className="text-sm font-medium text-gray-400">-{fromWei(totalCreatorRoyalty, tokenDecimals)} {tokenSymbol}</span>
                   </div>
                   <div className="flex justify-between border-t border-gray-700 pt-2">

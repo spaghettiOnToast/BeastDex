@@ -3,7 +3,7 @@ import { Button } from "../ui/button";
 import type { Listing } from "../../services/marketplace/types";
 import { toBigIntSafe } from "../../utils/bigint";
 import { CLIENT_FEE_BP } from "../../services/marketplace/constants";
-import { Zap } from "lucide-react";
+import { Zap, ChevronDown, X } from "lucide-react";
 import { useEkuboTokens, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
 
 type Props = {
@@ -14,6 +14,7 @@ type Props = {
   maxItems?: number;
   onSelectionChange?: (listingIds: Set<string>) => void;
   excludedIds?: Set<string>; // Listings manually excluded from sweep
+  defaultExpanded?: boolean;
 };
 
 export default function SweepControl({
@@ -24,8 +25,10 @@ export default function SweepControl({
   maxItems = 30,
   onSelectionChange,
   excludedIds = new Set(),
+  defaultExpanded = false,
 }: Props) {
   const [sweepCount, setSweepCount] = useState(0);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const { tokens } = useEkuboTokens();
 
   // Track previous excludedIds size to detect when items are manually excluded
@@ -129,16 +132,11 @@ export default function SweepControl({
     return total;
   }, [listingsToSweep, getListingUsdValue]);
 
-  // Get floor and ceiling USD prices
+  // Get floor USD price
   const floorUsd = useMemo(() => {
-    if (listingsToSweep.length === 0) return null;
-    return getListingUsdValue(listingsToSweep[0]);
-  }, [listingsToSweep, getListingUsdValue]);
-
-  const ceilingUsd = useMemo(() => {
-    if (listingsToSweep.length <= 1) return null;
-    return getListingUsdValue(listingsToSweep[listingsToSweep.length - 1]);
-  }, [listingsToSweep, getListingUsdValue]);
+    if (sweepableListings.length === 0) return null;
+    return getListingUsdValue(sweepableListings[0]);
+  }, [sweepableListings, getListingUsdValue]);
 
   const maxSweepable = Math.min(sweepableListings.length, maxItems);
   const canSweep = listingsToSweep.length > 0 && !disabled;
@@ -149,83 +147,120 @@ export default function SweepControl({
     }
   };
 
+  // Reference for click-outside detection
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close on click outside
+  useEffect(() => {
+    if (!isExpanded) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsExpanded(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isExpanded]);
+
   if (sweepableListings.length === 0) {
     return null;
   }
 
   return (
-    <div className="rounded-lg border border-gray-800 bg-gradient-to-r from-purple-900/20 to-blue-900/20 p-3 sm:p-4">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-        {/* Sweep Icon and Label */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400" />
-          <span className="text-sm font-semibold text-white">Sweep Floor</span>
-        </div>
+    <div ref={containerRef} className="relative">
+      {/* Toggle button - always visible */}
+      <button
+        type="button"
+        onClick={() => setIsExpanded(!isExpanded)}
+        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${
+          isExpanded
+            ? "border-purple-500/50 bg-gradient-to-r from-purple-900/40 to-blue-900/40"
+            : "border-purple-500/30 bg-gradient-to-r from-purple-900/20 to-blue-900/20 hover:from-purple-900/30 hover:to-blue-900/30"
+        }`}
+        disabled={disabled}
+      >
+        <Zap className="w-4 h-4 text-purple-400" />
+        <span className="text-sm font-medium text-white">Sweep Floor</span>
+        {floorUsd !== null && (
+          <span className="text-xs text-gray-400">from ${floorUsd.toFixed(2)}</span>
+        )}
+        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+      </button>
 
-        {/* Slider and Count */}
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <input
-            type="range"
-            min={0}
-            max={maxSweepable}
-            value={Math.min(sweepCount, maxSweepable)}
-            onChange={(e) => setSweepCount(Number(e.target.value))}
-            className="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
-            disabled={disabled || maxSweepable === 0}
-          />
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <input
-              type="number"
-              min={0}
-              max={maxSweepable}
-              value={Math.min(sweepCount, maxSweepable)}
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                if (val >= 0 && val <= maxSweepable) {
-                  setSweepCount(val);
-                }
-              }}
-              className="w-12 sm:w-14 px-2 py-1 text-center text-sm font-medium bg-gray-800 border border-gray-700 rounded text-white"
-              disabled={disabled}
-            />
-            <span className="text-xs text-gray-400">/ {maxSweepable}</span>
+      {/* Expanded dropdown panel - absolutely positioned */}
+      {isExpanded && (
+        <div className="absolute right-0 top-full mt-2 z-50 min-w-[400px] rounded-lg border border-purple-500/30 bg-[#0b0b0f]/95 backdrop-blur-sm p-4 shadow-xl shadow-purple-900/20">
+          {/* Close button */}
+          <button
+            type="button"
+            onClick={() => setIsExpanded(false)}
+            className="absolute top-2 right-2 p-1 rounded hover:bg-gray-800 transition-colors"
+          >
+            <X className="w-4 h-4 text-gray-400" />
+          </button>
+
+          <div className="flex flex-col gap-4">
+            {/* Header */}
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-purple-400" />
+              <span className="text-sm font-semibold text-white">Sweep Floor</span>
+              <span className="text-xs text-gray-500">Select items to sweep</span>
+            </div>
+
+            {/* Slider and Count */}
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={0}
+                max={maxSweepable}
+                value={Math.min(sweepCount, maxSweepable)}
+                onChange={(e) => setSweepCount(Number(e.target.value))}
+                className="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                disabled={disabled || maxSweepable === 0}
+              />
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <input
+                  type="number"
+                  min={0}
+                  max={maxSweepable}
+                  value={Math.min(sweepCount, maxSweepable)}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (val >= 0 && val <= maxSweepable) {
+                      setSweepCount(val);
+                    }
+                  }}
+                  className="w-14 px-2 py-1 text-center text-sm font-medium bg-gray-800 border border-gray-700 rounded text-white"
+                  disabled={disabled}
+                />
+                <span className="text-xs text-gray-400">/ {maxSweepable}</span>
+              </div>
+            </div>
+
+            {/* Total and Sweep Button */}
+            <div className="flex items-center justify-between pt-2 border-t border-gray-800">
+              <div className="flex flex-col">
+                <span className="text-lg font-bold text-lsGold">
+                  ${totalUsd.toFixed(2)}
+                </span>
+                <span className="text-[10px] text-gray-500">
+                  incl. {CLIENT_FEE_BP / 100}% fee
+                </span>
+              </div>
+
+              <Button
+                onClick={handleSweep}
+                disabled={!canSweep}
+                size="sm"
+                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-semibold px-5 py-2"
+              >
+                <Zap className="w-4 h-4 mr-1.5" />
+                Sweep {listingsToSweep.length}
+              </Button>
+            </div>
           </div>
-        </div>
-
-        {/* Total in USD */}
-        <div className="flex flex-col gap-0.5 flex-shrink-0 min-w-[100px]">
-          <div className="flex items-center justify-end gap-1.5">
-            <span className="text-sm font-bold text-lsGold">
-              ${totalUsd.toFixed(2)}
-            </span>
-          </div>
-          <p className="text-[10px] text-gray-500 text-right">
-            incl. {CLIENT_FEE_BP / 100}% fee
-          </p>
-        </div>
-
-        {/* Sweep Button */}
-        <Button
-          onClick={handleSweep}
-          disabled={!canSweep}
-          className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-semibold px-4 sm:px-6 py-2 flex-shrink-0"
-        >
-          <Zap className="w-4 h-4 mr-1.5" />
-          Sweep {listingsToSweep.length}
-        </Button>
-      </div>
-
-      {/* Floor/Ceiling price indicator in USD */}
-      {listingsToSweep.length > 0 && floorUsd !== null && (
-        <div className="mt-2 pt-2 border-t border-gray-800/50 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400">
-          <span>
-            Floor: ${floorUsd.toFixed(2)}
-          </span>
-          {ceilingUsd !== null && (
-            <span>
-              Ceiling: ${ceilingUsd.toFixed(2)}
-            </span>
-          )}
         </div>
       )}
     </div>
