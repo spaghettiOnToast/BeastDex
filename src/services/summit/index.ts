@@ -27,16 +27,10 @@ export async function fetchSummitBeastData(
     );
 
     if (!rows || rows.length === 0) {
-      console.debug(`[Summit] No data found for tokenId: ${tokenId}`);
       return computeSummitBeastData(tokenId, null);
     }
 
     const liveStats = mapSummitRow(rows[0]);
-    console.debug(`[Summit] Loaded data for tokenId: ${tokenId}`, {
-      attackStreak: liveStats.attackStreak,
-      blocksHeld: liveStats.blocksHeld,
-      bonusHealth: liveStats.bonusHealth,
-    });
     return computeSummitBeastData(tokenId, liveStats);
   } catch (error) {
     console.error(`[Summit] Failed to fetch beast data for ${tokenId}:`, error);

@@ -208,18 +208,6 @@ export default function CartListDialog({
           // Build token ID as Uint256
           const tokenIdU256 = toUint256Hex(tokenIdBigInt);
 
-          console.log('📝 Preparing to list beast:', {
-            name: beast.name,
-            tokenId: tokenIdBigInt.toString(),
-            price: priceBigInt.toString(),
-            priceFormatted: priceStr,
-            currency: tokenSymbol,
-            currencyAddress,
-            expiration: expirationSeconds.toString(),
-            expirationDate: new Date(expirationSeconds * 1000).toLocaleString(),
-            collection: BEASTS_COLLECTION_ADDRESS,
-          });
-
           // Build list call (free to list - buyer pays fees on purchase)
           // Contract signature: list(collection, token_id: u256, quantity: u128, price: u128, currency, expiration: u64, royalties: bool)
           const listCall = {
@@ -235,8 +223,6 @@ export default function CartListDialog({
               ROYALTIES_ENABLED ? "1" : "0", // royalties: bool
             ],
           };
-
-          console.log(`Adding list call for ${beast.name} (${i}):`, { listCall });
 
           // Add to batch (1 call per beast - free to list)
           allCalls.push(listCall);
@@ -263,7 +249,6 @@ export default function CartListDialog({
         try {
           const hasApproval = approvalCall !== null;
           toast.loading(hasApproval ? "Approving & listing..." : "Submitting listings...", { id: toastId });
-          console.log(`🚀 Executing multicall with ${allCalls.length} calls (${hasApproval ? 'incl. approval' : 'no approval'}) for ${successfulBeasts.length} beasts...`);
           const result = await account.execute(allCalls);
 
           // Extract transaction hash
@@ -275,8 +260,6 @@ export default function CartListDialog({
               retryInterval: 2000,
             });
           }
-
-          console.log('✅ Successfully executed multicall! TX:', txHash);
 
           // Update all listing results with the transaction hash
           listingResults.forEach(lr => {

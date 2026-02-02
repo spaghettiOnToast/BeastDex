@@ -55,15 +55,11 @@ export function SendBeastDialog({
 
     // Try to resolve as Cartridge username
     try {
-      console.log("Looking up username:", trimmed);
       const result = await lookupControllerAddresses([trimmed]);
-      console.log("Lookup result:", result);
 
       // The result keys are normalized (lowercase)
       const normalizedKey = trimmed.toLowerCase();
       const addresses = result[normalizedKey] ?? [];
-
-      console.log("Addresses found:", addresses);
 
       if (addresses.length > 0) {
         return addresses[0];
