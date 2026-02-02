@@ -20,6 +20,7 @@ export type ArcadeOrderModelCompat = {
   price: string; // Keep as string to avoid precision loss with large numbers
   currency: string;
   owner: string;
+  createdAt?: number; // Unix timestamp when the offer was created (from arcadeOfferModels)
 };
 
 function parseGraphQLOrder(node: any): ArcadeOrderModelCompat | null {
@@ -63,6 +64,24 @@ export type ArcadeOrderWithTime = ArcadeOrderModelCompat & {
 };
 
 /**
+ * Parse an offer from arcadeOfferModels (has nested order and time field)
+ */
+function parseGraphQLOffer(node: any): ArcadeOrderModelCompat | null {
+  if (!node?.order) return null;
+
+  const order = parseGraphQLOrder(node.order);
+  if (!order) return null;
+
+  // Parse the time field (hex string to unix timestamp)
+  const time = node.time ? parseInt(node.time, 16) : undefined;
+
+  return {
+    ...order,
+    createdAt: time,
+  };
+}
+
+/**
  * Helper for making GraphQL requests with abort signal support
  * Prevents memory leaks when components unmount during requests
  */
@@ -90,52 +109,58 @@ async function graphqlFetch<T>(
   return result.data as T;
 }
 
+/**
+ * Parse a listing from arcadeListingModels (has nested order and time field)
+ */
+function parseGraphQLListing(node: any): ArcadeOrderWithTime | null {
+  if (!node?.order) return null;
+
+  const order = parseGraphQLOrder(node.order);
+  if (!order) return null;
+
+  // Parse the time field (hex string to unix timestamp)
+  const time = node.time ? parseInt(node.time, 16) : undefined;
+
+  return {
+    ...order,
+    listedAt: time,
+  };
+}
+
 async function fetchArcadeOrdersGraphQL(
   collectionAddress: string,
   limit: number = 1000,
   signal?: AbortSignal
 ): Promise<ArcadeOrderWithTime[]> {
-  // Query current active orders first
-  const ordersQuery = `
-    query GetArcadeOrders($collection: String!, $limit: Int!) {
-      arcadeOrderModels(
-        where: {
-          collection: $collection,
-          status: 1,
-          category: 2
-        },
-        limit: $limit
-      ) {
-        edges {
-          node {
-            id
-            status
-            category
-            collection
-            token_id
-            price
-            currency
-            owner
-            expiration
-            quantity
-          }
-        }
-      }
-    }
-  `;
-
-  // Query listing events to get creation times
-  const listingsQuery = `
-    query GetArcadeListings($limit: Int!) {
+  // Query arcadeListingModels directly - has nested order and time field
+  const query = `
+    query GetArcadeListings($collection: String!, $limit: Int!) {
       arcadeListingModels(
-        limit: $limit
+        where: {
+          order: {
+            collection: $collection,
+            status: 1,
+            category: 2
+          }
+        },
+        limit: $limit,
+        order: { direction: DESC, field: TIME }
       ) {
         edges {
           node {
             order_id
             time
             order {
+              id
+              status
+              category
               collection
+              token_id
+              price
+              currency
+              owner
+              expiration
+              quantity
             }
           }
         }
@@ -143,122 +168,72 @@ async function fetchArcadeOrdersGraphQL(
     }
   `;
 
-  // Fetch both in parallel with abort signal
-  const [ordersResponse, listingsResponse] = await Promise.all([
-    fetch(ARCADE_GRAPHQL_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: ordersQuery,
-        variables: { collection: collectionAddress, limit },
-      }),
-      signal,
-    }),
-    fetch(ARCADE_GRAPHQL_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: listingsQuery,
-        variables: { limit: limit * 2 }, // Fetch more to ensure coverage
-      }),
-      signal,
-    }),
-  ]);
+  type Response = { arcadeListingModels?: { edges?: Array<{ node: any }> } };
+  const data = await graphqlFetch<Response>(
+    query,
+    { collection: collectionAddress, limit },
+    signal
+  );
 
-  if (!ordersResponse.ok) {
-    throw new Error(`GraphQL request failed: ${ordersResponse.status} ${ordersResponse.statusText}`);
-  }
-
-  const ordersResult = await ordersResponse.json();
-  if (ordersResult.errors) {
-    throw new Error(`GraphQL errors: ${ordersResult.errors.map((e: any) => e.message).join(", ")}`);
-  }
-
-  // Build a map of order_id -> listing time from listing events
-  const listingTimeMap = new Map<number, number>();
-  if (listingsResponse.ok) {
-    const listingsResult = await listingsResponse.json();
-    const listingEdges = listingsResult.data?.arcadeListingModels?.edges ?? [];
-    for (const edge of listingEdges) {
-      const node = edge.node;
-      if (!node) continue;
-      // Filter by collection
-      if (node.order?.collection && !compareStarknetAddresses(node.order.collection, collectionAddress)) continue;
-      const orderId = parseInt(node.order_id ?? "0", 10);
-      const time = parseInt(node.time ?? "0", 16);
-      if (orderId > 0 && time > 0) {
-        listingTimeMap.set(orderId, time);
-      }
-    }
-  }
-
-  // Parse orders and enrich with listing times
-  const orderEdges = ordersResult.data?.arcadeOrderModels?.edges ?? [];
-  const listings: ArcadeOrderWithTime[] = [];
-
-  for (const edge of orderEdges) {
-    const order = parseGraphQLOrder(edge.node);
-    if (!order) continue;
-
-    // Get listing time from the events map
-    const listedAt = listingTimeMap.get(order.id);
-
-    listings.push({
-      ...order,
-      listedAt,
-    });
-  }
-
-  return listings;
+  const edges = data?.arcadeListingModels?.edges ?? [];
+  return edges
+    .map((edge: any) => parseGraphQLListing(edge.node))
+    .filter(Boolean) as ArcadeOrderWithTime[];
 }
 
 async function fetchArcadeOrderByTokenGraphQL(
   collectionAddress: string,
   tokenId: string,
   signal?: AbortSignal
-): Promise<ArcadeOrderModelCompat | null> {
+): Promise<ArcadeOrderWithTime | null> {
   const tokenIdHex = `0x${parseInt(tokenId, 10).toString(16)}`;
 
   const query = `
-    query GetArcadeOrderByToken($collection: String!, $tokenId: String!) {
-      arcadeOrderModels(
+    query GetArcadeListingByToken($collection: String!, $tokenId: String!) {
+      arcadeListingModels(
         where: {
-          collection: $collection,
-          token_id: $tokenId,
-          status: 1,
-          category: 2
+          order: {
+            collection: $collection,
+            token_id: $tokenId,
+            status: 1,
+            category: 2
+          }
         },
         limit: 1
       ) {
         edges {
           node {
-            id
-            status
-            category
-            collection
-            token_id
-            price
-            currency
-            owner
-            expiration
-            quantity
+            order_id
+            time
+            order {
+              id
+              status
+              category
+              collection
+              token_id
+              price
+              currency
+              owner
+              expiration
+              quantity
+            }
           }
         }
       }
     }
   `;
 
-  type Response = { arcadeOrderModels?: { edges?: Array<{ node: any }> } };
+  type Response = { arcadeListingModels?: { edges?: Array<{ node: any }> } };
   const data = await graphqlFetch<Response>(
     query,
     { collection: collectionAddress, tokenId: tokenIdHex },
     signal
   );
 
-  const edges = data?.arcadeOrderModels?.edges ?? [];
+  const edges = data?.arcadeListingModels?.edges ?? [];
   if (edges.length === 0) return null;
 
-  return parseGraphQLOrder(edges[0].node);
+  return parseGraphQLListing(edges[0].node);
 }
 
 export function useArcadeListedTokensForCollection(collectionAddress: string) {
@@ -288,7 +263,7 @@ export function useArcadeIsTokenListed(collectionAddress: string, tokenId: strin
       const listing = await fetchArcadeOrderByTokenGraphQL(collectionAddress, tokenId, signal);
       return { isListed: listing !== null, listing };
     },
-    initialData: { isListed: false, listing: null } as { isListed: boolean; listing: ArcadeOrderModelCompat | null },
+    initialData: { isListed: false, listing: null } as { isListed: boolean; listing: ArcadeOrderWithTime | null },
   });
 }
 
@@ -405,45 +380,53 @@ async function fetchUserOffersGraphQL(
   // Pad address to 64 hex chars to match GraphQL storage format
   const normalizedOwner = padStarknetAddress(userAddress) ?? userAddress.toLowerCase();
 
-  // Fetch all user offers (category: 1 = Buy order/offer)
+  // Fetch all user offers from arcadeOfferModels (has time field)
+  // Filter by order.owner and order.category (1 = Buy order/offer)
   // Don't filter by status so we can show expired offers in the Hidden section
   const query = `
     query GetUserOffers($owner: String!, $limit: Int!) {
-      arcadeOrderModels(
+      arcadeOfferModels(
         where: {
-          owner: $owner,
-          category: 1
+          order: {
+            owner: $owner,
+            category: 1
+          }
         },
-        limit: $limit
+        limit: $limit,
+        order: { direction: DESC, field: TIME }
       ) {
         edges {
           node {
-            id
-            status
-            category
-            collection
-            token_id
-            price
-            currency
-            owner
-            expiration
-            quantity
+            order_id
+            time
+            order {
+              id
+              status
+              category
+              collection
+              token_id
+              price
+              currency
+              owner
+              expiration
+              quantity
+            }
           }
         }
       }
     }
   `;
 
-  type Response = { arcadeOrderModels?: { edges?: Array<{ node: any }> } };
+  type Response = { arcadeOfferModels?: { edges?: Array<{ node: any }> } };
   const data = await graphqlFetch<Response>(
     query,
     { owner: normalizedOwner, limit },
     signal
   );
 
-  const edges = data?.arcadeOrderModels?.edges ?? [];
+  const edges = data?.arcadeOfferModels?.edges ?? [];
   const offers = edges
-    .map((edge: any) => parseGraphQLOrder(edge.node))
+    .map((edge: any) => parseGraphQLOffer(edge.node))
     .filter(Boolean) as ArcadeOrderModelCompat[];
 
   // Filter to only include offers for the specified collection
@@ -490,43 +473,50 @@ async function fetchOffersForTokenGraphQL(
 
   const query = `
     query GetOffersForToken($collection: String!, $tokenId: String!, $limit: Int!) {
-      arcadeOrderModels(
+      arcadeOfferModels(
         where: {
-          collection: $collection,
-          token_id: $tokenId,
-          category: 1,
-          status: 1
+          order: {
+            collection: $collection,
+            token_id: $tokenId,
+            category: 1,
+            status: 1
+          }
         },
-        limit: $limit
+        limit: $limit,
+        order: { direction: DESC, field: TIME }
       ) {
         edges {
           node {
-            id
-            status
-            category
-            collection
-            token_id
-            price
-            currency
-            owner
-            expiration
-            quantity
+            order_id
+            time
+            order {
+              id
+              status
+              category
+              collection
+              token_id
+              price
+              currency
+              owner
+              expiration
+              quantity
+            }
           }
         }
       }
     }
   `;
 
-  type Response = { arcadeOrderModels?: { edges?: Array<{ node: any }> } };
+  type Response = { arcadeOfferModels?: { edges?: Array<{ node: any }> } };
   const data = await graphqlFetch<Response>(
     query,
     { collection: collectionAddress, tokenId: tokenIdHex, limit },
     signal
   );
 
-  const edges = data?.arcadeOrderModels?.edges ?? [];
+  const edges = data?.arcadeOfferModels?.edges ?? [];
   const offers = edges
-    .map((edge: any) => parseGraphQLOrder(edge.node))
+    .map((edge: any) => parseGraphQLOffer(edge.node))
     .filter(Boolean) as ArcadeOrderModelCompat[];
 
   // Filter out expired offers
@@ -563,42 +553,49 @@ async function fetchAllOffersForCollectionGraphQL(
 ): Promise<ArcadeOrderModelCompat[]> {
   const query = `
     query GetAllOffersForCollection($collection: String!, $limit: Int!) {
-      arcadeOrderModels(
+      arcadeOfferModels(
         where: {
-          collection: $collection,
-          category: 1,
-          status: 1
+          order: {
+            collection: $collection,
+            category: 1,
+            status: 1
+          }
         },
-        limit: $limit
+        limit: $limit,
+        order: { direction: DESC, field: TIME }
       ) {
         edges {
           node {
-            id
-            status
-            category
-            collection
-            token_id
-            price
-            currency
-            owner
-            expiration
-            quantity
+            order_id
+            time
+            order {
+              id
+              status
+              category
+              collection
+              token_id
+              price
+              currency
+              owner
+              expiration
+              quantity
+            }
           }
         }
       }
     }
   `;
 
-  type Response = { arcadeOrderModels?: { edges?: Array<{ node: any }> } };
+  type Response = { arcadeOfferModels?: { edges?: Array<{ node: any }> } };
   const data = await graphqlFetch<Response>(
     query,
     { collection: collectionAddress, limit },
     signal
   );
 
-  const edges = data?.arcadeOrderModels?.edges ?? [];
+  const edges = data?.arcadeOfferModels?.edges ?? [];
   const offers = edges
-    .map((edge: any) => parseGraphQLOrder(edge.node))
+    .map((edge: any) => parseGraphQLOffer(edge.node))
     .filter(Boolean) as ArcadeOrderModelCompat[];
 
   // Filter out expired offers
