@@ -100,15 +100,7 @@ export function TermsOfServiceDialog() {
             </section>
 
             <section>
-              <h3 className="text-white font-semibold mb-2">6. Intellectual Property</h3>
-              <p>
-                Purchasing an NFT does NOT grant you intellectual property rights to the underlying artwork.
-                You receive a limited license to display the NFT for personal, non-commercial purposes only.
-              </p>
-            </section>
-
-            <section>
-              <h3 className="text-white font-semibold mb-2">7. Prohibited Conduct</h3>
+              <h3 className="text-white font-semibold mb-2">6. Prohibited Conduct</h3>
               <p>
                 You agree not to engage in market manipulation, wash trading, IP infringement, money laundering,
                 or any other illegal activities on the platform.
@@ -116,7 +108,7 @@ export function TermsOfServiceDialog() {
             </section>
 
             <section>
-              <h3 className="text-white font-semibold mb-2">8. Limitation of Liability</h3>
+              <h3 className="text-white font-semibold mb-2">7. Limitation of Liability</h3>
               <p>
                 To the maximum extent permitted by law, BeastDex shall not be liable for any indirect,
                 incidental, special, or consequential damages arising from your use of the Marketplace,
@@ -125,7 +117,7 @@ export function TermsOfServiceDialog() {
             </section>
 
             <section>
-              <h3 className="text-white font-semibold mb-2">9. Indemnification</h3>
+              <h3 className="text-white font-semibold mb-2">8. Indemnification</h3>
               <p>
                 You agree to indemnify and hold harmless BeastDex from any claims, damages, or expenses
                 arising from your use of the Marketplace or violation of these Terms.
@@ -133,7 +125,7 @@ export function TermsOfServiceDialog() {
             </section>
 
             <section>
-              <h3 className="text-white font-semibold mb-2">10. Privacy</h3>
+              <h3 className="text-white font-semibold mb-2">9. Privacy</h3>
               <p>
                 Your wallet address and transaction history are publicly visible on the blockchain.
                 We do not collect additional personal information beyond what is necessary to provide our services.
@@ -141,7 +133,7 @@ export function TermsOfServiceDialog() {
             </section>
 
             <section>
-              <h3 className="text-white font-semibold mb-2">11. Dispute Resolution</h3>
+              <h3 className="text-white font-semibold mb-2">10. Dispute Resolution</h3>
               <p>
                 Any disputes shall be resolved through binding arbitration. You waive any right to a jury
                 trial or to participate in a class action.
@@ -149,7 +141,7 @@ export function TermsOfServiceDialog() {
             </section>
 
             <section>
-              <h3 className="text-white font-semibold mb-2">12. Modifications</h3>
+              <h3 className="text-white font-semibold mb-2">11. Modifications</h3>
               <p>
                 We reserve the right to modify these terms at any time. Continued use of the platform
                 after changes constitutes acceptance of the new terms.
