@@ -176,20 +176,23 @@ function HomePage() {
       }
     }
 
-    // Load filters first (needed for UI interaction)
-    loadFilters();
+    // Stagger all data loading to avoid overwhelming the indexer
+    // Beasts load via useBeasts hook immediately, so defer everything else
+    const filtersTimer = setTimeout(() => {
+      if (mounted) loadFilters();
+    }, 300);
 
-    // Stagger secondary data loading to reduce initial burst
     const statsTimer = setTimeout(() => {
       if (mounted) loadBeastStats();
-    }, 500);
+    }, 800);
 
     const highlightsTimer = setTimeout(() => {
       if (mounted) loadHighlights();
-    }, 1000);
+    }, 1500);
 
     return () => {
       mounted = false;
+      clearTimeout(filtersTimer);
       clearTimeout(statsTimer);
       clearTimeout(highlightsTimer);
     };
