@@ -92,10 +92,10 @@ export function TermsOfServiceDialog() {
             <section>
               <h3 className="text-white font-semibold mb-2">5. Fees</h3>
               <p>
-                Trading on BeastDex may incur fees including platform fees (5%), creator royalties (5%),
-                and network gas fees. All applicable fees will be displayed before you confirm a transaction.
-                All transactions are executed atomically via smart contracts - BeastDex does not hold user
-                funds or NFTs in escrow.
+                Trading on BeastDex may incur fees including platform fees, creator royalties,
+                and network gas fees. All applicable fees and their breakdown will be displayed
+                before you confirm a transaction. All transactions are executed atomically via
+                smart contracts - BeastDex does not hold user funds or NFTs in escrow.
               </p>
             </section>
 
