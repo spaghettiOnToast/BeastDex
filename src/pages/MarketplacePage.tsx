@@ -158,6 +158,7 @@ export default function MarketplacePage() {
   const [detailModalListing, setDetailModalListing] = useState<Listing | null>(null);
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<string | null>(null);
   const [activityTypeFilter, setActivityTypeFilter] = useState<"listing" | "sale" | null>(null);
+  const [activityPage, setActivityPage] = useState(1);
   const [recentViewMode, setRecentViewMode] = useState<"cards" | "table">("cards");
 
   // Hidden offers received state (persisted to localStorage)
@@ -205,6 +206,11 @@ export default function MarketplacePage() {
       // Ignore localStorage errors
     }
   }, [hiddenMadeOfferIds]);
+
+  // Reset activity page when filter changes
+  useEffect(() => {
+    setActivityPage(1);
+  }, [activityTypeFilter]);
 
   // Sync global cart dialog state with local dialogs
   // When floating cart buttons are clicked, open the local marketplace-specific dialogs
@@ -1681,8 +1687,10 @@ export default function MarketplacePage() {
                         ? activities.filter(a => a.type === activityTypeFilter)
                         : activities;
 
-                      // Take top 100
-                      const topActivities = filteredActivities.slice(0, 100);
+                      // Paginate with 100 items per page
+                      const ACTIVITY_PAGE_SIZE = 100;
+                      const activityStartIndex = (activityPage - 1) * ACTIVITY_PAGE_SIZE;
+                      const topActivities = filteredActivities.slice(activityStartIndex, activityStartIndex + ACTIVITY_PAGE_SIZE);
 
                       if (topActivities.length === 0) {
                         return (
@@ -1833,6 +1841,31 @@ export default function MarketplacePage() {
                   </tbody>
                 </table>
               </div>
+              {(() => {
+                // Compute total count from source data for pagination
+                const listingCount = filtersHook.namedRecentListings.length;
+                const saleCount = namedRecentSales.length;
+                const totalCount = activityTypeFilter === "listing"
+                  ? listingCount
+                  : activityTypeFilter === "sale"
+                    ? saleCount
+                    : listingCount + saleCount;
+                const ACTIVITY_PAGE_SIZE = 100;
+                const totalActivityPages = Math.ceil(totalCount / ACTIVITY_PAGE_SIZE);
+
+                if (totalActivityPages > 1) {
+                  return (
+                    <Pagination
+                      currentPage={activityPage}
+                      totalPages={totalActivityPages}
+                      totalItems={totalCount}
+                      itemsPerPage={ACTIVITY_PAGE_SIZE}
+                      onPageChange={setActivityPage}
+                    />
+                  );
+                }
+                return null;
+              })()}
               </div>
             )}
           </section>
