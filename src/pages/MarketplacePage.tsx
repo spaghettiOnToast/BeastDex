@@ -1430,8 +1430,21 @@ export default function MarketplacePage() {
                 ) : (
                   <div className="space-y-3">
                     {namedRecentSales.map(({ sale, beast, tokenId, price, from, to, time }, idx) => {
-                      const token = sale.order?.currency ? getPaymentTokenByAddress(sale.order.currency) : null;
+                      const tokenAddress = sale.order?.currency;
+                      const token = tokenAddress ? getPaymentTokenByAddress(tokenAddress) : null;
+                      const tokenInfo = tokenAddress ? getToken(tokenAddress) : null;
                       const symbol = token?.symbol ?? 'STRK';
+
+                      // Calculate USD price
+                      let usdPrice: string | undefined;
+                      if (tokenInfo?.usdPrice && price) {
+                        const usdValue = tokenAmountToUsd(price, tokenInfo.decimals, tokenInfo.usdPrice);
+                        usdPrice = usdValue.toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        });
+                      }
+
                       return (
                         <div
                           key={`sale-${idx}`}
@@ -1454,9 +1467,14 @@ export default function MarketplacePage() {
                           {/* Sale Details */}
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-white truncate">{beast?.name || `Beast #${tokenId}`}</p>
-                            <p className="text-sm text-lsGold font-medium">
-                              {formatPrice(price, symbol)}
-                            </p>
+                            <div className="flex flex-col">
+                              <span className="text-sm text-lsGold font-medium">
+                                {formatPrice(price, symbol)}
+                              </span>
+                              {usdPrice && (
+                                <span className="text-xs text-gray-500">${usdPrice}</span>
+                              )}
+                            </div>
                             <p className="text-xs text-gray-500 truncate">
                               {from.slice(0, 6)}...{from.slice(-4)} → {to.slice(0, 6)}...{to.slice(-4)}
                             </p>
@@ -1564,14 +1582,32 @@ export default function MarketplacePage() {
 
                       // Add sales
                       for (const saleData of namedRecentSales) {
-                        const token = saleData.sale.order?.currency ? getPaymentTokenByAddress(saleData.sale.order.currency) : null;
+                        const tokenAddress = saleData.sale.order?.currency;
+                        const paymentToken = tokenAddress ? getPaymentTokenByAddress(tokenAddress) : null;
+                        const tokenInfo = tokenAddress ? getToken(tokenAddress) : null;
+
+                        // Calculate USD price for sales
+                        let saleUsdPrice: string | undefined;
+                        if (tokenInfo?.usdPrice && saleData.price) {
+                          const usdValue = tokenAmountToUsd(
+                            saleData.price,
+                            tokenInfo.decimals,
+                            tokenInfo.usdPrice
+                          );
+                          saleUsdPrice = usdValue.toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          });
+                        }
+
                         activities.push({
                           type: "sale",
                           timestamp: saleData.time,
                           beast: saleData.beast,
                           tokenId: saleData.tokenId,
-                          price: formatPrice(saleData.price, token?.symbol ?? "STRK"),
-                          symbol: token?.symbol ?? "STRK",
+                          price: formatPrice(saleData.price, paymentToken?.symbol ?? "STRK"),
+                          symbol: paymentToken?.symbol ?? "STRK",
+                          usdPrice: saleUsdPrice,
                           from: saleData.from,
                           to: saleData.to,
                           sale: saleData,

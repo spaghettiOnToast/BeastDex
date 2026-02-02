@@ -161,6 +161,18 @@ export function useMarketplaceFilters({
   }, [attributeFilters, sortOption, hideExpired, activeTab]);
 
   /**
+   * Set default sort based on active tab
+   * My Beasts tab defaults to power sort (descending), other tabs default to price sort
+   */
+  useEffect(() => {
+    if (activeTab === "my-beasts") {
+      setSortOption("default"); // "default" sorts by power descending
+    } else {
+      setSortOption("price-asc");
+    }
+  }, [activeTab]);
+
+  /**
    * Filter user beasts based on current filters
    */
   const filteredUserBeasts = useMemo(
