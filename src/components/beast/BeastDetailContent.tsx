@@ -116,7 +116,7 @@ export function BeastDetailContent({
             <span>
               Owned by{" "}
               <Link
-                to={`/account/${encodeURIComponent(accountIdentifier)}`}
+                to={`/collection/${encodeURIComponent(accountIdentifier)}`}
                 className="text-lsGold hover:underline"
               >
                 {ownerLabel}

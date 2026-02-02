@@ -187,7 +187,7 @@ export function BeastSlayerLeaderboard() {
                 <div className="flex items-center">
                   {entry.owner ? (
                     <Link
-                      to={`/account/${encodeURIComponent(normaliseStarknetAddress(entry.owner) ?? entry.owner)}`}
+                      to={`/collection/${encodeURIComponent(normaliseStarknetAddress(entry.owner) ?? entry.owner)}`}
                       className={`transition-all duration-200 hover:text-[#ff7cf7] ${ownerInfo.className}`}
                     >
                       {ownerInfo.label}
