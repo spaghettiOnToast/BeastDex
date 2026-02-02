@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 
-const ARCADE_TORII_GRAPHQL =
-  (import.meta.env.VITE_ARCADE_TORII_BASE as string) + "/graphql" ||
-  "https://api.cartridge.gg/x/arcade-main/torii/graphql";
+const ARCADE_TORII_GRAPHQL = import.meta.env.VITE_ARCADE_TORII_BASE
+  ? `${import.meta.env.VITE_ARCADE_TORII_BASE}/graphql`
+  : "https://api.cartridge.gg/x/arcade-main/torii/graphql";
 
 export interface BookConfig {
   id: number;
