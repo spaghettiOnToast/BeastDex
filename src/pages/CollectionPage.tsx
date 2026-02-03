@@ -315,7 +315,7 @@ function CollectionPage() {
 
     try {
       // Load ALL user's beasts efficiently (we only need their collection, not random samples)
-      const limit = 150; // Larger batch since we're only getting user's beasts
+      const limit = 300; // Larger batch for faster loading
       let allUserBeasts: Beast[] = [];
       let currentPage = 1;
       let hasMoreData = true;
@@ -347,11 +347,6 @@ function CollectionPage() {
         // Early break if we have all the data
         if (allUserBeasts.length >= total || batch.length < limit) {
           hasMoreData = false;
-        }
-
-        // Add small delay between requests to prevent overwhelming the server
-        if (hasMoreData) {
-          await new Promise((resolve) => setTimeout(resolve, 50));
         }
       }
     } catch (err: unknown) {
@@ -532,6 +527,54 @@ function CollectionPage() {
     () => calculateCategoryDuplicateCounts(ownedBeasts),
     [ownedBeasts]
   );
+
+  // Build index of beasts by type and category for O(1) duplicate lookups
+  const beastsByTypeAndCategory = useMemo(() => {
+    const index: Record<TabKey, Map<string, Beast[]>> = {
+      all: new Map(),
+      standard: new Map(),
+      shiny: new Map(),
+      animated: new Map(),
+      animatedShiny: new Map(),
+    };
+
+    ownedBeasts.forEach((beast) => {
+      const typeKey = getBeastTypeKey(beast);
+      if (!typeKey) return;
+
+      // Add to "all" category
+      const allList = index.all.get(typeKey) || [];
+      allList.push(beast);
+      index.all.set(typeKey, allList);
+
+      // Determine specific category
+      const animatedAttr = beast.attributes.find(
+        (attr) => attr.trait_type?.toLowerCase() === "animated"
+      )?.value;
+      const shinyAttr = beast.attributes.find(
+        (attr) => attr.trait_type?.toLowerCase() === "shiny"
+      )?.value;
+      const animated = isAnimated(animatedAttr);
+      const shiny = isAnimated(shinyAttr);
+
+      let category: TabKey;
+      if (animated && shiny) {
+        category = "animatedShiny";
+      } else if (animated) {
+        category = "animated";
+      } else if (shiny) {
+        category = "shiny";
+      } else {
+        category = "standard";
+      }
+
+      const categoryList = index[category].get(typeKey) || [];
+      categoryList.push(beast);
+      index[category].set(typeKey, categoryList);
+    });
+
+    return index;
+  }, [ownedBeasts]);
 
   // Use template-based placeholders - much faster!
   const placeholderCache = useMemo(() => {
@@ -822,47 +865,16 @@ function CollectionPage() {
   const [selectedBeast, setSelectedBeast] = useState<Beast | null>(null);
   const [currentDuplicateIndex, setCurrentDuplicateIndex] = useState(0);
 
-  // Get duplicates of the same beast type based on current tab context
+  // Get duplicates of the same beast type based on current tab context - O(1) lookup using index
   const selectedBeastDuplicates = useMemo(() => {
     if (!selectedBeast) return [];
 
     const selectedBeastType = getBeastTypeKey(selectedBeast);
     if (!selectedBeastType) return [];
 
-    return ownedBeasts.filter((beast) => {
-      const beastType = getBeastTypeKey(beast);
-      if (beastType !== selectedBeastType) return false;
-
-      // If we're on the "all" tab, show all duplicates regardless of category
-      if (activeTab === "all") {
-        return true;
-      }
-
-      // For specific tabs, filter by the category
-      const beastShiny = beast.attributes.some(
-        (attr) =>
-          attr.trait_type?.toLowerCase() === "shiny" && attr.value === "1"
-      );
-      const beastAnimated = beast.attributes.some(
-        (attr) =>
-          attr.trait_type?.toLowerCase() === "animated" && attr.value === "1"
-      );
-
-      // Match the current tab's category
-      switch (activeTab) {
-        case "standard":
-          return !beastShiny && !beastAnimated;
-        case "shiny":
-          return beastShiny && !beastAnimated;
-        case "animated":
-          return !beastShiny && beastAnimated;
-        case "animatedShiny":
-          return beastShiny && beastAnimated;
-        default:
-          return true;
-      }
-    });
-  }, [selectedBeast, ownedBeasts, activeTab]);
+    // Use pre-built index for O(1) lookup instead of O(n) filtering
+    return beastsByTypeAndCategory[activeTab].get(selectedBeastType) || [];
+  }, [selectedBeast, activeTab, beastsByTypeAndCategory]);
 
   // Update the selected beast when navigating through duplicates
   const currentDisplayedBeast =

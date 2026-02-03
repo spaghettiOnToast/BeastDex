@@ -33,6 +33,8 @@ class ApiCache {
     this.cacheConfigs.set("beast-combined-ranks", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("beast-health-rank", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("owner-beast-stats", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("owner-collection-stats", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("owner-beast-highlights", { ttl: 5 * 60 * 1000 }); // 5 minutes
   }
 
   private getCacheKey(endpoint: string, params: any): string {

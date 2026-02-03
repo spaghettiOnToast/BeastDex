@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, memo } from "react";
 import CompletionTracker from "./CompletionTracker";
 import StatsCarousel from "./StatsCarousel";
 import { TOTAL_BEAST_SUPPLY } from "../../services/beast";
@@ -27,7 +27,7 @@ type StatsPanelProps = {
   globalError?: string | null;
 };
 
-export function StatsPanel({
+export const StatsPanel = memo(function StatsPanel({
   mintedCount,
   uniqueOwners,
   mintedLoading,
@@ -140,6 +140,6 @@ export function StatsPanel({
       </CardContent>
     </Card>
   );
-}
+});
 
 export default StatsPanel;
