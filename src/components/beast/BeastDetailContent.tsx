@@ -13,6 +13,7 @@ type BeastDetailContentProps = {
   imageSize?: "modal" | "detail";
   summitData?: SummitBeastData | null;
   summitLoading?: boolean;
+  hideFooter?: boolean;
 };
 
 const BOOLEAN_ATTRIBUTES = new Set(["shiny", "animated", "genesis"]);
@@ -99,6 +100,7 @@ export function BeastDetailContent({
   imageSize = "detail",
   summitData,
   summitLoading,
+  hideFooter = false,
 }: BeastDetailContentProps) {
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>("metadata");
   const attributes = Array.isArray(beast.attributes) ? beast.attributes : [];
@@ -259,28 +261,30 @@ export function BeastDetailContent({
         </div>
       </div>
 
-      {/* Footer: Owner + Actions - Always Visible */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-gray-800/50">
-        {/* Owned by */}
-        <div className="rounded-lg border border-gray-800 bg-black/40 px-4 py-2.5 text-sm text-gray-400">
-          {beast.owner ? (
-            <span>
-              Owned by{" "}
-              <Link
-                to={`/collection/${encodeURIComponent(accountIdentifier)}`}
-                className="text-lsGold font-medium hover:underline"
-              >
-                {ownerLabel}
-              </Link>
-            </span>
-          ) : (
-            <span>Not owned</span>
-          )}
-        </div>
+      {/* Footer: Owner + Actions - Only shown when not hidden */}
+      {!hideFooter && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-gray-800/50">
+          {/* Owned by */}
+          <div className="rounded-lg border border-gray-800 bg-black/40 px-4 py-2.5 text-sm text-gray-400">
+            {beast.owner ? (
+              <span>
+                Owned by{" "}
+                <Link
+                  to={`/collection/${encodeURIComponent(accountIdentifier)}`}
+                  className="text-lsGold font-medium hover:underline"
+                >
+                  {ownerLabel}
+                </Link>
+              </span>
+            ) : (
+              <span>Not owned</span>
+            )}
+          </div>
 
-        {/* Action Buttons */}
-        {actionSlot && <div className="flex flex-wrap gap-2">{actionSlot}</div>}
-      </div>
+          {/* Action Buttons */}
+          {actionSlot && <div className="flex flex-wrap gap-2">{actionSlot}</div>}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode, memo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAccount } from "@starknet-react/core";
 import type { Beast } from "../../services/beast";
 import { fetchSummitBeastData, type SummitBeastData } from "../../services/summit";
@@ -96,10 +96,50 @@ export const BeastModal = memo(function BeastModal({
   const isOwner = connectedAddress && normalizedOwner &&
     normaliseStarknetAddress(connectedAddress)?.toLowerCase() === normalizedOwner.toLowerCase();
 
+  // Owner display info
+  const ownerAddressLower = beast.owner ? beast.owner.toLowerCase() : "";
+  const accountIdentifier = ownerUsername
+    ? ownerUsername.trim().toLowerCase()
+    : ownerAddressLower;
+  const ownerLabel = ownerUsername
+    ? ownerUsername
+    : beast.owner
+      ? `${beast.owner.slice(0, 6)}…${beast.owner.slice(-4)}`
+      : "";
+
+  // Default action buttons (when no customActionSlot provided)
+  const defaultActions = (
+    <div className="flex flex-wrap gap-2">
+      <Button
+        variant="default"
+        size="sm"
+        onClick={() => {
+          onClose();
+          navigate(detailPath);
+        }}
+        className="font-semibold tracking-wide"
+      >
+        View Details
+      </Button>
+      {isOwner && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowSendDialog(true)}
+          className="font-semibold tracking-wide cursor-pointer"
+        >
+          <Send className="mr-1.5 h-3.5 w-3.5" />
+          Send
+        </Button>
+      )}
+    </div>
+  );
+
   return (
     <Dialog open={!!beast} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-6xl p-0 gap-0 border-muted/50 bg-background/95 backdrop-blur-sm">
-        <DialogHeader className="px-4 py-5 border-b border-border/50 bg-muted/30">
+        <DialogHeader className="px-4 py-4 border-b border-border/50 bg-muted/30">
+          {/* Row 1: Title + Expiry + Duplicate Navigation */}
           <div className="flex items-center justify-between pr-8">
             <DialogTitle className="text-xl font-bold tracking-tight">{beast.name}</DialogTitle>
             <div className="flex items-center gap-3">
@@ -140,43 +180,36 @@ export const BeastModal = memo(function BeastModal({
               )}
             </div>
           </div>
+          {/* Row 2: Owner + Actions */}
+          <div className="flex items-center justify-between mt-3 pr-8">
+            <div className="text-sm text-muted-foreground">
+              {beast.owner ? (
+                <span>
+                  Owned by{" "}
+                  <Link
+                    to={`/collection/${encodeURIComponent(accountIdentifier)}`}
+                    onClick={onClose}
+                    className="text-lsGold font-medium hover:underline"
+                  >
+                    {ownerLabel}
+                  </Link>
+                </span>
+              ) : (
+                <span>Not owned</span>
+              )}
+            </div>
+            {customActionSlot ?? defaultActions}
+          </div>
         </DialogHeader>
-        <ScrollArea className="max-h-[85vh]">
-          <div className="px-6 py-6 space-y-4">
+        <ScrollArea className="max-h-[80vh]">
+          <div className="px-6 py-4">
             <BeastDetailContent
               beast={beast}
               ownerUsername={ownerUsername}
               summitData={summitData}
               summitLoading={summitLoading}
               imageSize="modal"
-              actionSlot={
-                customActionSlot ?? (
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Button
-                      variant="default"
-                      size="default"
-                      onClick={() => {
-                        onClose();
-                        navigate(detailPath);
-                      }}
-                      className="w-full sm:w-auto font-semibold tracking-wide"
-                    >
-                      View Full Details
-                    </Button>
-                    {isOwner && (
-                      <Button
-                        variant="outline"
-                        size="default"
-                        onClick={() => setShowSendDialog(true)}
-                        className="w-full sm:w-auto font-semibold tracking-wide cursor-pointer"
-                      >
-                        <Send className="mr-2 h-4 w-4" />
-                        Send Beast
-                      </Button>
-                    )}
-                  </div>
-                )
-              }
+              hideFooter
             />
           </div>
         </ScrollArea>

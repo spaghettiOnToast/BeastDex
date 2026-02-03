@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { BeastAttributeFilters } from "../../services/beast";
 
 type FiltersDrawerProps = {
@@ -9,8 +9,40 @@ type FiltersDrawerProps = {
   filtersLoading: boolean;
   filtersError: string | null;
   onFilterChange: (trait: string, value: string) => void;
+  onMultiFilterChange?: (trait: string, values: string[]) => void;
+  onRankRangeChange?: (ranges: string[]) => void;
+  onHealthRangeChange?: (min: number, max: number) => void;
+  onLevelRangeChange?: (min: number, max: number) => void;
   onResetFilters: () => void;
 };
+
+// Health range constants
+const HEALTH_MIN = 1;
+const HEALTH_MAX = 1023;
+
+// Level range constants
+const LEVEL_MIN = 1;
+const LEVEL_MAX = 255;
+
+// Traits that support multi-select (checkboxes)
+const MULTI_SELECT_TRAITS = new Set([
+  "tier",
+  "type",
+  "beast",
+  "prefix",
+  "suffix",
+]);
+
+// Rank range options (max rank is 1243)
+const RANK_RANGES = [
+  { label: "1-10", min: 1, max: 10 },
+  { label: "11-25", min: 11, max: 25 },
+  { label: "26-50", min: 26, max: 50 },
+  { label: "51-100", min: 51, max: 100 },
+  { label: "101-150", min: 101, max: 150 },
+  { label: "151-200", min: 151, max: 200 },
+  { label: "201+", min: 201, max: 1243 },
+];
 
 export function FiltersDrawer({
   open,
@@ -20,8 +52,53 @@ export function FiltersDrawer({
   filtersLoading,
   filtersError,
   onFilterChange,
+  onMultiFilterChange,
+  onRankRangeChange,
+  onHealthRangeChange,
+  onLevelRangeChange,
   onResetFilters,
 }: FiltersDrawerProps) {
+  // Get current rank range selections
+  const selectedRankRanges = useMemo(() => {
+    const rankValues = attributeFilters["Rank"] || attributeFilters["rank"] || [];
+    // Convert individual rank values back to range labels for display
+    const ranges = new Set<string>();
+    for (const value of rankValues) {
+      const num = Number(value);
+      if (!isNaN(num)) {
+        for (const range of RANK_RANGES) {
+          if (num >= range.min && num <= range.max) {
+            ranges.add(range.label);
+            break;
+          }
+        }
+      }
+    }
+    return ranges;
+  }, [attributeFilters]);
+
+  // Health range state
+  const [healthMin, setHealthMin] = useState(HEALTH_MIN);
+  const [healthMax, setHealthMax] = useState(HEALTH_MAX);
+  const healthFilterActive = attributeFilters["Health"]?.length > 0;
+
+  // Level range state
+  const [levelMin, setLevelMin] = useState(LEVEL_MIN);
+  const [levelMax, setLevelMax] = useState(LEVEL_MAX);
+  const levelFilterActive = attributeFilters["Level"]?.length > 0;
+
+  // Reset sliders when filters are reset
+  useEffect(() => {
+    if (!healthFilterActive) {
+      setHealthMin(HEALTH_MIN);
+      setHealthMax(HEALTH_MAX);
+    }
+    if (!levelFilterActive) {
+      setLevelMin(LEVEL_MIN);
+      setLevelMax(LEVEL_MAX);
+    }
+  }, [healthFilterActive, levelFilterActive]);
+
   const hasFiltersApplied = useMemo(
     () => Object.keys(attributeFilters || {}).length > 0,
     [attributeFilters]
@@ -105,6 +182,121 @@ export function FiltersDrawer({
             <p className="text-xs text-gray-400">Loading filters...</p>
           ) : (
             <div className="space-y-3">
+              {/* Tier Filter - Priority position */}
+              {onMultiFilterChange && availableFilters["Tier"] && (
+                <div className="flex flex-col gap-2 text-xs text-gray-300">
+                  <span className="font-semibold text-gray-200">Tier</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(availableFilters["Tier"] || [])
+                      .slice()
+                      .sort((a, b) => Number(a) - Number(b))
+                      .map((value) => {
+                        const currentValues = attributeFilters["Tier"] || [];
+                        const isSelected = currentValues.includes(value);
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => {
+                              const newValues = isSelected
+                                ? currentValues.filter((v) => v !== value)
+                                : [...currentValues, value];
+                              onMultiFilterChange("Tier", newValues);
+                            }}
+                            className={`px-2 py-1 text-xs rounded-md border transition-all ${
+                              isSelected
+                                ? "bg-lsGreen/20 border-lsGreen text-lsGreen"
+                                : "bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-500"
+                            }`}
+                          >
+                            {value}
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+              {/* Type Filter - Priority position */}
+              {onMultiFilterChange && availableFilters["Type"] && (
+                <div className="flex flex-col gap-2 text-xs text-gray-300">
+                  <span className="font-semibold text-gray-200">Type</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(availableFilters["Type"] || [])
+                      .slice()
+                      .sort((a, b) => String(a).localeCompare(String(b)))
+                      .map((value) => {
+                        const currentValues = attributeFilters["Type"] || [];
+                        const isSelected = currentValues.includes(value);
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => {
+                              const newValues = isSelected
+                                ? currentValues.filter((v) => v !== value)
+                                : [...currentValues, value];
+                              onMultiFilterChange("Type", newValues);
+                            }}
+                            className={`px-2 py-1 text-xs rounded-md border transition-all ${
+                              isSelected
+                                ? "bg-lsGreen/20 border-lsGreen text-lsGreen"
+                                : "bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-500"
+                            }`}
+                          >
+                            {value}
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+              {/* Rank Range Filter */}
+              {onRankRangeChange && (
+                <div className="flex flex-col gap-2 text-xs text-gray-300">
+                  <span className="font-semibold text-gray-200">Rank</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {RANK_RANGES.map((range) => {
+                      const isSelected = selectedRankRanges.has(range.label);
+                      return (
+                        <button
+                          key={range.label}
+                          type="button"
+                          onClick={() => {
+                            // Toggle this range
+                            const newRanges = new Set(selectedRankRanges);
+                            if (isSelected) {
+                              newRanges.delete(range.label);
+                            } else {
+                              newRanges.add(range.label);
+                            }
+                            // Convert ranges to individual rank values
+                            const rankValues: string[] = [];
+                            for (const r of RANK_RANGES) {
+                              if (newRanges.has(r.label)) {
+                                const maxVal = Math.min(r.max, 1243);
+                                for (let i = r.min; i <= maxVal; i++) {
+                                  rankValues.push(String(i));
+                                }
+                              }
+                            }
+                            onRankRangeChange(rankValues);
+                          }}
+                          className={`px-2 py-1 text-xs rounded-md border transition-all ${
+                            isSelected
+                              ? "bg-lsGreen/20 border-lsGreen text-lsGreen"
+                              : "bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-500"
+                          }`}
+                        >
+                          {range.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {(Object.entries(availableFilters || {}) as Array<[string, string[]]>)
                 .sort(([a], [b]) => {
                   // Custom sort order for filters
@@ -113,15 +305,15 @@ export function FiltersDrawer({
                     "animated",
                     "genesis",
                     "beast",
-                    "beast id",
                     "prefix",
                     "suffix",
-                    "rank",
                     "tier",
                     "type",
-                    "token id",
+                    "rank",
                     "health",
                     "level",
+                    "beast id",
+                    "token id",
                     "power",
                   ];
 
@@ -163,7 +355,9 @@ export function FiltersDrawer({
                   const REMOVED_TRAITS = new Set([
                     "last death timestamp", "lastdeathtimestamp",
                     "adventurerkilledcount", "adventurer killed count",
-                    "adventurers killed", "lastkilledby", "last killed by"
+                    "adventurers killed", "lastkilledby", "last killed by",
+                    "tier", "type", // Rendered as special sections above
+                    "health", "level" // Rendered as special sliders at bottom
                   ]);
 
                   // Skip removed traits
@@ -181,7 +375,9 @@ export function FiltersDrawer({
                     safeValues.every((value) => value === "0" || value === "1");
                   const isSearchField = SEARCH_FIELD_TRAITS.has(normalisedTrait);
                   const isRangeSlider = RANGE_SLIDER_TRAITS.has(normalisedTrait);
+                  const isMultiSelect = MULTI_SELECT_TRAITS.has(normalisedTrait) && onMultiFilterChange;
                   const currentValue = attributeFilters[trait]?.[0];
+                  const currentValues = attributeFilters[trait] || [];
 
                   return (
                     <div
@@ -259,6 +455,42 @@ export function FiltersDrawer({
                             {currentValue ? `Selected: ${currentValue}` : 'All values'}
                           </div>
                         </div>
+                      ) : isMultiSelect ? (
+                        <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                          {safeValues
+                            .slice()
+                            .sort((a, b) => {
+                              // Sort numerically if both are numbers
+                              const aNum = Number(a);
+                              const bNum = Number(b);
+                              if (!isNaN(aNum) && !isNaN(bNum)) {
+                                return aNum - bNum;
+                              }
+                              return a.localeCompare(b);
+                            })
+                            .map((value) => {
+                              const isSelected = currentValues.includes(value);
+                              return (
+                                <button
+                                  key={value}
+                                  type="button"
+                                  onClick={() => {
+                                    const newValues = isSelected
+                                      ? currentValues.filter((v) => v !== value)
+                                      : [...currentValues, value];
+                                    onMultiFilterChange(trait, newValues);
+                                  }}
+                                  className={`px-2 py-1 text-xs rounded-md border transition-all ${
+                                    isSelected
+                                      ? "bg-lsGreen/20 border-lsGreen text-lsGreen"
+                                      : "bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-500"
+                                  }`}
+                                >
+                                  {value}
+                                </button>
+                              );
+                            })}
+                        </div>
                       ) : (
                         <select
                           value={currentValue ?? ""}
@@ -285,6 +517,128 @@ export function FiltersDrawer({
                 <p className="text-xs text-gray-400">
                   No metadata filters available.
                 </p>
+              )}
+
+              {/* Health Range Slider - at bottom above Level */}
+              {onHealthRangeChange && (
+                <div className="flex flex-col gap-2 text-xs text-gray-300 pt-2 border-t border-gray-800/50">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-gray-200">Health</span>
+                    {healthFilterActive && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHealthMin(HEALTH_MIN);
+                          setHealthMax(HEALTH_MAX);
+                          onHealthRangeChange(HEALTH_MIN, HEALTH_MAX);
+                        }}
+                        className="text-[10px] text-gray-500 hover:text-gray-300"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <label className="text-[10px] text-gray-500 mb-1 block">Min</label>
+                        <input
+                          type="number"
+                          min={HEALTH_MIN}
+                          max={healthMax}
+                          value={healthMin}
+                          onChange={(e) => {
+                            const val = Math.max(HEALTH_MIN, Math.min(Number(e.target.value), healthMax));
+                            setHealthMin(val);
+                          }}
+                          onBlur={() => onHealthRangeChange(healthMin, healthMax)}
+                          className="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-[10px] text-gray-500 mb-1 block">Max</label>
+                        <input
+                          type="number"
+                          min={healthMin}
+                          max={HEALTH_MAX}
+                          value={healthMax}
+                          onChange={(e) => {
+                            const val = Math.min(HEALTH_MAX, Math.max(Number(e.target.value), healthMin));
+                            setHealthMax(val);
+                          }}
+                          onBlur={() => onHealthRangeChange(healthMin, healthMax)}
+                          className="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs"
+                        />
+                      </div>
+                    </div>
+                    <div className="text-center text-[10px] text-gray-500">
+                      {healthMin === HEALTH_MIN && healthMax === HEALTH_MAX
+                        ? "All health values"
+                        : `${healthMin} - ${healthMax}`}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Level Range Slider - below Health */}
+              {onLevelRangeChange && (
+                <div className="flex flex-col gap-2 text-xs text-gray-300">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-gray-200">Level</span>
+                    {levelFilterActive && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLevelMin(LEVEL_MIN);
+                          setLevelMax(LEVEL_MAX);
+                          onLevelRangeChange(LEVEL_MIN, LEVEL_MAX);
+                        }}
+                        className="text-[10px] text-gray-500 hover:text-gray-300"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <label className="text-[10px] text-gray-500 mb-1 block">Min</label>
+                        <input
+                          type="number"
+                          min={LEVEL_MIN}
+                          max={levelMax}
+                          value={levelMin}
+                          onChange={(e) => {
+                            const val = Math.max(LEVEL_MIN, Math.min(Number(e.target.value), levelMax));
+                            setLevelMin(val);
+                          }}
+                          onBlur={() => onLevelRangeChange(levelMin, levelMax)}
+                          className="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-[10px] text-gray-500 mb-1 block">Max</label>
+                        <input
+                          type="number"
+                          min={levelMin}
+                          max={LEVEL_MAX}
+                          value={levelMax}
+                          onChange={(e) => {
+                            const val = Math.min(LEVEL_MAX, Math.max(Number(e.target.value), levelMin));
+                            setLevelMax(val);
+                          }}
+                          onBlur={() => onLevelRangeChange(levelMin, levelMax)}
+                          className="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs"
+                        />
+                      </div>
+                    </div>
+                    <div className="text-center text-[10px] text-gray-500">
+                      {levelMin === LEVEL_MIN && levelMax === LEVEL_MAX
+                        ? "All levels"
+                        : `${levelMin} - ${levelMax}`}
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           )}

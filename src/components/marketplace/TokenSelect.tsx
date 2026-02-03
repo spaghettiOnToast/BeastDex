@@ -15,8 +15,8 @@ import { WHITELISTED_PAYMENT_TOKENS } from "../../services/marketplace/constants
 
 // Priority order for tokens (lowercase symbols)
 const TOKEN_PRIORITY_ORDER = [
-  "lords",
   "survivor",
+  "lords",
   "strk",
   "eth",
   "ekubo",

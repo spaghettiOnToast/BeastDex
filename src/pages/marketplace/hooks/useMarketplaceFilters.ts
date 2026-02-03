@@ -347,7 +347,7 @@ export function useMarketplaceFilters({
   );
 
   /**
-   * Handle filter change
+   * Handle filter change (single value)
    */
   const handleFilterChange = useCallback((trait: string, value: string) => {
     setAttributeFilters((prev) => {
@@ -356,6 +356,78 @@ export function useMarketplaceFilters({
         next[trait] = [value];
       } else {
         delete next[trait];
+      }
+      return next;
+    });
+  }, []);
+
+  /**
+   * Handle multi-select filter change (multiple values)
+   */
+  const handleMultiFilterChange = useCallback((trait: string, values: string[]) => {
+    setAttributeFilters((prev) => {
+      const next = { ...prev } as BeastAttributeFilters;
+      if (values && values.length > 0) {
+        next[trait] = values;
+      } else {
+        delete next[trait];
+      }
+      return next;
+    });
+  }, []);
+
+  /**
+   * Handle rank range filter change
+   */
+  const handleRankRangeChange = useCallback((rankValues: string[]) => {
+    setAttributeFilters((prev) => {
+      const next = { ...prev } as BeastAttributeFilters;
+      if (rankValues && rankValues.length > 0) {
+        next["Rank"] = rankValues;
+      } else {
+        delete next["Rank"];
+      }
+      return next;
+    });
+  }, []);
+
+  /**
+   * Handle health range filter change
+   */
+  const handleHealthRangeChange = useCallback((min: number, max: number) => {
+    setAttributeFilters((prev) => {
+      const next = { ...prev } as BeastAttributeFilters;
+      // If full range, remove the filter
+      if (min <= 1 && max >= 1023) {
+        delete next["Health"];
+      } else {
+        // Generate array of health values in the range
+        const healthValues: string[] = [];
+        for (let i = min; i <= max; i++) {
+          healthValues.push(String(i));
+        }
+        next["Health"] = healthValues;
+      }
+      return next;
+    });
+  }, []);
+
+  /**
+   * Handle level range filter change
+   */
+  const handleLevelRangeChange = useCallback((min: number, max: number) => {
+    setAttributeFilters((prev) => {
+      const next = { ...prev } as BeastAttributeFilters;
+      // If full range, remove the filter
+      if (min <= 1 && max >= 255) {
+        delete next["Level"];
+      } else {
+        // Generate array of level values in the range
+        const levelValues: string[] = [];
+        for (let i = min; i <= max; i++) {
+          levelValues.push(String(i));
+        }
+        next["Level"] = levelValues;
       }
       return next;
     });
@@ -425,6 +497,10 @@ export function useMarketplaceFilters({
 
     // Handlers
     handleFilterChange,
+    handleMultiFilterChange,
+    handleRankRangeChange,
+    handleHealthRangeChange,
+    handleLevelRangeChange,
     handleResetFilters,
     hideListingById,
     unhideListingById,

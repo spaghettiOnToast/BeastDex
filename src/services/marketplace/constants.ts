@@ -46,10 +46,14 @@ function getEkuboTokensFromCache(): PaymentToken[] {
   }
 }
 
-// Default token address - LORDS on mainnet
-const DEFAULT_LORDS_ADDRESS =
+// Default token addresses on mainnet
+export const DEFAULT_LORDS_ADDRESS =
   (import.meta.env.VITE_TOKEN_LORDS as string) ||
   "0x0124aeb495b947201f5fac96fd1138e326ad86195b98df6dec9009158a533b49";
+
+export const DEFAULT_SURVIVOR_ADDRESS =
+  (import.meta.env.VITE_TOKEN_SURVIVOR as string) ||
+  "0x042dd777885ad2c116be96d4d634abc90a26a790ffb5871e037dd5ae7d2ec86b";
 
 export function getPaymentTokenByAddress(address?: string | null): PaymentToken | null {
   if (!address) return null;
@@ -67,8 +71,8 @@ export function getPaymentTokenByAddress(address?: string | null): PaymentToken 
 
 // Default payment token for dialog initial state
 export const DEFAULT_PAYMENT_TOKEN: PaymentToken = {
-  symbol: "LORDS",
-  address: DEFAULT_LORDS_ADDRESS,
+  symbol: "SURVIVOR",
+  address: DEFAULT_SURVIVOR_ADDRESS,
 };
 
 // Listing expiration handling

@@ -2990,6 +2990,10 @@ export default function MarketplacePage() {
           filtersLoading={dataHook.filtersLoading}
           filtersError={dataHook.filtersError}
           onFilterChange={filtersHook.handleFilterChange}
+          onMultiFilterChange={filtersHook.handleMultiFilterChange}
+          onRankRangeChange={filtersHook.handleRankRangeChange}
+          onHealthRangeChange={filtersHook.handleHealthRangeChange}
+          onLevelRangeChange={filtersHook.handleLevelRangeChange}
           onResetFilters={filtersHook.handleResetFilters}
         />
 

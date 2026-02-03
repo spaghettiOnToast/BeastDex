@@ -32,7 +32,6 @@ export const HIDDEN_FILTER_TRAITS = new Set([
   "last death timestamp",
   "health",
   "power",
-  "rank",
 ]);
 
 /**
