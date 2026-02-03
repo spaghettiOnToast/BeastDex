@@ -15,8 +15,7 @@
 const pendingRequests = new Map<string, Promise<unknown>>();
 
 // Semaphore for limiting concurrent requests
-// Reduced from 4 to 2 to avoid overwhelming the indexer
-const MAX_CONCURRENT_REQUESTS = 2;
+const MAX_CONCURRENT_REQUESTS = 3;
 let activeRequests = 0;
 const requestQueue: Array<() => void> = [];
 

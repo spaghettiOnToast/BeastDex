@@ -8,15 +8,16 @@ import { useBeastFilters } from "../../../hooks/useBeastFilters";
  *
  * This hook composes several focused hooks:
  * - useMarketplaceListings: Handles order fetching and hydration
- * - useUserBeasts: Handles user's owned beasts
+ * - useUserBeasts: Handles user's owned beasts (deferred loading)
  * - useBeastFilters: Handles available filter options
  */
 export function useMarketplaceData(address: string | undefined) {
   // Marketplace listings (orders + hydration)
   const listingsHook = useMarketplaceListings();
 
-  // User's owned beasts
-  const userBeastsHook = useUserBeasts(address);
+  // User's owned beasts - defer loading until "My Listings" tab is opened
+  // This reduces initial load by avoiding pagination queries upfront
+  const userBeastsHook = useUserBeasts(address, { autoLoad: false });
 
   // Beast attribute filters
   const filtersHook = useBeastFilters();
@@ -51,11 +52,9 @@ export function useMarketplaceData(address: string | undefined) {
   return {
     // Listings
     listings: listingsHook.listings,
-    hydratingListings: listingsHook.hydratingListings,
     listingsError: listingsHook.listingsError,
 
     // Orders
-    listedOrders: listingsHook.listedOrders,
     ordersLoading: listingsHook.ordersLoading,
     ordersFetching: listingsHook.ordersFetching,
     refetchOrders: listingsHook.refetchOrders,
@@ -68,6 +67,7 @@ export function useMarketplaceData(address: string | undefined) {
     // User beasts
     userBeasts: userBeastsHook.beasts,
     userBeastsLoading: userBeastsHook.loading,
+    userBeastsHasLoaded: userBeastsHook.hasLoaded,
     userBeastsError: userBeastsHook.error,
     reloadUserBeasts: userBeastsHook.reload,
 

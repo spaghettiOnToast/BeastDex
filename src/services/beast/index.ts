@@ -179,7 +179,7 @@ export async function fetchBeastsByIds(
     tokenHexes,
   });
   const rows = await runBeastSql<BeastRow[]>(query, "fetchBeastsByIds", {
-    timeoutMs: 20_000,
+    timeoutMs: 60_000, // Increased timeout for large batches
   });
   return rows.map(mapBeastRow);
 }

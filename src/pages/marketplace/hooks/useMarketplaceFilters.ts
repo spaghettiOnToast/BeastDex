@@ -14,8 +14,8 @@ export interface UseMarketplaceFiltersProps {
   address: string | undefined;
   availableFilters: BeastAttributeFilters;
   userBeastsLoading?: boolean;
-  /** When true, hydration is still in progress - show skeletons. When false, hide unmatched listings. */
-  hydratingListings?: boolean;
+  /** Whether user beasts have been loaded at least once */
+  userBeastsHasLoaded?: boolean;
 }
 
 /**
@@ -28,7 +28,7 @@ export function useMarketplaceFilters({
   address,
   availableFilters,
   userBeastsLoading = false,
-  hydratingListings = false,
+  userBeastsHasLoaded = false,
 }: UseMarketplaceFiltersProps) {
   // Filter and sort state
   const [attributeFilters, setAttributeFilters] = useState<BeastAttributeFilters>({});
@@ -94,7 +94,7 @@ export function useMarketplaceFilters({
 
     if (import.meta.env.DEV) {
       const withoutBeast = listings.filter(l => !l.beast).length;
-      console.log(`[Filter] Running filter: hydratingListings=${hydratingListings}, listings=${listings.length}, withoutBeast=${withoutBeast}`);
+      console.log(`[Filter] Running filter: listings=${listings.length}, withoutBeast=${withoutBeast}`);
     }
 
     for (const listing of listings) {
@@ -107,11 +107,11 @@ export function useMarketplaceFilters({
       // Only apply attribute filters if beast data is loaded
       if (listing.beast && !matchesAttributeFilters(listing as Listing & { beast: Beast }, attributeFilters)) continue;
 
-      // Hide listings without beast data once hydration is complete
+      // Hide listings without beast data
       // (they couldn't be matched to beast metadata, so we can't verify ownership)
-      if (!hydratingListings && !listing.beast) {
+      if (!listing.beast) {
         if (import.meta.env.DEV) {
-          console.log(`[Filter] Hiding listing ${listing.listingId} - no beast data after hydration`);
+          console.log(`[Filter] Hiding listing ${listing.listingId} - no beast data`);
         }
         continue;
       }
@@ -141,7 +141,7 @@ export function useMarketplaceFilters({
     }
 
     return Array.from(listingsByTokenId.values());
-  }, [listings, attributeFilters, hiddenListingIds, hideExpired, hydratingListings]);
+  }, [listings, attributeFilters, hiddenListingIds, hideExpired]);
 
   /**
    * Sort filtered listings
@@ -306,19 +306,21 @@ export function useMarketplaceFilters({
     const ownedTokenIds = new Set(normalizedBeastTokenIds.values());
 
     // Filter to listings where the seller is the current user
-    // Only apply ownership check if userBeasts has finished loading
-    // (prevents flicker where listings disappear then reappear)
+    // Only apply ownership check if userBeasts has finished loading at least once
+    // (prevents flicker where listings disappear then reappear, and prevents
+    // showing 0 listings before beasts are loaded when autoLoad is false)
     return base.filter((listing) => {
       if (listing.seller.toLowerCase() !== lower) return false;
 
-      // Skip ownership check while beasts are loading to prevent flicker
-      if (userBeastsLoading) return true;
+      // Skip ownership check if beasts haven't been loaded yet or are currently loading
+      // This ensures listings show correctly before the first beasts load completes
+      if (!userBeastsHasLoaded || userBeastsLoading) return true;
 
       // Check if user still owns this NFT
       const normalizedTokenId = String(listing.tokenId).trim();
       return ownedTokenIds.has(normalizedTokenId);
     });
-  }, [sortedListings, listings, address, showAllMyListings, normalizedBeastTokenIds, userBeastsLoading]);
+  }, [sortedListings, listings, address, showAllMyListings, normalizedBeastTokenIds, userBeastsLoading, userBeastsHasLoaded]);
 
   /**
    * Track which token IDs are already actively listed
