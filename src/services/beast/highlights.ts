@@ -56,117 +56,123 @@ export async function fetchBeastHighlights(forceRefresh = false): Promise<BeastH
     return highlightsCache.data;
   }
 
-  const countsQuery = `
-    ${baseCte}
+  // Single combined query - computes counts and leaderboards in one pass
+  // This avoids running the expensive baseCte twice
+  const combinedQuery = `
+    ${baseCte},
+    counts AS (
+      SELECT
+        SUM(CASE WHEN is_shiny = 1 AND is_animated = 1 THEN 1 ELSE 0 END) AS animated_shiny_count,
+        SUM(CASE WHEN is_shiny = 1 AND is_animated = 0 THEN 1 ELSE 0 END) AS shiny_count,
+        SUM(CASE WHEN is_shiny = 0 AND is_animated = 1 THEN 1 ELSE 0 END) AS animated_count,
+        SUM(CASE WHEN is_shiny = 0 AND is_animated = 0 THEN 1 ELSE 0 END) AS standard_count
+      FROM normalized
+    ),
+    overall_leader AS (
+      SELECT owner, COUNT(*) AS value FROM normalized GROUP BY owner ORDER BY value DESC LIMIT 1
+    ),
+    animated_shiny_leader AS (
+      SELECT owner, COUNT(*) AS value FROM normalized WHERE is_shiny = 1 AND is_animated = 1 GROUP BY owner ORDER BY value DESC LIMIT 1
+    ),
+    shiny_leader AS (
+      SELECT owner, COUNT(*) AS value FROM normalized WHERE is_shiny = 1 GROUP BY owner ORDER BY value DESC LIMIT 1
+    ),
+    animated_leader AS (
+      SELECT owner, COUNT(*) AS value FROM normalized WHERE is_animated = 1 GROUP BY owner ORDER BY value DESC LIMIT 1
+    )
     SELECT
-      (SELECT COUNT(*) FROM normalized WHERE is_shiny = 1 AND is_animated = 1) AS animated_shiny_count,
-      (SELECT COUNT(*) FROM normalized WHERE is_shiny = 1 AND is_animated = 0) AS shiny_count,
-      (SELECT COUNT(*) FROM normalized WHERE is_shiny = 0 AND is_animated = 1) AS animated_count,
-      (SELECT COUNT(*) FROM normalized WHERE is_shiny = 0 AND is_animated = 0) AS standard_count;
+      c.animated_shiny_count,
+      c.shiny_count,
+      c.animated_count,
+      c.standard_count,
+      ol.owner AS overall_owner,
+      ol.value AS overall_value,
+      asl.owner AS animated_shiny_owner,
+      asl.value AS animated_shiny_value,
+      sl.owner AS shiny_owner,
+      sl.value AS shiny_value,
+      al.owner AS animated_owner,
+      al.value AS animated_value
+    FROM counts c
+    LEFT JOIN overall_leader ol ON 1=1
+    LEFT JOIN animated_shiny_leader asl ON 1=1
+    LEFT JOIN shiny_leader sl ON 1=1
+    LEFT JOIN animated_leader al ON 1=1;
   `;
 
-  const leaderboardQuery = `
-    ${baseCte}
-    SELECT 'overall' AS category, owner, value FROM (
-      SELECT owner, COUNT(*) AS value
-      FROM normalized
-      GROUP BY owner
-      ORDER BY value DESC
-      LIMIT 1
-    )
-    UNION ALL
-    SELECT 'animated_shiny' AS category, owner, value FROM (
-      SELECT owner, COUNT(*) AS value
-      FROM normalized
-      WHERE is_shiny = 1 AND is_animated = 1
-      GROUP BY owner
-      ORDER BY value DESC
-      LIMIT 1
-    )
-    UNION ALL
-    SELECT 'shiny' AS category, owner, value FROM (
-      SELECT owner, COUNT(*) AS value
-      FROM normalized
-      WHERE is_shiny = 1
-      GROUP BY owner
-      ORDER BY value DESC
-      LIMIT 1
-    )
-    UNION ALL
-    SELECT 'animated' AS category, owner, value FROM (
-      SELECT owner, COUNT(*) AS value
-      FROM normalized
-      WHERE is_animated = 1
-      GROUP BY owner
-      ORDER BY value DESC
-      LIMIT 1
-    );
-  `;
-
-  const countsRows = await runBeastSql<Array<{ animated_shiny_count: number; shiny_count: number; animated_count: number; standard_count: number }>>(
-    countsQuery,
-    "fetchBeastHighlights-counts"
-  );
-
-  const leaderboardRows = await runBeastSql<Array<{ category: string; owner: string | null; value: number }>>(
-    leaderboardQuery,
-    "fetchBeastHighlights-leaderboards"
-  );
-
-  const counts = countsRows?.[0] ?? {
-    animated_shiny_count: 0,
-    shiny_count: 0,
-    animated_count: 0,
-    standard_count: 0,
+  type CombinedRow = {
+    animated_shiny_count: number;
+    shiny_count: number;
+    animated_count: number;
+    standard_count: number;
+    overall_owner: string | null;
+    overall_value: number | null;
+    animated_shiny_owner: string | null;
+    animated_shiny_value: number | null;
+    shiny_owner: string | null;
+    shiny_value: number | null;
+    animated_owner: string | null;
+    animated_value: number | null;
   };
 
-  // Parse leaders from leaderboard rows
-  const leaderMap = (leaderboardRows ?? []).reduce<Record<string, { owner: string | null; value: number }>>((acc, row) => {
-    if (row.category && !acc[row.category]) {
-      acc[row.category] = { owner: row.owner ?? null, value: row.value ?? 0 };
-    }
-    return acc;
-  }, {});
+  const rows = await runBeastSql<CombinedRow[]>(combinedQuery, "fetchBeastHighlights-combined");
+  const row = rows?.[0];
 
-  // Lookup usernames for leaders
+  if (!row) {
+    const emptyData: BeastHighlights = {
+      animatedShinyCount: 0,
+      shinyCount: 0,
+      animatedCount: 0,
+      standardCount: 0,
+      leaders: {
+        overall: { owner: null, username: null, value: 0 },
+        animatedShiny: { owner: null, username: null, value: 0 },
+        shiny: { owner: null, username: null, value: 0 },
+        animated: { owner: null, username: null, value: 0 },
+      },
+    };
+    highlightsCache = { data: emptyData, expiresAt: now + BEAST_STATS_CACHE_TTL_MS };
+    return emptyData;
+  }
+
+  // Collect unique addresses for username lookup
   const uniqueAddresses = Array.from(
     new Set(
-      (leaderboardRows ?? [])
-        .map((row) => row.owner)
+      [row.overall_owner, row.animated_shiny_owner, row.shiny_owner, row.animated_owner]
         .filter((owner): owner is string => typeof owner === "string" && owner.length > 0)
     )
   );
 
+  // Lookup usernames (this is typically fast with caching)
   const usernamesLookup = uniqueAddresses.length
     ? await lookupControllerUsernames(uniqueAddresses)
     : {};
 
-  function enrich(category: string) {
-    const entry = leaderMap[category];
-    if (!entry || !entry.owner) {
+  function enrichLeader(owner: string | null, value: number | null) {
+    if (!owner) {
       return { owner: null, username: null, value: 0 };
     }
-    const address = entry.owner.toLowerCase();
+    const address = owner.toLowerCase();
     const normalizedAddress = normaliseStarknetAddress(address);
     const username = normalizedAddress ? usernamesLookup[normalizedAddress] ?? null : null;
 
     return {
       owner: address,
       username,
-      value: entry.value ?? 0,
+      value: value ?? 0,
     };
   }
 
   const data: BeastHighlights = {
-    animatedShinyCount: counts.animated_shiny_count ?? 0,
-    shinyCount: counts.shiny_count ?? 0,
-    animatedCount: counts.animated_count ?? 0,
-    standardCount: counts.standard_count ?? 0,
+    animatedShinyCount: row.animated_shiny_count ?? 0,
+    shinyCount: row.shiny_count ?? 0,
+    animatedCount: row.animated_count ?? 0,
+    standardCount: row.standard_count ?? 0,
     leaders: {
-      overall: enrich("overall"),
-      animatedShiny: enrich("animated_shiny"),
-      shiny: enrich("shiny"),
-      animated: enrich("animated"),
+      overall: enrichLeader(row.overall_owner, row.overall_value),
+      animatedShiny: enrichLeader(row.animated_shiny_owner, row.animated_shiny_value),
+      shiny: enrichLeader(row.shiny_owner, row.shiny_value),
+      animated: enrichLeader(row.animated_owner, row.animated_value),
     },
   };
 

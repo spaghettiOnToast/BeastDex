@@ -23,7 +23,7 @@ export default function CompletionTracker({
 
   return (
     <div
-      className={`${isLeftAligned ? "text-left" : "text-center"} mb-2 sm:mb-6 ${className}`.trim()}
+      className={`${isLeftAligned ? "text-left" : "text-center"} mb-4 sm:mb-8 ${className}`.trim()}
     >
       <p className="text-sm sm:text-lg font-medium font-gothic tracking-wide">
         <span className="font-bold text-neon">{safeOwned.toLocaleString()}</span> /
