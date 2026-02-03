@@ -11,6 +11,7 @@ import ErrorBoundary from "./components/common/ErrorBoundary";
 import { GlobalSearchProvider } from "./hooks/useGlobalSearch";
 import { GlobalCartProvider } from "./contexts/GlobalCartContext";
 import { TermsOfServiceProvider } from "./contexts/TermsOfServiceContext";
+import { SoldListingsProvider } from "./contexts/SoldListingsContext";
 import { FloatingCarts } from "./components/marketplace/FloatingCarts";
 import { GlobalCartDialogs } from "./components/marketplace/GlobalCartDialogs";
 import { TermsOfServiceDialog } from "./components/legal/TermsOfServiceDialog";
@@ -49,6 +50,7 @@ function App() {
     >
       <GlobalSearchProvider>
         <GlobalCartProvider>
+          <SoldListingsProvider>
           <TermsOfServiceProvider>
           <ErrorBoundary>
             <Toaster
@@ -97,6 +99,7 @@ function App() {
             <TermsOfServiceDialog />
           </ErrorBoundary>
           </TermsOfServiceProvider>
+          </SoldListingsProvider>
         </GlobalCartProvider>
       </GlobalSearchProvider>
     </StarknetConfig>

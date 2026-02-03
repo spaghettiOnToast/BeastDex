@@ -1,21 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import type { Listing, ListingStatus } from "../../../services/marketplace/types";
-import { hydrateOrdersProgressive } from "../../../services/marketplace";
-import { BEASTS_COLLECTION_ADDRESS } from "../../../services/marketplace/constants";
-import { useArcadeListedTokensForCollection, type ArcadeOrderWithTime } from "../../../hooks/useArcadeOrders";
-
-/** Check if an order is expired and return the appropriate status */
-function getSkeletonStatus(order: ArcadeOrderWithTime): ListingStatus {
-  const now = Math.floor(Date.now() / 1000);
-  const isExpired = order.expiration && order.expiration <= now;
-  return isExpired ? "expired" : "active";
-}
+import { useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Listing } from "../../../services/marketplace/types";
+import { fetchListingsWithMetadataSingleQuery } from "../../../services/beast/marketplaceQuery";
+import { useSoldListings } from "../../../contexts/SoldListingsContext";
 
 export interface UseMarketplaceListingsResult {
   listings: Listing[];
-  hydratingListings: boolean;
   listingsError: string | null;
-  listedOrders: ArcadeOrderWithTime[];
   ordersLoading: boolean;
   ordersFetching: boolean;
   ordersError: unknown;
@@ -25,173 +16,70 @@ export interface UseMarketplaceListingsResult {
 }
 
 /**
- * Hook for fetching and hydrating marketplace listings
- * Fetches orders from Arcade and enriches them with beast metadata
+ * Hook for fetching marketplace listings with beast metadata
+ *
+ * OPTIMIZED: Uses a SINGLE SQL query to pg-beasts that joins
+ * ARCADE-Order with tokens metadata. This replaces:
+ * 1. Arcade GraphQL for orders
+ * 2. Multiple batched hydration queries to pg-beasts
+ *
+ * One query to rule them all!
  */
 export function useMarketplaceListings(): UseMarketplaceListingsResult {
-  const [listings, setListings] = useState<Listing[]>([]);
-  const [hydratingListings, setHydratingListings] = useState(false);
-  const [listingsError, setListingsError] = useState<string | null>(null);
-  // Track listings that have been sold (optimistic update)
-  const [soldListingIds, setSoldListingIds] = useState<Set<string>>(new Set());
+  const queryClient = useQueryClient();
+  const { markAsSold, clearStaleIds, isSold } = useSoldListings();
 
-  const prevOrdersRef = useRef<string>("");
-
-  // Fetch orders from Arcade (now includes listedAt time)
+  // Single query fetches orders + metadata from pg-beasts
   const {
-    data: listedOrders = [],
-    isLoading: ordersLoading,
-    isFetching: ordersFetching,
-    refetch: refetchOrders,
-    error: ordersError,
-  } = useArcadeListedTokensForCollection(
-    BEASTS_COLLECTION_ADDRESS
-  ) as unknown as {
-    data: ArcadeOrderWithTime[];
-    isLoading: boolean;
-    isFetching: boolean;
-    refetch: () => Promise<any>;
-    error: unknown;
-  };
-
-  // Hydrate listings with beast data (progressive - first page loads fast)
-  useEffect(() => {
-    let cancelled = false;
-
-    const hydrate = async () => {
-      // Don't hydrate if we're currently loading
-      if (ordersLoading || ordersFetching) return;
-
-      // Check if orders have actually changed by comparing IDs (sorted to ignore order changes)
-      const orderIds = listedOrders.map((o) => o.identifier).sort().join(",");
-
-      if (prevOrdersRef.current === orderIds) {
-        return; // Data hasn't changed, skip hydration
-      }
-
-      prevOrdersRef.current = orderIds;
-      setHydratingListings(true);
-      setListingsError(null);
-
-      // Merge new listings with existing hydrated data to prevent flicker
-      // while still allowing new listings to appear
-      setListings((currentListings) => {
-        // Build a map of existing hydrated listings by listingId
-        const existingMap = new Map<string, Listing>();
-        for (const listing of currentListings) {
-          if (listing.beast !== null) {
-            existingMap.set(listing.listingId, listing);
-          }
-        }
-
-        // Create new listings array, preserving hydrated data where available
-        return listedOrders.map((order: ArcadeOrderWithTime) => {
-          const existing = existingMap.get(order.identifier);
-          if (existing) {
-            // Keep existing hydrated listing
-            return existing;
-          }
-          // Create skeleton for new listing (check expiration for proper status)
-          const status = getSkeletonStatus(order);
-          return {
-            listingId: order.identifier,
-            tokenId: order.tokenId.toString(),
-            seller: order.owner,
-            price: order.price.toString(),
-            paymentToken: order.currency,
-            active: status === "active",
-            status,
-            quantity: order.quantity,
-            expiration: order.expiration,
-            createdAt: order.listedAt,
-            beast: null,
-            orderId: order.id,
-          };
-        });
-      });
-
-      // Priority token IDs - first 50 items (covers first page on both mobile and desktop)
-      const priorityTokenIds = listedOrders.slice(0, 50).map((o) => o.tokenId.toString());
-
-      try {
-        // Progressive hydration - updates UI incrementally
-        await hydrateOrdersProgressive(
-          listedOrders,
-          priorityTokenIds,
-          (progressListings) => {
-            if (cancelled) return;
-            setListings(progressListings);
-          }
-        );
-
-        if (cancelled) return;
-
-        setListingsError(null);
-        setHydratingListings(false);
-
-        if (import.meta.env.DEV) {
-          console.log("[Hydration] Complete - hydratingListings set to false");
-        }
-
-        // Clear optimistic sold IDs when we get fresh data from indexer
-        setSoldListingIds((prev) => {
-          const currentIds = new Set(listedOrders.map((l) => l.identifier));
-          const stillPending = new Set<string>();
-          prev.forEach((id) => {
-            if (currentIds.has(id)) {
-              stillPending.add(id);
-            }
-          });
-          return stillPending;
-        });
-      } catch (error) {
-        if (!cancelled) {
-          setListings([]);
-          const errorMsg =
-            error instanceof Error ? error.message : "Failed to load listings";
-
-          if (
-            errorMsg.includes("502") ||
-            errorMsg.includes("can't reach deployment")
-          ) {
-            setListingsError(
-              "Indexer service is temporarily unavailable. Listings data cannot be displayed right now. Please try again in a few minutes."
-            );
-          } else {
-            setListingsError(
-              "Failed to load marketplace listings. Please try again."
-            );
-          }
-          setHydratingListings(false);
-        }
-      }
-    };
-
-    hydrate();
-    return () => {
-      cancelled = true;
-    };
-  }, [listedOrders, ordersLoading, ordersFetching]);
-
-  // Optimistically mark a listing as sold
-  const markListingAsSold = useCallback((listingId: string) => {
-    setSoldListingIds((prev) => new Set([...prev, listingId]));
-  }, []);
+    data: listings = [],
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["marketplaceListingsSingleQuery"],
+    queryFn: async () => {
+      const result = await fetchListingsWithMetadataSingleQuery();
+      // Clear stale sold IDs when we get fresh data
+      clearStaleIds(result.map((l) => l.listingId));
+      return result;
+    },
+    staleTime: 60_000, // Consider data fresh for 1 minute
+    gcTime: 5 * 60_000, // Keep in cache for 5 minutes
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    retry: 2,
+  });
 
   // Filter out optimistically sold listings
   const filteredListings = listings.filter(
-    (listing) => !soldListingIds.has(listing.listingId)
+    (listing) => !isSold(listing.listingId)
   );
+
+  // Manual refetch function
+  const refetchOrders = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ["marketplaceListingsSingleQuery"] });
+    return refetch();
+  }, [queryClient, refetch]);
+
+  // Build error message
+  let listingsError: string | null = null;
+  if (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    if (errorMsg.includes("502") || errorMsg.includes("can't reach deployment") || errorMsg.includes("timed out")) {
+      listingsError = "Indexer service is temporarily unavailable. Please try again in a few minutes.";
+    } else {
+      listingsError = "Failed to load marketplace listings. Please try again.";
+    }
+  }
 
   return {
     listings: filteredListings,
-    hydratingListings,
     listingsError,
-    listedOrders,
-    ordersLoading,
-    ordersFetching,
-    ordersError,
+    ordersLoading: isLoading,
+    ordersFetching: isFetching,
+    ordersError: error,
     refetchOrders,
-    markListingAsSold,
+    markListingAsSold: markAsSold,
   };
 }

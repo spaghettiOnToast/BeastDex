@@ -12,7 +12,17 @@ if (import.meta.env.DEV) {
   (window as any).apiCache = apiCache;
 }
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Default cache settings for better performance
+      staleTime: 60_000, // Consider data fresh for 1 minute
+      gcTime: 5 * 60_000, // Keep unused data in cache for 5 minutes
+      refetchOnWindowFocus: false, // Don't refetch on tab switch (reduces API calls)
+      retry: 2, // Retry failed requests twice
+    },
+  },
+});
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

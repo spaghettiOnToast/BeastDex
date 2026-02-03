@@ -25,7 +25,7 @@ import {
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { getUserFriendlyErrorMessage } from "../utils/error";
 import { config } from "../config";
-import { useMarketplaceListings } from "./marketplace/hooks/useMarketplaceListings";
+import { useListedTokens } from "../hooks/useListedTokens";
 import { useGlobalCart } from "../contexts/GlobalCartContext";
 import { formatPrice } from "../utils/price";
 import { getPaymentTokenByAddress, BEASTS_COLLECTION_ADDRESS, CLIENT_FEE_BP, CLIENT_FEE_RECEIVER, ROYALTIES_ENABLED } from "../services/marketplace/constants";
@@ -37,6 +37,7 @@ import type { Listing } from "../services/marketplace/types";
 import { executePurchaseWithApproval } from "../services/marketplace/approvals";
 import { toast } from "sonner";
 import { isUserRejection } from "../utils/transaction";
+import { useSoldListings } from "../contexts/SoldListingsContext";
 
 const HIDDEN_FILTER_TRAITS = new Set<string>([
   "adventurerkilledcount",
@@ -73,8 +74,10 @@ function HomePage() {
   // Marketplace state
   const { address, account } = useAccount();
   const globalCart = useGlobalCart();
-  const { listings } = useMarketplaceListings();
+  // Use lightweight listing check (no beast hydration - doesn't compete with homepage queries)
+  const { getListingForToken } = useListedTokens();
   const { getToken } = useTokenMap();
+  const { markAsSold, notifyOfferMade, notifyPurchase } = useSoldListings();
   const [makeOfferOpen, setMakeOfferOpen] = useState(false);
   const [purchaseConfirmOpen, setPurchaseConfirmOpen] = useState(false);
   const [purchasingListing, setPurchasingListing] = useState<Listing | null>(null);
@@ -280,16 +283,14 @@ function HomePage() {
     return items;
   }, [highlights, formatOwner]);
 
-  // Find listing for selected beast (if any)
+  // Find listing for selected beast (if any) - uses lightweight lookup (no beast hydration)
   const selectedBeastListing = useMemo(() => {
     if (!selectedBeast) return null;
     // Get the token ID from the beast
     const beastTokenId = selectedBeast.numericId?.toString() || selectedBeast.id.split(":").pop() || "";
-    // Find active listing for this beast
-    return listings.find(
-      (l) => l.status === "active" && l.active && String(l.tokenId) === beastTokenId
-    ) || null;
-  }, [selectedBeast, listings]);
+    // Look up listing for this beast (O(1) lookup from cached Arcade data)
+    return getListingForToken(beastTokenId);
+  }, [selectedBeast, getListingForToken]);
 
   // Format price with USD for the listing
   const formatPriceWithUsd = useCallback((listing: Listing) => {
@@ -333,6 +334,12 @@ function HomePage() {
       );
 
       toast.success("Purchase successful!", { id: toastId });
+
+      // Optimistically mark listing as sold (shared across all pages)
+      markAsSold(listing.listingId);
+      // Notify other pages about the purchase
+      notifyPurchase();
+
       setPurchaseConfirmOpen(false);
       setPurchasingListing(null);
     } catch (e) {
@@ -345,7 +352,7 @@ function HomePage() {
     } finally {
       setPurchaseProcessing(false);
     }
-  }, [account]);
+  }, [account, markAsSold, notifyPurchase]);
 
   // Custom action slot for BeastModal - shows actions for both listed and unlisted beasts
   const beastModalActionSlot = useMemo(() => {
@@ -494,6 +501,10 @@ function HomePage() {
         onOpenChange={setMakeOfferOpen}
         beast={selectedBeast}
         tokenId={selectedBeast?.numericId?.toString() || selectedBeast?.id.split(":").pop() || ""}
+        onOfferMade={() => {
+          // Notify other pages that an offer was made (for refreshing offer lists)
+          notifyOfferMade();
+        }}
       />
 
       <PurchaseConfirmDialog

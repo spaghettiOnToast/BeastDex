@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef, lazy, Suspense } from "react";
 import { useAccount } from "@starknet-react/core";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
@@ -64,6 +64,7 @@ import { useMarketplaceActions as useMarketplaceActionsHook } from "./marketplac
 import { useUserTransactions } from "./marketplace/hooks/useUserTransactions";
 import { useRecentSales } from "./marketplace/hooks/useRecentSales";
 import { useTokenMap, tokenAmountToUsd } from "../hooks/useEkuboTokens";
+import { useSoldListings } from "../contexts/SoldListingsContext";
 import { ViewToggle } from "./marketplace/components/ViewToggle";
 import type { ExploreSubTab, MyActivitySubTab } from "./marketplace/types";
 
@@ -266,8 +267,24 @@ export default function MarketplacePage() {
     address,
     availableFilters: dataHook.availableFilters,
     userBeastsLoading: dataHook.userBeastsLoading,
-    hydratingListings: dataHook.hydratingListings,
   });
+
+  // Track if user beasts have been loaded (to avoid redundant loads)
+  const userBeastsLoadedRef = useRef(false);
+
+  // Deferred loading: load user beasts when tab changes to "my" or "my-beasts"
+  useEffect(() => {
+    const needsUserBeasts = filtersHook.activeTab === "my" || filtersHook.activeTab === "my-beasts";
+    if (needsUserBeasts && !userBeastsLoadedRef.current && address) {
+      userBeastsLoadedRef.current = true;
+      dataHook.reloadUserBeasts();
+    }
+  }, [filtersHook.activeTab, address, dataHook.reloadUserBeasts]);
+
+  // Reset the loaded flag when address changes (user switches account)
+  useEffect(() => {
+    userBeastsLoadedRef.current = false;
+  }, [address]);
 
   // Cancel cart hook (list and purchase carts are in GlobalCartContext)
   const cartsHook = useMarketplaceCarts();
@@ -366,6 +383,27 @@ export default function MarketplacePage() {
     address,
     BEASTS_COLLECTION_ADDRESS
   );
+
+  // Subscribe to global purchase and offer events (from other pages like HomePage)
+  const { subscribeToPurchase, subscribeToOfferMade } = useSoldListings();
+
+  useEffect(() => {
+    // When a purchase happens from another page, refresh orders
+    const unsubPurchase = subscribeToPurchase(() => {
+      dataHook.refetchOrders();
+      invalidateAllSales();
+    });
+
+    // When an offer is made from another page, refresh user offers
+    const unsubOffer = subscribeToOfferMade(() => {
+      refetchUserMadeOffers();
+    });
+
+    return () => {
+      unsubPurchase();
+      unsubOffer();
+    };
+  }, [subscribeToPurchase, subscribeToOfferMade, dataHook.refetchOrders, invalidateAllSales, refetchUserMadeOffers]);
 
   // Poll for new offers when Offers tab is active (every 30 seconds)
   // This ensures incoming offers from other users show up without manual refresh
@@ -1223,7 +1261,7 @@ export default function MarketplacePage() {
                       </div>
                     ))}
                   </div>
-                ) : filtersHook.sortedListings.length === 0 && !dataHook.hydratingListings ? (
+                ) : filtersHook.sortedListings.length === 0 ? (
                   <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
                     No active listings match your filters yet.
                   </p>
@@ -2593,7 +2631,7 @@ export default function MarketplacePage() {
                       {[
                         { type: "buy", label: "Buy", class: "bg-green-500/20 text-green-400 border-green-500/50", activeRing: "ring-2 ring-green-400/50" },
                         { type: "list", label: "List", class: "bg-blue-500/20 text-blue-400 border-blue-500/50", activeRing: "ring-2 ring-blue-400/50" },
-                        { type: "sold", label: "Sold", class: "bg-green-500/20 text-green-400 border-green-500/50", activeRing: "ring-2 ring-green-400/50" },
+                        { type: "sold", label: "Sold", class: "bg-orange-500/20 text-orange-400 border-orange-500/50", activeRing: "ring-2 ring-orange-400/50" },
                         { type: "offer-accepted", label: "Accepted Offer", class: "bg-emerald-500/20 text-emerald-400 border-emerald-500/50", activeRing: "ring-2 ring-emerald-400/50" },
                         { type: "offer", label: "Offer", class: "bg-purple-500/20 text-purple-400 border-purple-500/50", activeRing: "ring-2 ring-purple-400/50" },
                         { type: "cancel", label: "Cancel", class: "bg-red-500/20 text-red-400 border-red-500/50", activeRing: "ring-2 ring-red-400/50" },
@@ -2653,8 +2691,8 @@ export default function MarketplacePage() {
                             offer: { class: "bg-purple-500/20 text-purple-400", label: "Offer" },
                             list: { class: "bg-blue-500/20 text-blue-400", label: "List" },
                             buy: { class: "bg-green-500/20 text-green-400", label: "Buy" },
-                            sell: { class: "bg-green-500/20 text-green-400", label: "Sell" },
-                            sold: { class: "bg-green-500/20 text-green-400", label: "Sold" },
+                            sell: { class: "bg-orange-500/20 text-orange-400", label: "Sell" },
+                            sold: { class: "bg-orange-500/20 text-orange-400", label: "Sold" },
                             "offer-accepted": { class: "bg-emerald-500/20 text-emerald-400", label: "Accepted Offer" },
                             cancel: { class: "bg-red-500/20 text-red-400", label: "Cancel" },
                             edit: { class: "bg-yellow-500/20 text-yellow-400", label: "Edit" },

@@ -14,8 +14,6 @@ export interface UseMarketplaceFiltersProps {
   address: string | undefined;
   availableFilters: BeastAttributeFilters;
   userBeastsLoading?: boolean;
-  /** When true, hydration is still in progress - show skeletons. When false, hide unmatched listings. */
-  hydratingListings?: boolean;
 }
 
 /**
@@ -28,7 +26,6 @@ export function useMarketplaceFilters({
   address,
   availableFilters,
   userBeastsLoading = false,
-  hydratingListings = false,
 }: UseMarketplaceFiltersProps) {
   // Filter and sort state
   const [attributeFilters, setAttributeFilters] = useState<BeastAttributeFilters>({});
@@ -94,7 +91,7 @@ export function useMarketplaceFilters({
 
     if (import.meta.env.DEV) {
       const withoutBeast = listings.filter(l => !l.beast).length;
-      console.log(`[Filter] Running filter: hydratingListings=${hydratingListings}, listings=${listings.length}, withoutBeast=${withoutBeast}`);
+      console.log(`[Filter] Running filter: listings=${listings.length}, withoutBeast=${withoutBeast}`);
     }
 
     for (const listing of listings) {
@@ -107,11 +104,11 @@ export function useMarketplaceFilters({
       // Only apply attribute filters if beast data is loaded
       if (listing.beast && !matchesAttributeFilters(listing as Listing & { beast: Beast }, attributeFilters)) continue;
 
-      // Hide listings without beast data once hydration is complete
+      // Hide listings without beast data
       // (they couldn't be matched to beast metadata, so we can't verify ownership)
-      if (!hydratingListings && !listing.beast) {
+      if (!listing.beast) {
         if (import.meta.env.DEV) {
-          console.log(`[Filter] Hiding listing ${listing.listingId} - no beast data after hydration`);
+          console.log(`[Filter] Hiding listing ${listing.listingId} - no beast data`);
         }
         continue;
       }
@@ -141,7 +138,7 @@ export function useMarketplaceFilters({
     }
 
     return Array.from(listingsByTokenId.values());
-  }, [listings, attributeFilters, hiddenListingIds, hideExpired, hydratingListings]);
+  }, [listings, attributeFilters, hiddenListingIds, hideExpired]);
 
   /**
    * Sort filtered listings

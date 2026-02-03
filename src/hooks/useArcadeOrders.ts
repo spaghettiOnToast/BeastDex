@@ -300,9 +300,17 @@ async function fetchArcadeSalesGraphQL(
   limit: number = 100,
   signal?: AbortSignal
 ): Promise<ArcadeSaleCompat[]> {
+  // Pad collection address to 64 hex chars for GraphQL filter
+  const normalizedCollection = padStarknetAddress(collectionAddress) ?? collectionAddress.toLowerCase();
+
   const query = `
-    query GetArcadeSales($limit: Int!) {
+    query GetArcadeSales($collection: String!, $limit: Int!) {
       arcadeSaleModels(
+        where: {
+          order: {
+            collection: $collection
+          }
+        },
         limit: $limit,
         order: { direction: DESC, field: TIME }
       ) {
@@ -331,17 +339,12 @@ async function fetchArcadeSalesGraphQL(
   `;
 
   type Response = { arcadeSaleModels?: { edges?: Array<{ node: any }> } };
-  const data = await graphqlFetch<Response>(query, { limit }, signal);
+  const data = await graphqlFetch<Response>(query, { collection: normalizedCollection, limit }, signal);
 
   const edges = data?.arcadeSaleModels?.edges ?? [];
-  const sales = edges
+  return edges
     .map((edge: any) => parseGraphQLSale(edge.node))
     .filter(Boolean) as ArcadeSaleCompat[];
-
-  // Filter to only include sales for the specified collection
-  return sales.filter(sale =>
-    compareStarknetAddresses(sale.order.collection, collectionAddress)
-  );
 }
 
 export function useArcadeSalesForCollection(collectionAddress: string, limit: number = 100) {
@@ -377,18 +380,20 @@ async function fetchUserOffersGraphQL(
   limit: number = 100,
   signal?: AbortSignal
 ): Promise<ArcadeOrderModelCompat[]> {
-  // Pad address to 64 hex chars to match GraphQL storage format
+  // Pad addresses to 64 hex chars to match GraphQL storage format
   const normalizedOwner = padStarknetAddress(userAddress) ?? userAddress.toLowerCase();
+  const normalizedCollection = padStarknetAddress(collectionAddress) ?? collectionAddress.toLowerCase();
 
-  // Fetch all user offers from arcadeOfferModels (has time field)
-  // Filter by order.owner and order.category (1 = Buy order/offer)
+  // Fetch user offers from arcadeOfferModels (has time field)
+  // Filter by order.owner, order.collection, and order.category (1 = Buy order/offer)
   // Don't filter by status so we can show expired offers in the Hidden section
   const query = `
-    query GetUserOffers($owner: String!, $limit: Int!) {
+    query GetUserOffers($owner: String!, $collection: String!, $limit: Int!) {
       arcadeOfferModels(
         where: {
           order: {
             owner: $owner,
+            collection: $collection,
             category: 1
           }
         },
@@ -420,19 +425,14 @@ async function fetchUserOffersGraphQL(
   type Response = { arcadeOfferModels?: { edges?: Array<{ node: any }> } };
   const data = await graphqlFetch<Response>(
     query,
-    { owner: normalizedOwner, limit },
+    { owner: normalizedOwner, collection: normalizedCollection, limit },
     signal
   );
 
   const edges = data?.arcadeOfferModels?.edges ?? [];
-  const offers = edges
+  return edges
     .map((edge: any) => parseGraphQLOffer(edge.node))
     .filter(Boolean) as ArcadeOrderModelCompat[];
-
-  // Filter to only include offers for the specified collection
-  return offers.filter(offer =>
-    compareStarknetAddresses(offer.collection, collectionAddress)
-  );
 }
 
 export function useUserOffers(userAddress: string | undefined, collectionAddress: string) {
