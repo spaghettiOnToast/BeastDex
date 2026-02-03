@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
 import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
 import { useSearchParams } from "react-router-dom";
 import { useAccount } from "@starknet-react/core";
@@ -31,9 +31,11 @@ import { formatPrice } from "../utils/price";
 import { getPaymentTokenByAddress, BEASTS_COLLECTION_ADDRESS, CLIENT_FEE_BP, CLIENT_FEE_RECEIVER, ROYALTIES_ENABLED } from "../services/marketplace/constants";
 import { useTokenMap, tokenAmountToUsd } from "../hooks/useEkuboTokens";
 import { toBigIntSafe } from "../utils/bigint";
-import MakeOfferDialog from "../components/marketplace/MakeOfferDialog";
-import PurchaseConfirmDialog from "../components/marketplace/PurchaseConfirmDialog";
 import type { Listing } from "../services/marketplace/types";
+
+// Lazy load marketplace dialogs - only needed when modal opens (~20% of users)
+const MakeOfferDialog = lazy(() => import("../components/marketplace/MakeOfferDialog"));
+const PurchaseConfirmDialog = lazy(() => import("../components/marketplace/PurchaseConfirmDialog"));
 import { executePurchaseWithApproval } from "../services/marketplace/approvals";
 import { toast } from "sonner";
 import { isUserRejection } from "../utils/transaction";
@@ -135,8 +137,7 @@ function HomePage() {
         if (!mounted) return;
         setFiltersError(getUserFriendlyErrorMessage(error, "Failed to load filters"));
       } finally {
-        if (!mounted) return;
-        setFiltersLoading(false);
+        if (mounted) setFiltersLoading(false);
       }
     }
 
@@ -152,8 +153,7 @@ function HomePage() {
         if (!mounted) return;
         setMintedError(getUserFriendlyErrorMessage(error, "Failed to load beast stats"));
       } finally {
-        if (!mounted) return;
-        setMintedLoading(false);
+        if (mounted) setMintedLoading(false);
       }
     }
 
@@ -171,8 +171,7 @@ function HomePage() {
           getUserFriendlyErrorMessage(error, "Failed to load beast highlights")
         );
       } finally {
-        if (!mounted) return;
-        setHighlightsLoading(false);
+        if (mounted) setHighlightsLoading(false);
       }
     }
 
@@ -488,31 +487,33 @@ function HomePage() {
         listingExpiration={selectedBeastListing?.expiration}
       />
 
-      {/* Marketplace Dialogs */}
-      <MakeOfferDialog
-        open={makeOfferOpen}
-        onOpenChange={setMakeOfferOpen}
-        beast={selectedBeast}
-        tokenId={selectedBeast?.numericId?.toString() || selectedBeast?.id.split(":").pop() || ""}
-      />
+      {/* Marketplace Dialogs - lazy loaded */}
+      <Suspense fallback={null}>
+        <MakeOfferDialog
+          open={makeOfferOpen}
+          onOpenChange={setMakeOfferOpen}
+          beast={selectedBeast}
+          tokenId={selectedBeast?.numericId?.toString() || selectedBeast?.id.split(":").pop() || ""}
+        />
 
-      <PurchaseConfirmDialog
-        open={purchaseConfirmOpen}
-        onOpenChange={(open) => {
-          if (!purchaseProcessing) {
-            setPurchaseConfirmOpen(open);
-            if (!open) setPurchasingListing(null);
-          }
-        }}
-        listing={purchasingListing}
-        priceLabel={purchasingListing ? formatPriceWithUsd(purchasingListing) : ""}
-        onConfirm={() => {
-          if (purchasingListing) {
-            handleDirectPurchase(purchasingListing);
-          }
-        }}
-        isProcessing={purchaseProcessing}
-      />
+        <PurchaseConfirmDialog
+          open={purchaseConfirmOpen}
+          onOpenChange={(open) => {
+            if (!purchaseProcessing) {
+              setPurchaseConfirmOpen(open);
+              if (!open) setPurchasingListing(null);
+            }
+          }}
+          listing={purchasingListing}
+          priceLabel={purchasingListing ? formatPriceWithUsd(purchasingListing) : ""}
+          onConfirm={() => {
+            if (purchasingListing) {
+              handleDirectPurchase(purchasingListing);
+            }
+          }}
+          isProcessing={purchaseProcessing}
+        />
+      </Suspense>
 
       <FiltersDrawer
         open={filtersOpen}

@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAccount } from "@starknet-react/core";
 import type { Beast } from "../../services/beast";
@@ -28,7 +28,7 @@ type BeastModalProps = {
   listingExpiration?: number; // Unix timestamp for listing expiry
 };
 
-export function BeastModal({
+export const BeastModal = memo(function BeastModal({
   beast,
   ownerUsernames,
   onClose,
@@ -190,6 +190,6 @@ export function BeastModal({
       />
     </Dialog>
   );
-}
+});
 
 export default BeastModal;

@@ -1240,3 +1240,287 @@ export async function fetchTierCollectionStats(): Promise<TierCollectionStats[]>
     }));
   });
 }
+
+/**
+ * Collection stats for a specific owner - computed server-side via SQL
+ * This replaces the need to load all beasts client-side just to count them
+ */
+export type OwnerCollectionStats = {
+  animatedShinyCount: number;
+  animatedCount: number;
+  shinyCount: number;
+  standardCount: number;
+  uniqueBeastTypes: number;
+  uniqueAnimatedShinyTypes: number;
+  uniqueAnimatedTypes: number;
+  uniqueShinyTypes: number;
+  uniqueStandardTypes: number;
+};
+
+export async function fetchOwnerCollectionStats(
+  ownerAddress: string
+): Promise<OwnerCollectionStats> {
+  const normalised = normaliseStarknetAddress(ownerAddress);
+  if (!normalised) {
+    return {
+      animatedShinyCount: 0,
+      animatedCount: 0,
+      shinyCount: 0,
+      standardCount: 0,
+      uniqueBeastTypes: 0,
+      uniqueAnimatedShinyTypes: 0,
+      uniqueAnimatedTypes: 0,
+      uniqueShinyTypes: 0,
+      uniqueStandardTypes: 0,
+    };
+  }
+
+  return apiCache.get("owner-collection-stats", { address: normalised }, async () => {
+    const variants = new Set<string>();
+    variants.add(normalised.toLowerCase());
+    if (normalised.startsWith("0x")) {
+      const padded = `0x${normalised.slice(2).padStart(64, "0")}`;
+      variants.add(padded.toLowerCase());
+    }
+
+    const addressList = Array.from(variants)
+      .map((address) => `'${address.replace(/'/g, "''")}'`)
+      .join(", ");
+
+    // Single query that calculates all collection stats
+    const query = `
+      WITH beast_attrs AS (
+        SELECT
+          t.id,
+          MAX(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) = 'beast'
+              THEN json_extract(attr.value, '$.value') END) AS beast_type,
+          MAX(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) = 'shiny'
+                   AND json_extract(attr.value, '$.value') IN ('1', 1, 'true', 'True', 'TRUE')
+              THEN 1 ELSE 0 END) AS is_shiny,
+          MAX(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) = 'animated'
+                   AND json_extract(attr.value, '$.value') IN ('1', 1, 'true', 'True', 'TRUE')
+              THEN 1 ELSE 0 END) AS is_animated
+        FROM tokens t
+        JOIN token_balances b
+          ON t.id = b.token_id
+          AND t.contract_address = b.contract_address
+        JOIN json_each(
+          CASE
+            WHEN json_valid(t.metadata) = 1 THEN t.metadata
+            ELSE '{"attributes":[]}'
+          END,
+          '$.attributes'
+        ) attr
+        WHERE t.contract_address = '${CONTRACT_ADDRESS}'
+          AND b.balance > '${ZERO_BALANCE}'
+          AND json_valid(t.metadata) = 1
+          AND LOWER(b.account_address) IN (${addressList})
+        GROUP BY t.id
+      ),
+      categorized AS (
+        SELECT
+          id,
+          LOWER(beast_type) AS beast_type_lower,
+          CASE
+            WHEN is_shiny = 1 AND is_animated = 1 THEN 'animated_shiny'
+            WHEN is_animated = 1 THEN 'animated'
+            WHEN is_shiny = 1 THEN 'shiny'
+            ELSE 'standard'
+          END AS category
+        FROM beast_attrs
+        WHERE beast_type IS NOT NULL
+      )
+      SELECT
+        -- Total counts per category
+        SUM(CASE WHEN category = 'animated_shiny' THEN 1 ELSE 0 END) AS animated_shiny_count,
+        SUM(CASE WHEN category = 'animated' THEN 1 ELSE 0 END) AS animated_count,
+        SUM(CASE WHEN category = 'shiny' THEN 1 ELSE 0 END) AS shiny_count,
+        SUM(CASE WHEN category = 'standard' THEN 1 ELSE 0 END) AS standard_count,
+        -- Unique beast types overall
+        COUNT(DISTINCT beast_type_lower) AS unique_beast_types,
+        -- Unique beast types per category
+        COUNT(DISTINCT CASE WHEN category = 'animated_shiny' THEN beast_type_lower END) AS unique_animated_shiny_types,
+        COUNT(DISTINCT CASE WHEN category = 'animated' THEN beast_type_lower END) AS unique_animated_types,
+        COUNT(DISTINCT CASE WHEN category = 'shiny' THEN beast_type_lower END) AS unique_shiny_types,
+        COUNT(DISTINCT CASE WHEN category = 'standard' THEN beast_type_lower END) AS unique_standard_types
+      FROM categorized;
+    `;
+
+    type StatsRow = {
+      animated_shiny_count: number | null;
+      animated_count: number | null;
+      shiny_count: number | null;
+      standard_count: number | null;
+      unique_beast_types: number | null;
+      unique_animated_shiny_types: number | null;
+      unique_animated_types: number | null;
+      unique_shiny_types: number | null;
+      unique_standard_types: number | null;
+    };
+
+    const rows = await runBeastSql<StatsRow[]>(query, "fetchOwnerCollectionStats");
+
+    if (!rows || rows.length === 0) {
+      return {
+        animatedShinyCount: 0,
+        animatedCount: 0,
+        shinyCount: 0,
+        standardCount: 0,
+        uniqueBeastTypes: 0,
+        uniqueAnimatedShinyTypes: 0,
+        uniqueAnimatedTypes: 0,
+        uniqueShinyTypes: 0,
+        uniqueStandardTypes: 0,
+      };
+    }
+
+    const row = rows[0];
+
+    return {
+      animatedShinyCount: Number(row.animated_shiny_count) || 0,
+      animatedCount: Number(row.animated_count) || 0,
+      shinyCount: Number(row.shiny_count) || 0,
+      standardCount: Number(row.standard_count) || 0,
+      uniqueBeastTypes: Number(row.unique_beast_types) || 0,
+      uniqueAnimatedShinyTypes: Number(row.unique_animated_shiny_types) || 0,
+      uniqueAnimatedTypes: Number(row.unique_animated_types) || 0,
+      uniqueShinyTypes: Number(row.unique_shiny_types) || 0,
+      uniqueStandardTypes: Number(row.unique_standard_types) || 0,
+    };
+  });
+}
+
+/**
+ * Fetch highlight beasts for an owner (rarest, highest ranked, last collected)
+ * Combined into a single SQL query for better performance
+ */
+export type OwnerBeastHighlights = {
+  rarest: Beast | null;
+  highestRanked: Beast | null;
+  lastCollected: Beast | null;
+  lastCollectedName: string | null;
+};
+
+export async function fetchOwnerBeastHighlights(
+  ownerAddress: string
+): Promise<OwnerBeastHighlights> {
+  const normalised = normaliseStarknetAddress(ownerAddress);
+  if (!normalised) {
+    return {
+      rarest: null,
+      highestRanked: null,
+      lastCollected: null,
+      lastCollectedName: null,
+    };
+  }
+
+  return apiCache.get("owner-beast-highlights", { address: normalised }, async () => {
+    const variants = new Set<string>();
+    variants.add(normalised.toLowerCase());
+    if (normalised.startsWith("0x")) {
+      const padded = `0x${normalised.slice(2).padStart(64, "0")}`;
+      variants.add(padded.toLowerCase());
+    }
+
+    const addressList = Array.from(variants)
+      .map((address) => `'${address.replace(/'/g, "''")}'`)
+      .join(", ");
+
+    // Single combined query that computes all three highlights in one pass
+    // This avoids running the expensive base JOIN three times
+    const combinedQuery = `
+      WITH beast_attrs AS (
+        SELECT
+          t.id,
+          t.metadata,
+          b.account_address,
+          MAX(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) = 'shiny'
+                   AND json_extract(attr.value, '$.value') IN ('1', 1, 'true', 'True', 'TRUE')
+              THEN 1 ELSE 0 END) AS is_shiny,
+          MAX(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) = 'animated'
+                   AND json_extract(attr.value, '$.value') IN ('1', 1, 'true', 'True', 'TRUE')
+              THEN 1 ELSE 0 END) AS is_animated,
+          MAX(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) LIKE '%power%'
+              THEN CAST(json_extract(attr.value, '$.value') AS REAL) ELSE 0 END) AS power,
+          MIN(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) = 'rank'
+              THEN CAST(json_extract(attr.value, '$.value') AS INTEGER) ELSE 999999 END) AS rank_value,
+          MAX(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) = 'last death timestamp'
+              THEN CAST(json_extract(attr.value, '$.value') AS INTEGER) ELSE 0 END) AS death_timestamp
+        FROM tokens t
+        JOIN token_balances b ON t.id = b.token_id AND t.contract_address = b.contract_address
+        JOIN json_each(CASE WHEN json_valid(t.metadata) = 1 THEN t.metadata ELSE '{"attributes":[]}' END, '$.attributes') attr
+        WHERE t.contract_address = '${CONTRACT_ADDRESS}'
+          AND b.balance > '${ZERO_BALANCE}'
+          AND json_valid(t.metadata) = 1
+          AND LOWER(b.account_address) IN (${addressList})
+        GROUP BY t.id
+      ),
+      rarest AS (
+        SELECT id, metadata, account_address, 'rarest' AS highlight_type
+        FROM beast_attrs
+        ORDER BY (is_shiny + is_animated) DESC, is_shiny DESC, is_animated DESC, power DESC
+        LIMIT 1
+      ),
+      highest_ranked AS (
+        SELECT id, metadata, account_address, 'highest_ranked' AS highlight_type
+        FROM beast_attrs
+        WHERE rank_value < 999999
+        ORDER BY rank_value ASC
+        LIMIT 1
+      ),
+      last_collected AS (
+        SELECT id, metadata, account_address, 'last_collected' AS highlight_type
+        FROM beast_attrs
+        WHERE death_timestamp > 0
+        ORDER BY death_timestamp DESC
+        LIMIT 1
+      )
+      SELECT * FROM rarest
+      UNION ALL
+      SELECT * FROM highest_ranked
+      UNION ALL
+      SELECT * FROM last_collected;
+    `;
+
+    type BeastQueryRow = {
+      id: string;
+      metadata: string;
+      account_address: string;
+      highlight_type: string;
+    };
+
+    const rows = await runBeastSql<BeastQueryRow[]>(combinedQuery, "fetchOwnerBeastHighlights");
+
+    const mapRowToBeast = (row: BeastQueryRow | undefined): Beast | null => {
+      if (!row) return null;
+      try {
+        const beastRow: BeastRow = {
+          id: row.id,
+          metadata: row.metadata,
+          account_address: row.account_address,
+          power: undefined,
+          total_count: undefined,
+        };
+        return mapBeastRow(beastRow);
+      } catch (e) {
+        console.warn("Failed to parse beast row:", e);
+        return null;
+      }
+    };
+
+    // Parse results by highlight type
+    const rarestRow = rows?.find(r => r.highlight_type === "rarest");
+    const highestRankedRow = rows?.find(r => r.highlight_type === "highest_ranked");
+    const lastCollectedRow = rows?.find(r => r.highlight_type === "last_collected");
+
+    const lastCollectedBeast = mapRowToBeast(lastCollectedRow);
+
+    return {
+      rarest: mapRowToBeast(rarestRow),
+      highestRanked: mapRowToBeast(highestRankedRow),
+      lastCollected: lastCollectedBeast,
+      // Use the beast's name directly - no separate "death_name" attribute needed
+      lastCollectedName: lastCollectedBeast?.name ?? null,
+    };
+  });
+}
