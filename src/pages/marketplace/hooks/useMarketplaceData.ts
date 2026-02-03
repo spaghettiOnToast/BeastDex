@@ -67,6 +67,7 @@ export function useMarketplaceData(address: string | undefined) {
     // User beasts
     userBeasts: userBeastsHook.beasts,
     userBeastsLoading: userBeastsHook.loading,
+    userBeastsHasLoaded: userBeastsHook.hasLoaded,
     userBeastsError: userBeastsHook.error,
     reloadUserBeasts: userBeastsHook.reload,
 

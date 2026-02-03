@@ -10,6 +10,8 @@ export interface UseUserBeastsOptions {
 export interface UseUserBeastsResult {
   beasts: Beast[];
   loading: boolean;
+  /** Whether beasts have been loaded at least once (true after first successful load) */
+  hasLoaded: boolean;
   error: string | null;
   reload: () => Promise<void>;
 }
@@ -26,6 +28,7 @@ export function useUserBeasts(
 
   const [beasts, setBeasts] = useState<Beast[]>([]);
   const [loading, setLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadBeasts = useCallback(async () => {
@@ -70,6 +73,8 @@ export function useUserBeasts(
 
         page += 1;
       }
+      // Mark as loaded after successful completion
+      setHasLoaded(true);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Failed to load beasts";
 
@@ -96,6 +101,7 @@ export function useUserBeasts(
   return {
     beasts,
     loading,
+    hasLoaded,
     error,
     reload: loadBeasts,
   };

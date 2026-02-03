@@ -68,7 +68,8 @@ export const StatsPanel = memo(function StatsPanel({
             </div>
 
             {/* Controls */}
-            <div className="flex items-center justify-center gap-2 py-1 flex-wrap">
+            <div className="flex flex-col items-center gap-1 py-1">
+              {filtersControl ? <div>{filtersControl}</div> : null}
               <Button
                 onClick={onRefresh}
                 disabled={refreshing}
@@ -81,7 +82,6 @@ export const StatsPanel = memo(function StatsPanel({
                 />
                 Refresh
               </Button>
-              {filtersControl ? <div>{filtersControl}</div> : null}
             </div>
           </div>
 
@@ -108,7 +108,8 @@ export const StatsPanel = memo(function StatsPanel({
             </div>
 
             {/* Right: Controls */}
-            <div className="flex items-center gap-2 order-3 shrink-0 ml-auto">
+            <div className="flex flex-col items-end gap-1 order-3 shrink-0 ml-auto">
+              {filtersControl ? <div>{filtersControl}</div> : null}
               <Button
                 onClick={onRefresh}
                 disabled={refreshing}
@@ -121,7 +122,6 @@ export const StatsPanel = memo(function StatsPanel({
                 />
                 Refresh
               </Button>
-              {filtersControl ? <div>{filtersControl}</div> : null}
             </div>
           </div>
 

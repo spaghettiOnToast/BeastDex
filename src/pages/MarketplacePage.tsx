@@ -267,6 +267,7 @@ export default function MarketplacePage() {
     address,
     availableFilters: dataHook.availableFilters,
     userBeastsLoading: dataHook.userBeastsLoading,
+    userBeastsHasLoaded: dataHook.userBeastsHasLoaded,
   });
 
   // Track if user beasts have been loaded (to avoid redundant loads)

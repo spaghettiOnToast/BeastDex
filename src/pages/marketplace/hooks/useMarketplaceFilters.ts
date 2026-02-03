@@ -14,6 +14,8 @@ export interface UseMarketplaceFiltersProps {
   address: string | undefined;
   availableFilters: BeastAttributeFilters;
   userBeastsLoading?: boolean;
+  /** Whether user beasts have been loaded at least once */
+  userBeastsHasLoaded?: boolean;
 }
 
 /**
@@ -26,6 +28,7 @@ export function useMarketplaceFilters({
   address,
   availableFilters,
   userBeastsLoading = false,
+  userBeastsHasLoaded = false,
 }: UseMarketplaceFiltersProps) {
   // Filter and sort state
   const [attributeFilters, setAttributeFilters] = useState<BeastAttributeFilters>({});
@@ -303,19 +306,21 @@ export function useMarketplaceFilters({
     const ownedTokenIds = new Set(normalizedBeastTokenIds.values());
 
     // Filter to listings where the seller is the current user
-    // Only apply ownership check if userBeasts has finished loading
-    // (prevents flicker where listings disappear then reappear)
+    // Only apply ownership check if userBeasts has finished loading at least once
+    // (prevents flicker where listings disappear then reappear, and prevents
+    // showing 0 listings before beasts are loaded when autoLoad is false)
     return base.filter((listing) => {
       if (listing.seller.toLowerCase() !== lower) return false;
 
-      // Skip ownership check while beasts are loading to prevent flicker
-      if (userBeastsLoading) return true;
+      // Skip ownership check if beasts haven't been loaded yet or are currently loading
+      // This ensures listings show correctly before the first beasts load completes
+      if (!userBeastsHasLoaded || userBeastsLoading) return true;
 
       // Check if user still owns this NFT
       const normalizedTokenId = String(listing.tokenId).trim();
       return ownedTokenIds.has(normalizedTokenId);
     });
-  }, [sortedListings, listings, address, showAllMyListings, normalizedBeastTokenIds, userBeastsLoading]);
+  }, [sortedListings, listings, address, showAllMyListings, normalizedBeastTokenIds, userBeastsLoading, userBeastsHasLoaded]);
 
   /**
    * Track which token IDs are already actively listed
