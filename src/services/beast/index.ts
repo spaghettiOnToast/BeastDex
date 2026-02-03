@@ -5,6 +5,7 @@ import {
   buildBeastsQuery,
   buildBeastByIdQuery,
   buildOwnerBeastStatsQuery,
+  buildTopBeastsQuery,
 } from "./queries";
 import { runBeastSql } from "./sqlClient";
 import { normaliseStarknetAddress } from "../../utils/address";
@@ -79,6 +80,19 @@ export async function fetchBeasts({
       rows.length > 0 ? Number(rows[0]?.total_count ?? beasts.length) : 0;
 
     return { beasts, total };
+  });
+}
+
+/**
+ * Fetch top N beasts by power - optimized for fast initial page load.
+ * Cached aggressively (30 min) since top beasts rarely change.
+ * Use this for the initial render, then load full paginated data in background.
+ */
+export async function fetchTopBeasts(limit: number = 10): Promise<Beast[]> {
+  return apiCache.get("top-beasts", { limit }, async () => {
+    const query = buildTopBeastsQuery(limit);
+    const rows = await runBeastSql<BeastRow[]>(query, "fetchTopBeasts");
+    return rows.map(mapBeastRow);
   });
 }
 

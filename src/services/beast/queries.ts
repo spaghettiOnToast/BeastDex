@@ -547,3 +547,38 @@ export function buildOwnerBeastStatsQuery(ownerAddress: string) {
     LEFT JOIN beast_attributes ba ON ob.id = ba.id;
   `;
 }
+
+/**
+ * Optimized query for fetching top N beasts by power.
+ * Simpler than the full beasts query - no pagination, no filters, no total count.
+ * Results can be cached aggressively since top beasts rarely change.
+ */
+export function buildTopBeastsQuery(limit: number = 10) {
+  return `
+    WITH current_owners AS (
+      SELECT
+        token_id,
+        contract_address,
+        account_address,
+        balance,
+        ROW_NUMBER() OVER (PARTITION BY token_id, contract_address ORDER BY balance DESC) as rn
+      FROM token_balances
+      WHERE contract_address = '${CONTRACT_ADDRESS}'
+        AND balance > '${ZERO_BALANCE}'
+    )
+    SELECT
+      t.id,
+      t.metadata,
+      b.account_address,
+      ${POWER_SELECT_FRAGMENT}
+    FROM tokens t
+    JOIN current_owners b
+      ON t.id = b.token_id
+      AND t.contract_address = b.contract_address
+      AND b.rn = 1
+    WHERE t.contract_address = '${CONTRACT_ADDRESS}'
+      AND json_valid(t.metadata) = 1
+    ORDER BY power DESC
+    LIMIT ${limit};
+  `;
+}

@@ -18,6 +18,7 @@ class ApiCache {
     this.cacheConfigs.set("beast-filters", { ttl: 30 * 60 * 1000 }); // 30 minutes (static data)
     this.cacheConfigs.set("beast-by-id", { ttl: 2 * 60 * 1000 }); // 2 minutes
     this.cacheConfigs.set("beast-query", { ttl: 2 * 60 * 1000 }); // 2 minutes
+    this.cacheConfigs.set("top-beasts", { ttl: 30 * 60 * 1000 }); // 30 minutes (top beasts rarely change)
     this.cacheConfigs.set("adventurer-deaths", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("beast-power-rank", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("beast-stats", { ttl: 5 * 60 * 1000 }); // 5 minutes

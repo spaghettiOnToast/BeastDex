@@ -16,6 +16,7 @@ import {
   fetchBeastAttributeFilters,
   fetchBeastStats,
   fetchBeastHighlights,
+  fetchTopBeasts,
   type BeastAttributeFilters,
   type BeastStats,
   type BeastHighlights,
@@ -73,6 +74,10 @@ function HomePage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [searchParams] = useSearchParams();
 
+  // Two-phase loading: show top beasts immediately while full list loads
+  const [initialBeasts, setInitialBeasts] = useState<Beast[]>([]);
+  const [initialLoading, setInitialLoading] = useState(true);
+
   // Marketplace state
   const { address, account } = useAccount();
   const globalCart = useGlobalCart();
@@ -85,7 +90,42 @@ function HomePage() {
   const [purchasingListing, setPurchasingListing] = useState<Listing | null>(null);
   const [purchaseProcessing, setPurchaseProcessing] = useState(false);
 
-  const { beasts, loading, error, reload, total } = useBeasts({
+  // Phase 1: Fetch top beasts immediately (fast, heavily cached)
+  useEffect(() => {
+    let mounted = true;
+
+    // Only fetch initial beasts on first load (page 1, no filters, default sort)
+    const isInitialLoad = page === 1 &&
+      !search &&
+      Object.keys(attributeFilters).length === 0 &&
+      sortOption === "default";
+
+    if (isInitialLoad) {
+      setInitialLoading(true);
+      fetchTopBeasts(10)
+        .then((topBeasts) => {
+          if (mounted) {
+            setInitialBeasts(topBeasts);
+            setInitialLoading(false);
+          }
+        })
+        .catch((err) => {
+          console.warn("Failed to fetch top beasts:", err);
+          if (mounted) {
+            setInitialLoading(false);
+          }
+        });
+    } else {
+      // Not initial load, don't show initial beasts
+      setInitialBeasts([]);
+      setInitialLoading(false);
+    }
+
+    return () => { mounted = false; };
+  }, [page, search, attributeFilters, sortOption]);
+
+  // Phase 2: Fetch full paginated list (slower, but complete)
+  const { beasts: fullBeasts, loading: fullLoading, error, reload, total } = useBeasts({
     limit: PAGE_SIZE,
     search,
     attributeFilters,
@@ -93,6 +133,10 @@ function HomePage() {
     page,
     sort: sortOptionToBeastSortField(sortOption),
   });
+
+  // Use initial beasts while full list is loading, then switch to full list
+  const beasts = fullBeasts.length > 0 ? fullBeasts : initialBeasts;
+  const loading = initialLoading && fullLoading;
 
   const ownerAddresses = useMemo(
     () => beasts.map((beast) => beast.owner).filter(Boolean),
