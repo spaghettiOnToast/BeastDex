@@ -4,6 +4,7 @@ import {
   fetchBeasts,
   type AttributeFilterInput,
   type Beast,
+  type BeastSortField,
 } from "../services/beast";
 import { getUserFriendlyErrorMessage } from "../utils/error";
 
@@ -13,7 +14,7 @@ type UseBeastsOptions = {
   attributeFilters?: AttributeFilterInput;
   ownerAddresses?: string[];
   page?: number;
-  sort?: "default" | "beast" | "tier" | "health" | "rank" | "last-death";
+  sort?: BeastSortField;
   enabled?: boolean;
 };
 

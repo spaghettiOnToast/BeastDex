@@ -39,6 +39,7 @@ export type {
   BeastMetadata,
   BeastPowerRank,
   BeastHealthRank,
+  BeastSortField,
   BeastStats,
   PowerRankLeaderboard,
   BeastCollectionLeaderboard,
