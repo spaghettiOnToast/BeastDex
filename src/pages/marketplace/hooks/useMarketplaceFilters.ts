@@ -434,6 +434,27 @@ export function useMarketplaceFilters({
   }, []);
 
   /**
+   * Handle adventurers killed range filter change
+   */
+  const handleAdventurersKilledRangeChange = useCallback((min: number, max: number) => {
+    setAttributeFilters((prev) => {
+      const next = { ...prev } as BeastAttributeFilters;
+      // If full range (0-100), remove the filter
+      if (min <= 0 && max >= 100) {
+        delete next["Adventurers Killed"];
+      } else {
+        // Generate array of values in the range
+        const values: string[] = [];
+        for (let i = min; i <= max; i++) {
+          values.push(String(i));
+        }
+        next["Adventurers Killed"] = values;
+      }
+      return next;
+    });
+  }, []);
+
+  /**
    * Reset all filters
    */
   const handleResetFilters = useCallback(() => {
@@ -501,6 +522,7 @@ export function useMarketplaceFilters({
     handleRankRangeChange,
     handleHealthRangeChange,
     handleLevelRangeChange,
+    handleAdventurersKilledRangeChange,
     handleResetFilters,
     hideListingById,
     unhideListingById,

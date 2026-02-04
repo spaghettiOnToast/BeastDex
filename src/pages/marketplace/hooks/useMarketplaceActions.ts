@@ -351,9 +351,13 @@ export function useMarketplaceActions({
         toast.loading("Waiting for confirmation...", { id: toastId });
         await provider.waitForTransaction(result.transaction_hash);
 
-        // Success - clear all valid listings from cart
+        // Success - clear all valid listings from cart and mark as sold
         for (const listing of validListings) {
           handleRemoveFromPurchaseCart(listing.listingId);
+          // Mark as sold to hide from listings until indexer catches up
+          if (markListingAsSold) {
+            markListingAsSold(listing.listingId);
+          }
         }
 
         toast.success(

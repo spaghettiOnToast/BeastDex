@@ -65,6 +65,7 @@ import { useUserTransactions } from "./marketplace/hooks/useUserTransactions";
 import { useRecentSales } from "./marketplace/hooks/useRecentSales";
 import { useTokenMap, tokenAmountToUsd } from "../hooks/useEkuboTokens";
 import { useSoldListings } from "../contexts/SoldListingsContext";
+import { useBackgroundListingValidation } from "./marketplace/hooks/useBackgroundListingValidation";
 import { ViewToggle } from "./marketplace/components/ViewToggle";
 import type { ExploreSubTab, MyActivitySubTab } from "./marketplace/types";
 
@@ -386,7 +387,16 @@ export default function MarketplacePage() {
   );
 
   // Subscribe to global purchase and offer events (from other pages like HomePage)
-  const { subscribeToPurchase, subscribeToOfferMade } = useSoldListings();
+  const { subscribeToPurchase, subscribeToOfferMade, isSold } = useSoldListings();
+
+  // Background validation: validate listings and mark stale ones as sold
+  useBackgroundListingValidation({
+    account,
+    listings: dataHook.listings,
+    isLoading: dataHook.ordersLoading,
+    isSold,
+    markAsSold: dataHook.markListingAsSold,
+  });
 
   useEffect(() => {
     // When a purchase happens from another page, refresh orders
@@ -3000,6 +3010,7 @@ export default function MarketplacePage() {
           onRankRangeChange={filtersHook.handleRankRangeChange}
           onHealthRangeChange={filtersHook.handleHealthRangeChange}
           onLevelRangeChange={filtersHook.handleLevelRangeChange}
+          onAdventurersKilledRangeChange={filtersHook.handleAdventurersKilledRangeChange}
           onResetFilters={filtersHook.handleResetFilters}
         />
 

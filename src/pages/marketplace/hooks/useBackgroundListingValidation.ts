@@ -1,8 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import type { AccountInterface } from "starknet";
 import type { Listing } from "../../../services/marketplace/types";
 import { validateListingOwnership, getProvider } from "../../../services/marketplace/approvals";
 import { BEASTS_COLLECTION_ADDRESS } from "../../../services/marketplace/constants";
+
+// How often to re-validate all listings (in ms)
+const VALIDATION_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 interface UseBackgroundListingValidationProps {
   account: AccountInterface | undefined;
@@ -16,8 +19,8 @@ interface UseBackgroundListingValidationProps {
  * Hook that validates listing ownership in the background
  * and marks invalid listings as sold so they're filtered out.
  *
- * This runs automatically when listings change and validates
- * ownership by checking ownerOf on the NFT contract.
+ * This runs automatically when listings load and then periodically
+ * every 2 minutes to catch stale listings.
  */
 export function useBackgroundListingValidation({
   account,
@@ -27,29 +30,37 @@ export function useBackgroundListingValidation({
   markAsSold,
 }: UseBackgroundListingValidationProps): void {
   const validatedRef = useRef<Set<string>>(new Set());
+  const isValidatingRef = useRef(false);
 
-  useEffect(() => {
+  const validateListingsInBackground = useCallback(async (forceRevalidate = false) => {
     if (!account || listings.length === 0 || isLoading) return;
+    if (isValidatingRef.current) return; // Prevent concurrent runs
 
-    const validateListingsInBackground = async () => {
-      const provider = getProvider(account);
-      const BATCH_SIZE = 10; // Validate 10 at a time to avoid overwhelming RPC
-      const BATCH_DELAY = 500; // 500ms between batches
+    const provider = getProvider(account);
+    const BATCH_SIZE = 10; // Validate 10 at a time to avoid overwhelming RPC
+    const BATCH_DELAY = 500; // 500ms between batches
 
-      // Get listings that haven't been validated yet in this session
-      const toValidate = listings.filter(
-        (l) => !isSold(l.listingId) && !validatedRef.current.has(l.listingId)
-      );
+    // On periodic revalidation, clear the validated set to re-check everything
+    if (forceRevalidate) {
+      validatedRef.current.clear();
+    }
 
-      if (toValidate.length === 0) return;
+    // Get listings that haven't been validated yet
+    const toValidate = listings.filter(
+      (l) => !isSold(l.listingId) && !validatedRef.current.has(l.listingId)
+    );
 
-      console.log(`[BackgroundValidation] Validating ${toValidate.length} listings...`);
+    if (toValidate.length === 0) return;
 
-      // Mark all as in-progress to avoid duplicate validation
-      toValidate.forEach((l) => validatedRef.current.add(l.listingId));
+    isValidatingRef.current = true;
+    console.log(`[BackgroundValidation] Validating ${toValidate.length} listings...`);
 
-      let invalidCount = 0;
+    // Mark all as in-progress to avoid duplicate validation
+    toValidate.forEach((l) => validatedRef.current.add(l.listingId));
 
+    let invalidCount = 0;
+
+    try {
       // Process in batches
       for (let i = 0; i < toValidate.length; i += BATCH_SIZE) {
         const batch = toValidate.slice(i, i + BATCH_SIZE);
@@ -91,11 +102,29 @@ export function useBackgroundListingValidation({
       if (invalidCount > 0) {
         console.log(`[BackgroundValidation] Completed. Found ${invalidCount} invalid listings.`);
       }
-    };
+    } finally {
+      isValidatingRef.current = false;
+    }
+  }, [account, listings, isLoading, isSold, markAsSold]);
 
-    // Run validation in background (don't await - fire and forget)
-    validateListingsInBackground().catch((err) => {
+  // Run validation on initial load and when listings change
+  useEffect(() => {
+    validateListingsInBackground(false).catch((err) => {
       console.error("[BackgroundValidation] Error:", err);
     });
-  }, [account, listings, isLoading, isSold, markAsSold]);
+  }, [validateListingsInBackground]);
+
+  // Set up periodic revalidation
+  useEffect(() => {
+    if (!account || isLoading) return;
+
+    const intervalId = setInterval(() => {
+      console.log("[BackgroundValidation] Running periodic revalidation...");
+      validateListingsInBackground(true).catch((err) => {
+        console.error("[BackgroundValidation] Periodic validation error:", err);
+      });
+    }, VALIDATION_INTERVAL);
+
+    return () => clearInterval(intervalId);
+  }, [account, isLoading, validateListingsInBackground]);
 }
