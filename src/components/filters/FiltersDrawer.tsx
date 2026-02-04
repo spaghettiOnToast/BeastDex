@@ -23,11 +23,20 @@ const HEALTH_MAX = 1023;
 
 // Level range constants
 const LEVEL_MIN = 1;
-const LEVEL_MAX = 255;
+const LEVEL_MAX_DEFAULT = 255;
 
 // Adventurers Killed range constants
 const ADVENTURERS_KILLED_MIN = 0;
-const ADVENTURERS_KILLED_MAX = 100; // Reasonable upper bound, adjust if needed
+const ADVENTURERS_KILLED_MAX_DEFAULT = 100;
+
+/**
+ * Helper to compute max value from available filter values
+ */
+function getMaxFromFilterValues(values: string[] | undefined, fallback: number): number {
+  if (!values || values.length === 0) return fallback;
+  const nums = values.map(Number).filter((n) => !isNaN(n));
+  return nums.length > 0 ? Math.max(...nums) : fallback;
+}
 
 // Traits that support multi-select (checkboxes)
 const MULTI_SELECT_TRAITS = new Set([
@@ -64,6 +73,16 @@ export function FiltersDrawer({
   onAdventurersKilledRangeChange,
   onResetFilters,
 }: FiltersDrawerProps) {
+  // Compute dynamic max values from available filters (Level and Adventurers Killed only)
+  const dynamicLevelMax = useMemo(
+    () => getMaxFromFilterValues(availableFilters["Level"], LEVEL_MAX_DEFAULT),
+    [availableFilters]
+  );
+  const dynamicAdventurersKilledMax = useMemo(
+    () => getMaxFromFilterValues(availableFilters["Adventurers Killed"], ADVENTURERS_KILLED_MAX_DEFAULT),
+    [availableFilters]
+  );
+
   // Get current rank range selections
   const selectedRankRanges = useMemo(() => {
     const rankValues = attributeFilters["Rank"] || attributeFilters["rank"] || [];
@@ -83,20 +102,33 @@ export function FiltersDrawer({
     return ranges;
   }, [attributeFilters]);
 
-  // Health range state
+  // Health range state (static max of 1023)
   const [healthMin, setHealthMin] = useState(HEALTH_MIN);
   const [healthMax, setHealthMax] = useState(HEALTH_MAX);
   const healthFilterActive = attributeFilters["Health"]?.length > 0;
 
-  // Level range state
+  // Level range state (dynamic max)
   const [levelMin, setLevelMin] = useState(LEVEL_MIN);
-  const [levelMax, setLevelMax] = useState(LEVEL_MAX);
+  const [levelMax, setLevelMax] = useState(dynamicLevelMax);
   const levelFilterActive = attributeFilters["Level"]?.length > 0;
 
-  // Adventurers Killed range state
+  // Adventurers Killed range state (dynamic max)
   const [adventurersKilledMin, setAdventurersKilledMin] = useState(ADVENTURERS_KILLED_MIN);
-  const [adventurersKilledMax, setAdventurersKilledMax] = useState(ADVENTURERS_KILLED_MAX);
+  const [adventurersKilledMax, setAdventurersKilledMax] = useState(dynamicAdventurersKilledMax);
   const adventurersKilledFilterActive = attributeFilters["Adventurers Killed"]?.length > 0;
+
+  // Update dynamic max values when filters load
+  useEffect(() => {
+    if (!levelFilterActive) {
+      setLevelMax(dynamicLevelMax);
+    }
+  }, [dynamicLevelMax, levelFilterActive]);
+
+  useEffect(() => {
+    if (!adventurersKilledFilterActive) {
+      setAdventurersKilledMax(dynamicAdventurersKilledMax);
+    }
+  }, [dynamicAdventurersKilledMax, adventurersKilledFilterActive]);
 
   // Reset sliders when filters are reset
   useEffect(() => {
@@ -106,13 +138,13 @@ export function FiltersDrawer({
     }
     if (!levelFilterActive) {
       setLevelMin(LEVEL_MIN);
-      setLevelMax(LEVEL_MAX);
+      setLevelMax(dynamicLevelMax);
     }
     if (!adventurersKilledFilterActive) {
       setAdventurersKilledMin(ADVENTURERS_KILLED_MIN);
-      setAdventurersKilledMax(ADVENTURERS_KILLED_MAX);
+      setAdventurersKilledMax(dynamicAdventurersKilledMax);
     }
-  }, [healthFilterActive, levelFilterActive, adventurersKilledFilterActive]);
+  }, [healthFilterActive, levelFilterActive, adventurersKilledFilterActive, dynamicLevelMax, dynamicAdventurersKilledMax]);
 
   const hasFiltersApplied = useMemo(
     () => Object.keys(attributeFilters || {}).length > 0,
@@ -605,8 +637,8 @@ export function FiltersDrawer({
                         type="button"
                         onClick={() => {
                           setLevelMin(LEVEL_MIN);
-                          setLevelMax(LEVEL_MAX);
-                          onLevelRangeChange(LEVEL_MIN, LEVEL_MAX);
+                          setLevelMax(dynamicLevelMax);
+                          onLevelRangeChange(LEVEL_MIN, dynamicLevelMax);
                         }}
                         className="text-[10px] text-gray-500 hover:text-gray-300"
                       >
@@ -636,10 +668,10 @@ export function FiltersDrawer({
                         <input
                           type="number"
                           min={levelMin}
-                          max={LEVEL_MAX}
+                          max={dynamicLevelMax}
                           value={levelMax}
                           onChange={(e) => {
-                            const val = Math.min(LEVEL_MAX, Math.max(Number(e.target.value), levelMin));
+                            const val = Math.min(dynamicLevelMax, Math.max(Number(e.target.value), levelMin));
                             setLevelMax(val);
                           }}
                           onBlur={() => onLevelRangeChange(levelMin, levelMax)}
@@ -648,7 +680,7 @@ export function FiltersDrawer({
                       </div>
                     </div>
                     <div className="text-center text-[10px] text-gray-500">
-                      {levelMin === LEVEL_MIN && levelMax === LEVEL_MAX
+                      {levelMin === LEVEL_MIN && levelMax === dynamicLevelMax
                         ? "All levels"
                         : `${levelMin} - ${levelMax}`}
                     </div>
@@ -666,8 +698,8 @@ export function FiltersDrawer({
                         type="button"
                         onClick={() => {
                           setAdventurersKilledMin(ADVENTURERS_KILLED_MIN);
-                          setAdventurersKilledMax(ADVENTURERS_KILLED_MAX);
-                          onAdventurersKilledRangeChange(ADVENTURERS_KILLED_MIN, ADVENTURERS_KILLED_MAX);
+                          setAdventurersKilledMax(dynamicAdventurersKilledMax);
+                          onAdventurersKilledRangeChange(ADVENTURERS_KILLED_MIN, dynamicAdventurersKilledMax);
                         }}
                         className="text-[10px] text-gray-500 hover:text-gray-300"
                       >
@@ -697,10 +729,10 @@ export function FiltersDrawer({
                         <input
                           type="number"
                           min={adventurersKilledMin}
-                          max={ADVENTURERS_KILLED_MAX}
+                          max={dynamicAdventurersKilledMax}
                           value={adventurersKilledMax}
                           onChange={(e) => {
-                            const val = Math.min(ADVENTURERS_KILLED_MAX, Math.max(Number(e.target.value), adventurersKilledMin));
+                            const val = Math.min(dynamicAdventurersKilledMax, Math.max(Number(e.target.value), adventurersKilledMin));
                             setAdventurersKilledMax(val);
                           }}
                           onBlur={() => onAdventurersKilledRangeChange(adventurersKilledMin, adventurersKilledMax)}
@@ -709,7 +741,7 @@ export function FiltersDrawer({
                       </div>
                     </div>
                     <div className="text-center text-[10px] text-gray-500">
-                      {adventurersKilledMin === ADVENTURERS_KILLED_MIN && adventurersKilledMax === ADVENTURERS_KILLED_MAX
+                      {adventurersKilledMin === ADVENTURERS_KILLED_MIN && adventurersKilledMax === dynamicAdventurersKilledMax
                         ? "All values"
                         : `${adventurersKilledMin} - ${adventurersKilledMax}`}
                     </div>
