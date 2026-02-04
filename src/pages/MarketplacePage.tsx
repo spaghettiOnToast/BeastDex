@@ -65,6 +65,7 @@ import { useUserTransactions } from "./marketplace/hooks/useUserTransactions";
 import { useRecentSales } from "./marketplace/hooks/useRecentSales";
 import { useTokenMap, tokenAmountToUsd } from "../hooks/useEkuboTokens";
 import { useSoldListings } from "../contexts/SoldListingsContext";
+import { useBackgroundListingValidation } from "./marketplace/hooks/useBackgroundListingValidation";
 import { ViewToggle } from "./marketplace/components/ViewToggle";
 import type { ExploreSubTab, MyActivitySubTab } from "./marketplace/types";
 
@@ -386,7 +387,16 @@ export default function MarketplacePage() {
   );
 
   // Subscribe to global purchase and offer events (from other pages like HomePage)
-  const { subscribeToPurchase, subscribeToOfferMade } = useSoldListings();
+  const { subscribeToPurchase, subscribeToOfferMade, isSold } = useSoldListings();
+
+  // Background validation: validate listings and mark stale ones as sold
+  useBackgroundListingValidation({
+    account,
+    listings: dataHook.listings,
+    isLoading: dataHook.ordersLoading,
+    isSold,
+    markAsSold: dataHook.markListingAsSold,
+  });
 
   useEffect(() => {
     // When a purchase happens from another page, refresh orders
@@ -1034,34 +1044,6 @@ export default function MarketplacePage() {
   return (
     <AppLayout topBar={<TopBar />}>
       <div className="space-y-4">
-        {/* Maintenance Banner - visible and not blurred */}
-        <div className="relative overflow-hidden rounded-xl border border-amber-500/50 bg-gradient-to-r from-amber-500/10 via-amber-600/5 to-amber-500/10 p-4 shadow-lg">
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-            <span className="text-3xl">🔧</span>
-            <div className="text-center sm:text-left">
-              <p className="text-amber-400 font-semibold text-sm sm:text-base">
-                BeastDex Marketplace is undergoing updates
-              </p>
-              <p className="text-amber-300/70 text-xs sm:text-sm mt-1">
-                The marketplace is temporarily disabled. Thank you for your patience!
-              </p>
-            </div>
-            <Button
-              asChild
-              className="bg-lsGold text-black hover:bg-lsGold/80 font-semibold text-xs sm:text-sm"
-            >
-              <a href="/">Return to Home</a>
-            </Button>
-          </div>
-        </div>
-
-        {/* Blurred/disabled content container */}
-        <div className="relative">
-          {/* Overlay to block interactions */}
-          <div className="absolute inset-0 z-40 bg-black/50 rounded-xl" />
-
-          {/* Blurred content underneath */}
-          <div className="pointer-events-none select-none blur-sm opacity-50 space-y-4">
           {/* Header Section with Stats */}
         <section className="relative overflow-hidden rounded-xl border border-gray-800/50 bg-gradient-to-br from-[#0b0b0f] via-[#0f0f13] to-[#0b0b0f] p-3 sm:p-6 shadow-2xl">
           <div className="absolute inset-0 bg-gradient-to-r from-lsGold/5 via-transparent to-[#8bff72]/5 opacity-50" />
@@ -3028,11 +3010,10 @@ export default function MarketplacePage() {
           onRankRangeChange={filtersHook.handleRankRangeChange}
           onHealthRangeChange={filtersHook.handleHealthRangeChange}
           onLevelRangeChange={filtersHook.handleLevelRangeChange}
+          onAdventurersKilledRangeChange={filtersHook.handleAdventurersKilledRangeChange}
           onResetFilters={filtersHook.handleResetFilters}
         />
 
-          </div>
-        </div>
       </div>
     </AppLayout>
   );
