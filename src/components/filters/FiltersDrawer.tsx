@@ -17,17 +17,17 @@ type FiltersDrawerProps = {
   onResetFilters: () => void;
 };
 
-// Health range constants
+// Health range constants (static - max is always 1023)
 const HEALTH_MIN = 1;
 const HEALTH_MAX = 1023;
 
-// Level range constants
+// Level range constants (dynamic max from data, fallback to 255)
 const LEVEL_MIN = 1;
 const LEVEL_MAX_DEFAULT = 255;
 
-// Adventurers Killed range constants
+// Adventurers Killed range constants (dynamic max from data, fallback to 50)
 const ADVENTURERS_KILLED_MIN = 0;
-const ADVENTURERS_KILLED_MAX_DEFAULT = 100;
+const ADVENTURERS_KILLED_MAX_DEFAULT = 50;
 
 /**
  * Helper to compute max value from available filter values
@@ -75,11 +75,11 @@ export function FiltersDrawer({
 }: FiltersDrawerProps) {
   // Compute dynamic max values from available filters (Level and Adventurers Killed only)
   const dynamicLevelMax = useMemo(
-    () => getMaxFromFilterValues(availableFilters["Level"], LEVEL_MAX_DEFAULT),
+    () => getMaxFromFilterValues(availableFilters?.["Level"], LEVEL_MAX_DEFAULT),
     [availableFilters]
   );
   const dynamicAdventurersKilledMax = useMemo(
-    () => getMaxFromFilterValues(availableFilters["Adventurers Killed"], ADVENTURERS_KILLED_MAX_DEFAULT),
+    () => getMaxFromFilterValues(availableFilters?.["Adventurers Killed"], ADVENTURERS_KILLED_MAX_DEFAULT),
     [availableFilters]
   );
 
@@ -102,7 +102,7 @@ export function FiltersDrawer({
     return ranges;
   }, [attributeFilters]);
 
-  // Health range state (static max of 1023)
+  // Health range state (static max)
   const [healthMin, setHealthMin] = useState(HEALTH_MIN);
   const [healthMax, setHealthMax] = useState(HEALTH_MAX);
   const healthFilterActive = attributeFilters["Health"]?.length > 0;
@@ -577,7 +577,7 @@ export function FiltersDrawer({
                         onClick={() => {
                           setHealthMin(HEALTH_MIN);
                           setHealthMax(HEALTH_MAX);
-                          onHealthRangeChange(HEALTH_MIN, HEALTH_MAX);
+                          onHealthRangeChange(-1, -1); // Signal to clear filter
                         }}
                         className="text-[10px] text-gray-500 hover:text-gray-300"
                       >
@@ -597,8 +597,8 @@ export function FiltersDrawer({
                           onChange={(e) => {
                             const val = Math.max(HEALTH_MIN, Math.min(Number(e.target.value), healthMax));
                             setHealthMin(val);
+                            onHealthRangeChange(val, healthMax);
                           }}
-                          onBlur={() => onHealthRangeChange(healthMin, healthMax)}
                           className="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs"
                         />
                       </div>
@@ -612,8 +612,8 @@ export function FiltersDrawer({
                           onChange={(e) => {
                             const val = Math.min(HEALTH_MAX, Math.max(Number(e.target.value), healthMin));
                             setHealthMax(val);
+                            onHealthRangeChange(healthMin, val);
                           }}
-                          onBlur={() => onHealthRangeChange(healthMin, healthMax)}
                           className="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs"
                         />
                       </div>
@@ -638,7 +638,7 @@ export function FiltersDrawer({
                         onClick={() => {
                           setLevelMin(LEVEL_MIN);
                           setLevelMax(dynamicLevelMax);
-                          onLevelRangeChange(LEVEL_MIN, dynamicLevelMax);
+                          onLevelRangeChange(-1, -1); // Signal to clear filter
                         }}
                         className="text-[10px] text-gray-500 hover:text-gray-300"
                       >
@@ -658,8 +658,8 @@ export function FiltersDrawer({
                           onChange={(e) => {
                             const val = Math.max(LEVEL_MIN, Math.min(Number(e.target.value), levelMax));
                             setLevelMin(val);
+                            onLevelRangeChange(val, levelMax);
                           }}
-                          onBlur={() => onLevelRangeChange(levelMin, levelMax)}
                           className="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs"
                         />
                       </div>
@@ -673,8 +673,8 @@ export function FiltersDrawer({
                           onChange={(e) => {
                             const val = Math.min(dynamicLevelMax, Math.max(Number(e.target.value), levelMin));
                             setLevelMax(val);
+                            onLevelRangeChange(levelMin, val);
                           }}
-                          onBlur={() => onLevelRangeChange(levelMin, levelMax)}
                           className="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs"
                         />
                       </div>
@@ -699,7 +699,7 @@ export function FiltersDrawer({
                         onClick={() => {
                           setAdventurersKilledMin(ADVENTURERS_KILLED_MIN);
                           setAdventurersKilledMax(dynamicAdventurersKilledMax);
-                          onAdventurersKilledRangeChange(ADVENTURERS_KILLED_MIN, dynamicAdventurersKilledMax);
+                          onAdventurersKilledRangeChange(-1, -1); // Signal to clear filter
                         }}
                         className="text-[10px] text-gray-500 hover:text-gray-300"
                       >
@@ -719,8 +719,8 @@ export function FiltersDrawer({
                           onChange={(e) => {
                             const val = Math.max(ADVENTURERS_KILLED_MIN, Math.min(Number(e.target.value), adventurersKilledMax));
                             setAdventurersKilledMin(val);
+                            onAdventurersKilledRangeChange(val, adventurersKilledMax);
                           }}
-                          onBlur={() => onAdventurersKilledRangeChange(adventurersKilledMin, adventurersKilledMax)}
                           className="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs"
                         />
                       </div>
@@ -734,8 +734,8 @@ export function FiltersDrawer({
                           onChange={(e) => {
                             const val = Math.min(dynamicAdventurersKilledMax, Math.max(Number(e.target.value), adventurersKilledMin));
                             setAdventurersKilledMax(val);
+                            onAdventurersKilledRangeChange(adventurersKilledMin, val);
                           }}
-                          onBlur={() => onAdventurersKilledRangeChange(adventurersKilledMin, adventurersKilledMax)}
                           className="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs"
                         />
                       </div>

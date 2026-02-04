@@ -608,7 +608,7 @@ export function useMarketplaceActions({
           price.toString(), // price: u128 (single felt!)
           currency,
           expiration.toString(), // expiration: u64
-          "0", // royalties: bool = false
+          ROYALTIES_ENABLED ? "1" : "0", // royalties: bool - creator royalties (5%)
         ],
       };
 
@@ -688,7 +688,7 @@ export function useMarketplaceActions({
             priceBigInt.toString(),
             listing.currency,
             listing.expiration.toString(),
-            "0", // royalties: bool = false
+            ROYALTIES_ENABLED ? "1" : "0", // royalties: bool - creator royalties (5%)
           ],
         };
 
@@ -750,7 +750,7 @@ export function useMarketplaceActions({
           newPrice.toString(), // price: u128 (single felt!)
           currency,
           expiration.toString(), // expiration: u64
-          "0", // royalties: bool = false
+          ROYALTIES_ENABLED ? "1" : "0", // royalties: bool - creator royalties (5%)
         ],
       };
 

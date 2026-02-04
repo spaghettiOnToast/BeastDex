@@ -393,12 +393,13 @@ export function useMarketplaceFilters({
 
   /**
    * Handle health range filter change
+   * Pass negative values to signal "clear filter"
    */
   const handleHealthRangeChange = useCallback((min: number, max: number) => {
     setAttributeFilters((prev) => {
       const next = { ...prev } as BeastAttributeFilters;
-      // If full range, remove the filter
-      if (min <= 1 && max >= 1023) {
+      // Negative values signal to clear the filter
+      if (min < 0 || max < 0 || (min <= 1 && max >= 1023)) {
         delete next["Health"];
       } else {
         // Generate array of health values in the range
@@ -414,12 +415,13 @@ export function useMarketplaceFilters({
 
   /**
    * Handle level range filter change
+   * Pass negative values to signal "clear filter"
    */
   const handleLevelRangeChange = useCallback((min: number, max: number) => {
     setAttributeFilters((prev) => {
       const next = { ...prev } as BeastAttributeFilters;
-      // If full range, remove the filter
-      if (min <= 1 && max >= 255) {
+      // Negative values signal to clear the filter
+      if (min < 0 || max < 0) {
         delete next["Level"];
       } else {
         // Generate array of level values in the range
@@ -435,12 +437,13 @@ export function useMarketplaceFilters({
 
   /**
    * Handle adventurers killed range filter change
+   * Pass negative values to signal "clear filter"
    */
   const handleAdventurersKilledRangeChange = useCallback((min: number, max: number) => {
     setAttributeFilters((prev) => {
       const next = { ...prev } as BeastAttributeFilters;
-      // If full range (0-100), remove the filter
-      if (min <= 0 && max >= 100) {
+      // Negative values signal to clear the filter
+      if (min < 0 || max < 0) {
         delete next["Adventurers Killed"];
       } else {
         // Generate array of values in the range
