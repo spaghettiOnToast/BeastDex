@@ -1,4 +1,14 @@
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from "react";
+
+// localStorage key for persisting sold listing IDs
+const STORAGE_KEY = "beastdex:sold-listings";
+// Max age for persisted sold IDs (24 hours) - after this, re-validate
+const MAX_PERSISTENCE_AGE_MS = 24 * 60 * 60 * 1000;
+
+type PersistedSoldData = {
+  ids: string[];
+  timestamp: number;
+};
 
 type SoldListingsContextValue = {
   /** Set of listing IDs that have been sold (optimistic) */
@@ -21,10 +31,53 @@ type SoldListingsContextValue = {
 
 const SoldListingsContext = createContext<SoldListingsContextValue | null>(null);
 
+/**
+ * Load persisted sold IDs from localStorage
+ */
+function loadPersistedSoldIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return new Set();
+
+    const data: PersistedSoldData = JSON.parse(raw);
+
+    // Check if data is too old
+    if (Date.now() - data.timestamp > MAX_PERSISTENCE_AGE_MS) {
+      localStorage.removeItem(STORAGE_KEY);
+      return new Set();
+    }
+
+    return new Set(data.ids);
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Save sold IDs to localStorage
+ */
+function persistSoldIds(ids: Set<string>): void {
+  try {
+    const data: PersistedSoldData = {
+      ids: [...ids],
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // Ignore storage errors (quota exceeded, etc.)
+  }
+}
+
 export function SoldListingsProvider({ children }: { children: ReactNode }) {
-  const [soldListingIds, setSoldListingIds] = useState<Set<string>>(new Set());
+  // Initialize from localStorage
+  const [soldListingIds, setSoldListingIds] = useState<Set<string>>(() => loadPersistedSoldIds());
   const offerSubscribersRef = useRef<Set<() => void>>(new Set());
   const purchaseSubscribersRef = useRef<Set<() => void>>(new Set());
+
+  // Persist to localStorage when sold IDs change
+  useEffect(() => {
+    persistSoldIds(soldListingIds);
+  }, [soldListingIds]);
 
   const markAsSold = useCallback((listingId: string) => {
     setSoldListingIds((prev) => new Set([...prev, listingId]));

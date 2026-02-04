@@ -46,7 +46,7 @@ export function useMarketplaceData(address: string | undefined) {
         // If neither has a timestamp, fall back to orderId (higher = more recent)
         return (b.orderId ?? 0) - (a.orderId ?? 0);
       })
-      .slice(0, 50);
+      .slice(0, 60);
   }, [listingsHook.listings]);
 
   return {

@@ -1772,9 +1772,12 @@ export default function MarketplacePage() {
                               {from.slice(0, 6)}...{from.slice(-4)} → {to.slice(0, 6)}...{to.slice(-4)}
                             </p>
                           </div>
-                          {/* Date */}
+                          {/* Time & Date */}
                           <div className="flex-shrink-0 text-right">
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-gray-400">
+                              {formatRelativeTime(time)}
+                            </p>
+                            <p className="text-[10px] text-gray-600">
                               {new Date(time * 1000).toLocaleDateString()}
                             </p>
                           </div>
