@@ -16,6 +16,7 @@ import { getPaymentTokenByAddress, BEASTS_COLLECTION_ADDRESS, CLIENT_FEE_BP } fr
 import { toBigIntSafe } from "../../utils/bigint";
 import { validateListingOwnership, getProvider } from "../../services/marketplace/approvals";
 import { useEkuboTokens, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
+import { useSoldListings } from "../../contexts/SoldListingsContext";
 
 type Props = {
   open: boolean;
@@ -41,6 +42,7 @@ export default function PurchaseCartDialog({
   const [isValidating, setIsValidating] = useState(false);
   const [hasValidated, setHasValidated] = useState(false);
   const { tokens } = useEkuboTokens();
+  const { markAsSold } = useSoldListings();
 
   // Build a map of token address -> token data for USD calculations
   const tokenDataMap = useMemo(() => {
@@ -97,6 +99,8 @@ export default function PurchaseCartDialog({
       for (const result of results) {
         if (!result.isValid) {
           invalid.add(result.listingId);
+          // Mark as sold globally so it's hidden from listings tab
+          markAsSold(result.listingId);
         }
       }
     } catch (error) {
@@ -106,7 +110,7 @@ export default function PurchaseCartDialog({
     setInvalidListingIds(invalid);
     setIsValidating(false);
     setHasValidated(true);
-  }, [account, listings]);
+  }, [account, listings, markAsSold]);
 
   // Validate when dialog opens
   useEffect(() => {

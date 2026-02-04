@@ -42,7 +42,9 @@ export function isUserRejection(error: unknown): boolean {
     message.includes("closed by user") ||
     message.includes("dismissed") ||
     message.includes("modal closed") ||
-    message.includes("dialog closed")
+    message.includes("dialog closed") ||
+    message.includes("timed out") ||
+    message.includes("wallet may have been closed")
   ) {
     return true;
   }

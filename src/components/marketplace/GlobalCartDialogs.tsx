@@ -111,7 +111,7 @@ export function GlobalCartDialogs() {
               tokenIdU256[1],
               tokenIdU256[0], // asset_id (same as token_id for ERC721)
               tokenIdU256[1],
-              (listing.quantity ?? 1).toString(),
+              "0", // quantity: u128 = 0 for ERC721 (non-fungible)
               ROYALTIES_ENABLED ? "1" : "0",
               CLIENT_FEE_BP.toString(),
               CLIENT_FEE_RECEIVER,
@@ -119,8 +119,20 @@ export function GlobalCartDialogs() {
           });
         }
 
-        // Execute multicall
-        const result = await account.execute(calls);
+        // Execute multicall with timeout to prevent hanging if wallet popup is closed
+        const executeWithTimeout = <T,>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+          return Promise.race([
+            promise,
+            new Promise<T>((_, reject) =>
+              setTimeout(() => reject(new Error("Transaction timed out - wallet may have been closed")), timeoutMs)
+            ),
+          ]);
+        };
+
+        const result = await executeWithTimeout(account.execute(calls), 120000); // 2 minute timeout
+        if (!result?.transaction_hash) {
+          throw new Error("Transaction was not submitted");
+        }
         await provider.waitForTransaction(result.transaction_hash);
 
         toast.dismiss(toastId);
@@ -170,7 +182,13 @@ export function GlobalCartDialogs() {
       {purchaseDialogOpen && (
         <PurchaseCartDialog
           open={purchaseDialogOpen}
-          onOpenChange={(open) => !open && closePurchaseDialog()}
+          onOpenChange={(open) => {
+            if (!open) {
+              // Allow closing even while processing (escape hatch for stuck state)
+              setIsPurchasing(false);
+              closePurchaseDialog();
+            }
+          }}
           listings={globalCart.purchaseCart}
           onRemove={globalCart.removeFromPurchaseCart}
           onClearAll={globalCart.clearPurchaseCart}

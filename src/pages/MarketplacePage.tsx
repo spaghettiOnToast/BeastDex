@@ -2819,7 +2819,13 @@ export default function MarketplacePage() {
           {purchaseCartOpen && (
             <PurchaseCartDialog
               open={purchaseCartOpen}
-              onOpenChange={setPurchaseCartOpen}
+              onOpenChange={(open) => {
+                if (!open) {
+                  // Reset stuck batch state when closing dialog (escape hatch)
+                  actionsHook.resetBatchState();
+                }
+                setPurchaseCartOpen(open);
+              }}
               listings={globalCart.purchaseCart}
               onRemove={globalCart.removeFromPurchaseCart}
               onClearAll={globalCart.clearPurchaseCart}

@@ -368,7 +368,7 @@ function HomePage() {
         listing.orderId,
         BEASTS_COLLECTION_ADDRESS,
         listing.tokenId,
-        1, // quantity
+        0, // quantity: 0 for ERC721 (non-fungible)
         ROYALTIES_ENABLED,
         listing.paymentToken || "0x0",
         listing.price,

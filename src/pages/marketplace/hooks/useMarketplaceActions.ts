@@ -11,6 +11,7 @@ import {
   validateListingOwnership,
   getProvider,
   buildMarketplaceExecuteCall,
+  getErc20ApprovalCallIfNeeded,
 } from "../../../services/marketplace/approvals";
 import {
   BEASTS_COLLECTION_ADDRESS,
@@ -118,6 +119,10 @@ export function useMarketplaceActions({
 
         if (!isValidListing) {
           toast.error("This listing is no longer valid. The seller may not own the token anymore.", { id: toastId });
+          // Mark as sold to hide from listings (stale indexer data)
+          if (markListingAsSold) {
+            markListingAsSold(listing.listingId);
+          }
           setBuyingListingId(null);
           return;
         }
@@ -156,7 +161,7 @@ export function useMarketplaceActions({
           orderId,
           BEASTS_COLLECTION_ADDRESS,
           tokenIdBigInt,
-          BigInt(listing.quantity ?? 1),
+          0n, // quantity: 0 for ERC721 (non-fungible)
           ROYALTIES_ENABLED, // creator royalties (5%)
           currency,
           priceBigInt,
@@ -202,7 +207,7 @@ export function useMarketplaceActions({
   );
 
   /**
-   * Handle batch purchase of multiple listings
+   * Handle batch purchase of multiple listings in a SINGLE multicall transaction
    */
   const handlePurchaseAll = useCallback(
     async (
@@ -213,100 +218,166 @@ export function useMarketplaceActions({
 
       setPurchasingBatch(true);
       const toastId = toast.loading(
-        `Processing ${purchaseCart.length} purchases...`
+        `Purchasing ${purchaseCart.length} beast${purchaseCart.length > 1 ? "s" : ""}...`
       );
-      let successCount = 0;
-      let failCount = 0;
 
       try {
         const provider = getProvider(account);
+        const calls: Array<{
+          contractAddress: string;
+          entrypoint: string;
+          calldata: string[];
+        }> = [];
+        const validListings: Listing[] = [];
+        const invalidListingIds: string[] = [];
 
+        // Step 1: Validate all listings and collect valid ones
+        toast.loading("Validating listings...", { id: toastId });
         for (const listing of purchaseCart) {
-          try {
-            if (!listing.active) {
-              failCount++;
-              continue;
+          if (!listing.active) {
+            invalidListingIds.push(listing.listingId);
+            continue;
+          }
+
+          const tokenIdBigInt = toBigInt(listing.tokenId);
+          const isValidListing = await validateListingOwnership(
+            provider,
+            BEASTS_COLLECTION_ADDRESS,
+            tokenIdBigInt,
+            listing.seller
+          );
+
+          if (!isValidListing) {
+            // Mark as sold to hide from listings (stale indexer data)
+            if (markListingAsSold) {
+              markListingAsSold(listing.listingId);
             }
+            invalidListingIds.push(listing.listingId);
+            continue;
+          }
 
-            const tokenIdBigInt = toBigInt(listing.tokenId);
-            const priceBigInt = toBigInt(listing.price);
-            const currency = listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
-            const orderId = toBigInt(listing.orderId);
+          validListings.push(listing);
+        }
 
-            // Validate listing ownership
-            const isValidListing = await validateListingOwnership(
-              provider,
-              BEASTS_COLLECTION_ADDRESS,
-              tokenIdBigInt,
-              listing.seller
-            );
+        if (validListings.length === 0) {
+          toast.error("No valid listings to purchase", { id: toastId });
+          return false;
+        }
 
-            if (!isValidListing) {
-              failCount++;
-              continue;
-            }
+        // Update toast with actual count after validation
+        if (invalidListingIds.length > 0) {
+          toast.loading(
+            `Purchasing ${validListings.length} beast${validListings.length > 1 ? "s" : ""} (${invalidListingIds.length} unavailable)...`,
+            { id: toastId }
+          );
+        } else {
+          toast.loading(
+            `Purchasing ${validListings.length} beast${validListings.length > 1 ? "s" : ""}...`,
+            { id: toastId }
+          );
+        }
 
-            // Calculate total amount including platform fee
-            const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
-            const totalAmount = priceBigInt + feeAmount;
+        // Step 2: Group listings by payment token and calculate totals for approvals
+        const listingsByToken = new Map<string, Listing[]>();
+        for (const listing of validListings) {
+          const tokenAddr = listing.paymentToken || DEFAULT_PAYMENT_TOKEN.address;
+          if (!listingsByToken.has(tokenAddr)) {
+            listingsByToken.set(tokenAddr, []);
+          }
+          listingsByToken.get(tokenAddr)!.push(listing);
+        }
 
-            // Check balance
-            const { sufficient } = await checkSufficientBalance(
-              account,
-              currency,
-              totalAmount
-            );
-            if (!sufficient) {
-              failCount++;
-              continue;
-            }
+        // Step 3: Add approval calls for each token
+        for (const [tokenAddr, tokenListings] of listingsByToken) {
+          let totalNeeded = 0n;
+          for (const listing of tokenListings) {
+            const price = toBigInt(listing.price);
+            const fee = (price * BigInt(CLIENT_FEE_BP)) / 10000n;
+            totalNeeded += price + fee;
+          }
 
-            // Execute purchase with approval
-            await executePurchaseWithApproval(
-              account,
-              orderId,
-              BEASTS_COLLECTION_ADDRESS,
-              tokenIdBigInt,
-              BigInt(listing.quantity ?? 1),
-              ROYALTIES_ENABLED, // creator royalties (5%)
-              currency,
-              priceBigInt,
-              BigInt(CLIENT_FEE_BP),
-              CLIENT_FEE_RECEIVER
-            );
-
-            successCount++;
-            handleRemoveFromPurchaseCart(listing.listingId);
-          } catch {
-            failCount++;
+          // Get approval call if needed
+          const approvalCall = await getErc20ApprovalCallIfNeeded(
+            account,
+            tokenAddr,
+            totalNeeded.toString()
+          );
+          if (approvalCall) {
+            calls.push(approvalCall);
           }
         }
 
-        if (successCount > 0) {
-          toast.success(
-            `Successfully purchased ${successCount} beast${successCount > 1 ? "s" : ""}!`,
-            { id: toastId }
-          );
-          await refetchOrders();
-          await reloadUserBeasts();
-          // Poll for sales updates to refresh activity/sold tabs
-          void pollForSalesUpdates();
-        } else {
-          toast.error("Failed to purchase any beasts", { id: toastId });
+        // Step 4: Build execute calls for each valid listing
+        for (const listing of validListings) {
+          const tokenIdBigInt = toBigInt(listing.tokenId);
+          const tokenIdU256 = toUint256Hex(tokenIdBigInt);
+
+          calls.push({
+            contractAddress: MARKETPLACE_ADDRESS,
+            entrypoint: "execute",
+            calldata: [
+              listing.orderId?.toString() || "0",
+              BEASTS_COLLECTION_ADDRESS,
+              tokenIdU256[0],
+              tokenIdU256[1],
+              tokenIdU256[0], // asset_id (same as token_id for ERC721)
+              tokenIdU256[1],
+              "0", // quantity: 0 for ERC721 (non-fungible)
+              ROYALTIES_ENABLED ? "1" : "0",
+              CLIENT_FEE_BP.toString(),
+              CLIENT_FEE_RECEIVER,
+            ],
+          });
         }
 
-        if (failCount > 0) {
+        // Step 5: Execute ALL calls in ONE multicall transaction
+        toast.loading("Confirm transaction in wallet...", { id: toastId });
+
+        // Execute with timeout to prevent hanging if wallet popup is closed
+        const executeWithTimeout = <T,>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+          return Promise.race([
+            promise,
+            new Promise<T>((_, reject) =>
+              setTimeout(() => reject(new Error("Transaction timed out - wallet may have been closed")), timeoutMs)
+            ),
+          ]);
+        };
+
+        const result = await executeWithTimeout(account.execute(calls), 120000);
+        if (!result?.transaction_hash) {
+          throw new Error("Transaction was not submitted");
+        }
+
+        toast.loading("Waiting for confirmation...", { id: toastId });
+        await provider.waitForTransaction(result.transaction_hash);
+
+        // Success - clear all valid listings from cart
+        for (const listing of validListings) {
+          handleRemoveFromPurchaseCart(listing.listingId);
+        }
+
+        toast.success(
+          `Successfully purchased ${validListings.length} beast${validListings.length > 1 ? "s" : ""}!`,
+          { id: toastId }
+        );
+
+        await refetchOrders();
+        await reloadUserBeasts();
+        void pollForSalesUpdates();
+
+        if (invalidListingIds.length > 0) {
           toast.warning(
-            `${failCount} purchase${failCount > 1 ? "s" : ""} failed or skipped`
+            `${invalidListingIds.length} listing${invalidListingIds.length > 1 ? "s" : ""} were unavailable and skipped`
           );
         }
 
-        return successCount > 0 && failCount === 0;
+        return true;
       } catch (error) {
         if (isUserRejection(error)) {
-          toast.info("Batch purchase cancelled", { id: toastId });
+          toast.info("Purchase cancelled", { id: toastId });
         } else {
           const errorMessage = (error as Error).message || "Batch purchase failed";
+          console.error("Batch purchase error:", error);
           toast.error(errorMessage, { id: toastId });
         }
         return false;
@@ -314,7 +385,7 @@ export function useMarketplaceActions({
         setPurchasingBatch(false);
       }
     },
-    [account, purchasingBatch, refetchOrders, reloadUserBeasts, pollForSalesUpdates]
+    [account, purchasingBatch, refetchOrders, reloadUserBeasts, pollForSalesUpdates, markListingAsSold]
   );
 
   /**
@@ -362,7 +433,7 @@ export function useMarketplaceActions({
           orderId,
           BEASTS_COLLECTION_ADDRESS,
           tokenIdBigInt,
-          BigInt(order.quantity ?? 1),
+          0n, // quantity: 0 for ERC721 (non-fungible)
           ROYALTIES_ENABLED, // creator royalties (5%)
           order.currency,
           toBigInt(order.price),
@@ -776,7 +847,7 @@ export function useMarketplaceActions({
                 orderId,
                 BEASTS_COLLECTION_ADDRESS,
                 tokenIdBigInt,
-                BigInt(listing.quantity ?? 1),
+                0n, // quantity: 0 for ERC721 (non-fungible)
                 ROYALTIES_ENABLED, // creator royalties (5%)
                 currency,
                 priceBigInt,
@@ -814,6 +885,14 @@ export function useMarketplaceActions({
     [account, refetchOrders, reloadUserBeasts]
   );
 
+  // Reset function to clear stuck batch states (escape hatch)
+  const resetBatchState = useCallback(() => {
+    setPurchasingBatch(false);
+    setListingBatch(false);
+    setBuyingListingId(null);
+    setAcceptingOfferId(null);
+  }, []);
+
   return {
     // State
     buyingListingId,
@@ -827,6 +906,7 @@ export function useMarketplaceActions({
     handlePurchaseAll,
     handleAcceptOffer,
     handleExecuteUnifiedCart,
+    resetBatchState,
 
     // Direct marketplace actions
     cancel,

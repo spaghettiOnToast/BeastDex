@@ -499,19 +499,31 @@ export async function executePurchaseWithApproval(
   );
   calls.push(purchaseCall);
 
-  // Execute all calls in one transaction
-  const result = await account.execute(calls);
+  // Execute with timeout to prevent hanging if wallet popup is closed
+  const executeWithTimeout = <T,>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error("Transaction timed out - wallet may have been closed")), timeoutMs)
+      ),
+    ]);
+  };
 
-  // Wait for transaction confirmation
-  if (result?.transaction_hash) {
-    const provider = getProvider(account);
-    await provider.waitForTransaction(result.transaction_hash, {
-      retryInterval: 2000,
-    });
+  // Execute all calls in one transaction (2 minute timeout)
+  const result = await executeWithTimeout(account.execute(calls), 120000);
+
+  if (!result?.transaction_hash) {
+    throw new Error("Transaction was not submitted");
   }
 
+  // Wait for transaction confirmation
+  const provider = getProvider(account);
+  await provider.waitForTransaction(result.transaction_hash, {
+    retryInterval: 2000,
+  });
+
   return {
-    transaction_hash: result.transaction_hash || "",
+    transaction_hash: result.transaction_hash,
   };
 }
 
