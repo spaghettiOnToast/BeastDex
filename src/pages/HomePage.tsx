@@ -273,6 +273,19 @@ function HomePage() {
     });
   }, []);
 
+  const handleMultiFilterChange = useCallback((trait: string, values: string[]) => {
+    setPage(1);
+    setAttributeFilters((prev) => {
+      const newFilters = { ...prev };
+      if (values && values.length > 0) {
+        newFilters[trait] = values;
+      } else {
+        delete newFilters[trait];
+      }
+      return newFilters;
+    });
+  }, []);
+
   const handleResetFilters = useCallback(() => {
     setPage(1);
     setAttributeFilters({});
@@ -578,6 +591,7 @@ function HomePage() {
         filtersLoading={filtersLoading}
         filtersError={filtersError}
         onFilterChange={handleFilterChange}
+        onMultiFilterChange={handleMultiFilterChange}
         onResetFilters={handleResetFilters}
       />
     </AppLayout>
