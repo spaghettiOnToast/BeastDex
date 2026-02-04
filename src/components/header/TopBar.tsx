@@ -32,13 +32,12 @@ export default function TopBar({ filtersControl, onLogoClick }: Props) {
       {/* Desktop Navigation - hidden on mobile */}
       <div className="hidden md:flex items-center gap-2 lg:gap-4 flex-shrink-0">
         <Button
-          asChild
-          className="bg-[#0ef] text-black text-xs font-semibold uppercase tracking-wide hover:bg-[#0bc] hover:text-black h-9 px-3 lg:px-4 lg:min-w-[130px]"
+          disabled
+          className="bg-gray-600 text-gray-400 text-xs font-semibold uppercase tracking-wide cursor-not-allowed h-9 px-3 lg:px-4 lg:min-w-[130px]"
+          title="Marketplace temporarily disabled"
         >
-          <Link to="/marketplace">
-            <Store className="h-4 w-4" />
-            <span className="hidden lg:inline">Marketplace</span>
-          </Link>
+          <Store className="h-4 w-4" />
+          <span className="hidden lg:inline">Marketplace</span>
         </Button>
         <Button
           asChild
