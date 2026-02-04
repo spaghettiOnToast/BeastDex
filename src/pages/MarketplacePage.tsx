@@ -1034,7 +1034,35 @@ export default function MarketplacePage() {
   return (
     <AppLayout topBar={<TopBar />}>
       <div className="space-y-4">
-        {/* Header Section with Stats */}
+        {/* Maintenance Banner - visible and not blurred */}
+        <div className="relative overflow-hidden rounded-xl border border-amber-500/50 bg-gradient-to-r from-amber-500/10 via-amber-600/5 to-amber-500/10 p-4 shadow-lg">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+            <span className="text-3xl">🔧</span>
+            <div className="text-center sm:text-left">
+              <p className="text-amber-400 font-semibold text-sm sm:text-base">
+                BeastDex Marketplace is undergoing updates
+              </p>
+              <p className="text-amber-300/70 text-xs sm:text-sm mt-1">
+                The marketplace is temporarily disabled. Thank you for your patience!
+              </p>
+            </div>
+            <Button
+              asChild
+              className="bg-lsGold text-black hover:bg-lsGold/80 font-semibold text-xs sm:text-sm"
+            >
+              <a href="/">Return to Home</a>
+            </Button>
+          </div>
+        </div>
+
+        {/* Blurred/disabled content container */}
+        <div className="relative">
+          {/* Overlay to block interactions */}
+          <div className="absolute inset-0 z-40 bg-black/50 rounded-xl" />
+
+          {/* Blurred content underneath */}
+          <div className="pointer-events-none select-none blur-sm opacity-50 space-y-4">
+          {/* Header Section with Stats */}
         <section className="relative overflow-hidden rounded-xl border border-gray-800/50 bg-gradient-to-br from-[#0b0b0f] via-[#0f0f13] to-[#0b0b0f] p-3 sm:p-6 shadow-2xl">
           <div className="absolute inset-0 bg-gradient-to-r from-lsGold/5 via-transparent to-[#8bff72]/5 opacity-50" />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(208,201,141,0.1),transparent_50%)]" />
@@ -3003,6 +3031,8 @@ export default function MarketplacePage() {
           onResetFilters={filtersHook.handleResetFilters}
         />
 
+          </div>
+        </div>
       </div>
     </AppLayout>
   );

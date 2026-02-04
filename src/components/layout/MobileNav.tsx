@@ -1,8 +1,16 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, Trophy, Home, Store } from "lucide-react";
+import { Menu, X, Trophy, Home, Store, type LucideIcon } from "lucide-react";
 import { Button } from "../ui/button";
+
+type NavItem = {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  color?: string;
+  disabled?: boolean;
+};
 
 type Props = {
   onNavigate?: () => void;
@@ -17,9 +25,9 @@ export function MobileNav({ onNavigate }: Props) {
     onNavigate?.();
   };
 
-  const navItems = [
+  const navItems: NavItem[] = [
     { to: "/", label: "Home", icon: Home },
-    { to: "/marketplace", label: "Marketplace", icon: Store, color: "text-[#0ef]" },
+    { to: "/marketplace", label: "Marketplace", icon: Store, color: "text-[#0ef]", disabled: true },
     { to: "/leaderboard", label: "Leaderboard", icon: Trophy, color: "text-[#39ff14]" },
   ];
 
@@ -56,6 +64,19 @@ export function MobileNav({ onNavigate }: Props) {
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.to;
+
+            if (item.disabled) {
+              return (
+                <div
+                  key={item.to}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg cursor-not-allowed opacity-50"
+                  title="Temporarily disabled"
+                >
+                  <Icon className="h-5 w-5 text-gray-500" />
+                  <span className="font-medium text-gray-500">{item.label}</span>
+                </div>
+              );
+            }
 
             return (
               <Link
