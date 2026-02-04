@@ -8,6 +8,7 @@ import {
   BEASTS_COLLECTION_ADDRESS,
   CLIENT_FEE_BP,
   CLIENT_FEE_RECEIVER,
+  ROYALTIES_ENABLED,
 } from "../../services/marketplace/constants";
 import { getErc20ApprovalCallIfNeeded, getProvider } from "../../services/marketplace/approvals";
 import { toBigIntSafe } from "../../utils/bigint";
@@ -95,29 +96,25 @@ export function GlobalCartDialogs() {
           }
         }
 
-        // Build buy calls for each listing
+        // Build execute calls for each listing
         for (const listing of listings) {
           const tokenIdBigInt = BigInt(listing.tokenId);
           const tokenIdU256 = toUint256Hex(tokenIdBigInt);
-          const priceBigInt = toBigIntSafe(listing.price);
-          const priceU256 = toUint256Hex(priceBigInt);
-          const fee = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
-          const feeU256 = toUint256Hex(fee);
 
           calls.push({
             contractAddress: MARKETPLACE_ADDRESS,
-            entrypoint: "buy",
+            entrypoint: "execute",
             calldata: [
               listing.orderId?.toString() || "0",
               BEASTS_COLLECTION_ADDRESS,
               tokenIdU256[0],
               tokenIdU256[1],
-              listing.paymentToken || "0x0",
-              priceU256[0],
-              priceU256[1],
+              tokenIdU256[0], // asset_id (same as token_id for ERC721)
+              tokenIdU256[1],
+              (listing.quantity ?? 1).toString(),
+              ROYALTIES_ENABLED ? "1" : "0",
+              CLIENT_FEE_BP.toString(),
               CLIENT_FEE_RECEIVER,
-              feeU256[0],
-              feeU256[1],
             ],
           });
         }
