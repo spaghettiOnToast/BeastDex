@@ -121,11 +121,16 @@ export function useUserTransactions({ address, listings }: UseUserTransactionsPr
       }
     });
 
-    // Sort by recency: timestamp descending, then orderId descending for items without timestamp
+    // Sort by recency: timestamp descending, with orderId as tiebreaker for stable sort
     result.sort((a, b) => {
       // Both have timestamps - sort by timestamp descending
       if (a.timestamp !== 0 && b.timestamp !== 0) {
-        return b.timestamp - a.timestamp;
+        const timeDiff = b.timestamp - a.timestamp;
+        // If timestamps are equal, use orderId as tiebreaker for stable sort
+        if (timeDiff === 0) {
+          return (b.orderId ?? 0) - (a.orderId ?? 0);
+        }
+        return timeDiff;
       }
       // Both have no timestamp - use orderId as proxy (higher = more recent)
       if (a.timestamp === 0 && b.timestamp === 0) {

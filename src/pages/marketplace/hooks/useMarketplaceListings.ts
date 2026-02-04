@@ -44,8 +44,8 @@ export function useMarketplaceListings(): UseMarketplaceListingsResult {
       clearStaleIds(result.map((l) => l.listingId));
       return result;
     },
-    staleTime: 60_000, // Consider data fresh for 1 minute
-    gcTime: 5 * 60_000, // Keep in cache for 5 minutes
+    staleTime: 30_000, // Consider data fresh for 30 seconds (reduced for fresher data)
+    gcTime: 3 * 60_000, // Keep in cache for 3 minutes
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     retry: 2,

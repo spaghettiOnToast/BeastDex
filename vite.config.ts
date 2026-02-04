@@ -63,6 +63,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/torii/, ""),
       },
+      "/arcade": {
+        target: "https://api.cartridge.gg/x/arcade-main/torii",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/arcade/, ""),
+      },
       "/summit-torii": {
         target: "https://api.cartridge.gg/x/pg-mainnet-10/torii",
         changeOrigin: true,

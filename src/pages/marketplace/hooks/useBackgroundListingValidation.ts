@@ -2,10 +2,11 @@ import { useEffect, useRef, useCallback } from "react";
 import type { AccountInterface } from "starknet";
 import type { Listing } from "../../../services/marketplace/types";
 import { validateListingOwnership, getProvider } from "../../../services/marketplace/approvals";
+import { batchCheckOrderStatuses } from "../../../services/marketplace/arcadeSqlClient";
 import { BEASTS_COLLECTION_ADDRESS } from "../../../services/marketplace/constants";
 
 // How often to re-validate all listings (in ms)
-const VALIDATION_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const VALIDATION_INTERVAL = 3 * 60 * 1000; // 3 minutes (reduced from 5)
 
 interface UseBackgroundListingValidationProps {
   account: AccountInterface | undefined;
@@ -37,8 +38,8 @@ export function useBackgroundListingValidation({
     if (isValidatingRef.current) return; // Prevent concurrent runs
 
     const provider = getProvider(account);
-    const BATCH_SIZE = 10; // Validate 10 at a time to avoid overwhelming RPC
-    const BATCH_DELAY = 500; // 500ms between batches
+    const OWNERSHIP_BATCH_SIZE = 10; // Validate 10 at a time to avoid overwhelming RPC
+    const BATCH_DELAY = 300; // 300ms between batches
 
     // On periodic revalidation, clear the validated set to re-check everything
     if (forceRevalidate) {
@@ -59,48 +60,81 @@ export function useBackgroundListingValidation({
     toValidate.forEach((l) => validatedRef.current.add(l.listingId));
 
     let invalidCount = 0;
+    let statusInvalidCount = 0;
+    let ownershipInvalidCount = 0;
 
     try {
-      // Process in batches
-      for (let i = 0; i < toValidate.length; i += BATCH_SIZE) {
-        const batch = toValidate.slice(i, i + BATCH_SIZE);
+      // STEP 1: Fast batch check of order statuses via arcade-main
+      // This catches cancelled/executed orders that pg-beasts hasn't synced yet
+      const orderIds = toValidate.map((l) => l.listingId);
+      console.log(`[BackgroundValidation] Checking order statuses for ${orderIds.length} listings...`);
 
-        // Validate batch in parallel
-        const results = await Promise.all(
-          batch.map(async (listing) => {
-            try {
-              const isValid = await validateListingOwnership(
-                provider,
-                BEASTS_COLLECTION_ADDRESS,
-                BigInt(listing.tokenId),
-                listing.seller
-              );
-              return { listingId: listing.listingId, isValid };
-            } catch (err) {
-              // On error, assume valid (don't hide listing due to RPC issues)
-              console.warn(`[BackgroundValidation] Error validating ${listing.listingId}:`, err);
-              return { listingId: listing.listingId, isValid: true };
-            }
-          })
-        );
+      const statusMap = await batchCheckOrderStatuses(orderIds);
 
-        // Mark invalid listings as sold
-        for (const result of results) {
-          if (!result.isValid) {
-            console.log(`[BackgroundValidation] Marking ${result.listingId} as sold (seller no longer owns)`);
-            markAsSold(result.listingId);
-            invalidCount++;
-          }
+      // Filter out listings with inactive order status
+      const stillActiveListings: Listing[] = [];
+      for (const listing of toValidate) {
+        const isActive = statusMap.get(listing.listingId);
+        if (isActive === false) {
+          console.log(`[BackgroundValidation] Marking ${listing.listingId} as sold (order status inactive)`);
+          markAsSold(listing.listingId);
+          invalidCount++;
+          statusInvalidCount++;
+        } else {
+          stillActiveListings.push(listing);
         }
+      }
 
-        // Small delay between batches to avoid rate limiting
-        if (i + BATCH_SIZE < toValidate.length) {
-          await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY));
+      if (statusInvalidCount > 0) {
+        console.log(`[BackgroundValidation] Found ${statusInvalidCount} inactive orders via status check`);
+      }
+
+      // STEP 2: Ownership validation for remaining active listings
+      // This catches cases where seller transferred NFT without cancelling
+      if (stillActiveListings.length > 0) {
+        console.log(`[BackgroundValidation] Checking ownership for ${stillActiveListings.length} active listings...`);
+
+        for (let i = 0; i < stillActiveListings.length; i += OWNERSHIP_BATCH_SIZE) {
+          const batch = stillActiveListings.slice(i, i + OWNERSHIP_BATCH_SIZE);
+
+          // Validate batch in parallel
+          const results = await Promise.all(
+            batch.map(async (listing) => {
+              try {
+                const isValid = await validateListingOwnership(
+                  provider,
+                  BEASTS_COLLECTION_ADDRESS,
+                  BigInt(listing.tokenId),
+                  listing.seller
+                );
+                return { listingId: listing.listingId, isValid };
+              } catch (err) {
+                // On error, assume valid (don't hide listing due to RPC issues)
+                console.warn(`[BackgroundValidation] Error validating ${listing.listingId}:`, err);
+                return { listingId: listing.listingId, isValid: true };
+              }
+            })
+          );
+
+          // Mark invalid listings as sold
+          for (const result of results) {
+            if (!result.isValid) {
+              console.log(`[BackgroundValidation] Marking ${result.listingId} as sold (seller no longer owns)`);
+              markAsSold(result.listingId);
+              invalidCount++;
+              ownershipInvalidCount++;
+            }
+          }
+
+          // Small delay between batches to avoid rate limiting
+          if (i + OWNERSHIP_BATCH_SIZE < stillActiveListings.length) {
+            await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY));
+          }
         }
       }
 
       if (invalidCount > 0) {
-        console.log(`[BackgroundValidation] Completed. Found ${invalidCount} invalid listings.`);
+        console.log(`[BackgroundValidation] Completed. Found ${invalidCount} invalid listings (${statusInvalidCount} status, ${ownershipInvalidCount} ownership).`);
       }
     } finally {
       isValidatingRef.current = false;
