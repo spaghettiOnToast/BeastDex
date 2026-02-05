@@ -2791,7 +2791,7 @@ export default function MarketplacePage() {
                 if (singleBeastToList) setSingleBeastToList(null);
               }}
               onClearCart={singleBeastToList ? undefined : globalCart.clearListCart}
-              existingListings={filtersHook.sortedListings}
+              existingListings={dataHook.listings}
             />
           )}
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import type { AccountInterface } from "starknet";
 import type { Listing } from "../../../services/marketplace/types";
-import { validateListingOwnership, getProvider } from "../../../services/marketplace/approvals";
+import { validateListingOwnership, getOrderValidities, getProvider } from "../../../services/marketplace/approvals";
 import { batchCheckOrderStatuses } from "../../../services/marketplace/arcadeSqlClient";
 import { BEASTS_COLLECTION_ADDRESS } from "../../../services/marketplace/constants";
 
@@ -86,16 +86,55 @@ export function useBackgroundListingValidation({
       }
 
       if (statusInvalidCount > 0) {
-        console.log(`[BackgroundValidation] Found ${statusInvalidCount} inactive orders via status check`);
+        console.log(`[BackgroundValidation] Found ${statusInvalidCount} inactive orders via SQL status check`);
       }
 
-      // STEP 2: Ownership validation for remaining active listings
-      // This catches cases where seller transferred NFT without cancelling
-      if (stillActiveListings.length > 0) {
-        console.log(`[BackgroundValidation] Checking ownership for ${stillActiveListings.length} active listings...`);
+      // STEP 2: Contract validation using get_validities (authoritative)
+      // This catches expired orders and other contract-level invalidations
+      let contractInvalidCount = 0;
+      let listingsAfterContractCheck = stillActiveListings;
 
-        for (let i = 0; i < stillActiveListings.length; i += OWNERSHIP_BATCH_SIZE) {
-          const batch = stillActiveListings.slice(i, i + OWNERSHIP_BATCH_SIZE);
+      if (stillActiveListings.length > 0) {
+        console.log(`[BackgroundValidation] Validating ${stillActiveListings.length} listings via contract...`);
+
+        try {
+          const ordersToValidate = stillActiveListings.map((listing) => ({
+            orderId: listing.orderId ?? listing.listingId,
+            collection: BEASTS_COLLECTION_ADDRESS,
+            tokenId: BigInt(listing.tokenId),
+          }));
+
+          const validityResults = await getOrderValidities(provider, ordersToValidate);
+
+          listingsAfterContractCheck = [];
+          for (const listing of stillActiveListings) {
+            const validity = validityResults.get(String(listing.orderId ?? listing.listingId));
+            if (validity && !validity.valid) {
+              console.log(`[BackgroundValidation] Marking ${listing.listingId} as sold (contract: ${validity.reason || "invalid"})`);
+              markAsSold(listing.listingId);
+              invalidCount++;
+              contractInvalidCount++;
+            } else {
+              listingsAfterContractCheck.push(listing);
+            }
+          }
+
+          if (contractInvalidCount > 0) {
+            console.log(`[BackgroundValidation] Found ${contractInvalidCount} invalid orders via contract check`);
+          }
+        } catch (err) {
+          console.warn(`[BackgroundValidation] Contract validation failed, continuing with ownership check:`, err);
+          // Continue with remaining listings if contract call fails
+        }
+      }
+
+      // STEP 3: Ownership validation for remaining active listings
+      // This catches cases where seller transferred NFT without cancelling
+      if (listingsAfterContractCheck.length > 0) {
+        console.log(`[BackgroundValidation] Checking ownership for ${listingsAfterContractCheck.length} active listings...`);
+
+        for (let i = 0; i < listingsAfterContractCheck.length; i += OWNERSHIP_BATCH_SIZE) {
+          const batch = listingsAfterContractCheck.slice(i, i + OWNERSHIP_BATCH_SIZE);
 
           // Validate batch in parallel
           const results = await Promise.all(
@@ -127,14 +166,14 @@ export function useBackgroundListingValidation({
           }
 
           // Small delay between batches to avoid rate limiting
-          if (i + OWNERSHIP_BATCH_SIZE < stillActiveListings.length) {
+          if (i + OWNERSHIP_BATCH_SIZE < listingsAfterContractCheck.length) {
             await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY));
           }
         }
       }
 
       if (invalidCount > 0) {
-        console.log(`[BackgroundValidation] Completed. Found ${invalidCount} invalid listings (${statusInvalidCount} status, ${ownershipInvalidCount} ownership).`);
+        console.log(`[BackgroundValidation] Completed. Found ${invalidCount} invalid listings (${statusInvalidCount} SQL status, ${contractInvalidCount} contract, ${ownershipInvalidCount} ownership).`);
       }
     } finally {
       isValidatingRef.current = false;

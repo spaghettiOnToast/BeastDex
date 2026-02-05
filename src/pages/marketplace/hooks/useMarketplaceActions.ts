@@ -9,6 +9,8 @@ import {
   ensureCollectionApproval,
   executePurchaseWithApproval,
   validateListingOwnership,
+  getOrderValidity,
+  getOrderValidities,
   getProvider,
   buildMarketplaceExecuteCall,
   getErc20ApprovalCallIfNeeded,
@@ -107,19 +109,36 @@ export function useMarketplaceActions({
         const priceBigInt = toBigInt(listing.price);
         const currency = listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
         const orderId = toBigInt(listing.orderId);
-
-        // Validate listing ownership
         const provider = getProvider(account);
-        const isValidListing = await validateListingOwnership(
+
+        // Validate order using contract's get_validity helper (authoritative check)
+        const orderValidity = await getOrderValidity(
+          provider,
+          listing.orderId ?? 0,
+          BEASTS_COLLECTION_ADDRESS,
+          tokenIdBigInt
+        );
+
+        if (!orderValidity.valid) {
+          const reason = orderValidity.reason || "Order is no longer valid";
+          toast.error(`This listing is no longer valid: ${reason}`, { id: toastId });
+          if (markListingAsSold) {
+            markListingAsSold(listing.listingId);
+          }
+          setBuyingListingId(null);
+          return;
+        }
+
+        // Additional ownership check as backup (catches transfers not yet reflected in order status)
+        const isValidOwnership = await validateListingOwnership(
           provider,
           BEASTS_COLLECTION_ADDRESS,
           tokenIdBigInt,
           listing.seller
         );
 
-        if (!isValidListing) {
+        if (!isValidOwnership) {
           toast.error("This listing is no longer valid. The seller may not own the token anymore.", { id: toastId });
-          // Mark as sold to hide from listings (stale indexer data)
           if (markListingAsSold) {
             markListingAsSold(listing.listingId);
           }
@@ -231,24 +250,49 @@ export function useMarketplaceActions({
         const validListings: Listing[] = [];
         const invalidListingIds: string[] = [];
 
-        // Step 1: Validate all listings and collect valid ones
+        // Step 1: Batch validate all listings using contract's get_validities
         toast.loading("Validating listings...", { id: toastId });
-        for (const listing of purchaseCart) {
+
+        // First filter out inactive listings
+        const activeListings = purchaseCart.filter(listing => {
           if (!listing.active) {
+            invalidListingIds.push(listing.listingId);
+            return false;
+          }
+          return true;
+        });
+
+        // Batch validate order status via contract
+        const ordersToValidate = activeListings.map(listing => ({
+          orderId: listing.orderId ?? 0,
+          collection: BEASTS_COLLECTION_ADDRESS,
+          tokenId: toBigInt(listing.tokenId),
+        }));
+
+        const validityResults = await getOrderValidities(provider, ordersToValidate);
+
+        // Process validation results
+        for (const listing of activeListings) {
+          const validity = validityResults.get(String(listing.orderId ?? 0));
+
+          if (validity && !validity.valid) {
+            if (markListingAsSold) {
+              markListingAsSold(listing.listingId);
+            }
             invalidListingIds.push(listing.listingId);
             continue;
           }
 
+          // Additional ownership check for valid orders
           const tokenIdBigInt = toBigInt(listing.tokenId);
-          const isValidListing = await validateListingOwnership(
+          const isValidOwnership = await validateListingOwnership(
             provider,
             BEASTS_COLLECTION_ADDRESS,
             tokenIdBigInt,
             listing.seller
           );
 
-          if (!isValidListing) {
-            // Mark as sold to hide from listings (stale indexer data)
+          if (!isValidOwnership) {
             if (markListingAsSold) {
               markListingAsSold(listing.listingId);
             }
@@ -410,9 +454,24 @@ export function useMarketplaceActions({
       try {
         const tokenIdBigInt = toBigInt(order.tokenId);
         const orderId = toBigInt(order.id);
+        const provider = getProvider(account);
+
+        // Validate offer using contract's get_validity helper
+        const offerValidity = await getOrderValidity(
+          provider,
+          order.id,
+          BEASTS_COLLECTION_ADDRESS,
+          tokenIdBigInt
+        );
+
+        if (!offerValidity.valid) {
+          const reason = offerValidity.reason || "Offer is no longer valid";
+          toast.error(`This offer is no longer valid: ${reason}`, { id: toastId });
+          setAcceptingOfferId(null);
+          return false;
+        }
 
         // Validate that the seller still owns the NFT
-        const provider = getProvider(account);
         const isOwner = await validateListingOwnership(
           provider,
           BEASTS_COLLECTION_ADDRESS,

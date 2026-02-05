@@ -2,6 +2,7 @@ import { useState, useCallback, lazy, Suspense } from "react";
 import { useAccount } from "@starknet-react/core";
 import { useGlobalCart } from "../../contexts/GlobalCartContext";
 import { useTermsOfService } from "../../contexts/TermsOfServiceContext";
+import { useMarketplaceListings } from "../../pages/marketplace/hooks/useMarketplaceListings";
 import { toast } from "sonner";
 import {
   MARKETPLACE_ADDRESS,
@@ -23,6 +24,7 @@ export function GlobalCartDialogs() {
   const { account } = useAccount();
   const globalCart = useGlobalCart();
   const { hasAcceptedToS, openToSDialog } = useTermsOfService();
+  const { listings: existingListings } = useMarketplaceListings();
   const {
     listDialogOpen,
     purchaseDialogOpen,
@@ -176,6 +178,7 @@ export function GlobalCartDialogs() {
           onRemoveBeast={globalCart.removeFromListCart}
           onListed={handleListed}
           onClearCart={globalCart.clearListCart}
+          existingListings={existingListings}
         />
       )}
 
