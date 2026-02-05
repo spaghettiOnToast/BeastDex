@@ -1,4 +1,5 @@
-import { mapBeastRow, type BeastRow } from "./helpers";
+import { mapBeastRow, hasCompleteMetadata, type BeastRow } from "./helpers";
+export { hasCompleteMetadata };
 import {
   buildAttributeFiltersQuery,
   buildBeastsByIdListQuery,

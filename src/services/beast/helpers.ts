@@ -188,8 +188,12 @@ export function coercePower(raw: unknown, attributes: BeastAttribute[]): number 
 export function mapBeastRow(row: BeastRow): Beast {
   const metadata = parseMetadata(row?.metadata);
   const attributes = metadata?.attributes ?? [];
-  const name = metadata?.name ?? `Beast ${row?.id ?? ""}`;
   const numericId = deriveNumericId(row, metadata, attributes);
+
+  // Use metadata name if available, otherwise use a clean fallback with numeric ID
+  const name = metadata?.name && metadata.name.trim().length > 0
+    ? metadata.name
+    : `Beast #${numericId || "Unknown"}`;
 
   return {
     id: String(row?.id ?? ""),
@@ -201,4 +205,26 @@ export function mapBeastRow(row: BeastRow): Beast {
     metadata,
     power: coercePower(row?.power, attributes),
   };
+}
+
+/**
+ * Check if a beast has complete metadata (name, image, attributes)
+ */
+export function hasCompleteMetadata(beast: Beast): boolean {
+  // Must have a proper name (not just the fallback)
+  if (!beast.name || beast.name.startsWith("Beast #")) {
+    return false;
+  }
+
+  // Must have an image
+  if (!beast.image || beast.image.trim().length === 0) {
+    return false;
+  }
+
+  // Must have at least some attributes
+  if (!beast.attributes || beast.attributes.length === 0) {
+    return false;
+  }
+
+  return true;
 }
