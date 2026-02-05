@@ -321,13 +321,12 @@ export function useMarketplaceFilters({
     // showing 0 listings before beasts are loaded when autoLoad is false)
     const userListings = base.filter((listing) => {
       if (listing.seller.toLowerCase() !== lower) return false;
-      if (listing.status !== "active") return false;
 
       // Skip hidden listings (unless showAllMyListings is enabled)
       if (!showAllMyListings && hiddenListingIds.has(listing.listingId)) return false;
 
-      // Skip expired if hideExpired is on (unless showAllMyListings is enabled)
-      if (!showAllMyListings && hideExpired && listing.status === "expired") return false;
+      // Skip non-active listings (unless showAllMyListings is enabled to see cancelled/expired)
+      if (!showAllMyListings && listing.status !== "active") return false;
 
       // Apply attribute filters if beast data exists (unless showAllMyListings is enabled)
       if (!showAllMyListings && listing.beast && !matchesAttributeFilters(listing as Listing & { beast: Beast }, attributeFilters)) return false;
