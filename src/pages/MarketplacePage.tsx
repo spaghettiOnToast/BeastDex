@@ -1233,7 +1233,7 @@ export default function MarketplacePage() {
               </div>
               </div>
               {/* Sweep Control - on same row as sub-tabs, right side */}
-              {(exploreSubTab === "browse" || exploreSubTab === "recent-listed") && (
+              {exploreSubTab === "browse" && (
                 <SweepControl
                   listings={(exploreSubTab === "browse" ? filtersHook.sortedListings : filtersHook.namedRecentListings).filter(l => address?.toLowerCase() !== l.seller?.toLowerCase())}
                   onSweep={(listings) => requireToS(() => handleSweep(listings))}
