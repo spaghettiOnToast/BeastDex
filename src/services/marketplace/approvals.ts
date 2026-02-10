@@ -423,94 +423,123 @@ export async function getOrderValidity(
 }
 
 /**
- * Batch check order validities using the marketplace contract's get_validities helper
- * More efficient than individual calls for multiple orders
- * @returns Map of "orderId" -> { valid: boolean, reason: string }
+ * Check a single batch of order validities using the marketplace contract's get_validities helper.
+ * Returns results for the batch, or throws on failure.
  */
-export async function getOrderValidities(
+async function getOrderValiditiesBatch(
   provider: ProviderInterface,
   orders: Array<{ orderId: number | string; collection: string; tokenId: BigNumberish }>,
 ): Promise<Map<string, { valid: boolean; reason: string }>> {
   const results = new Map<string, { valid: boolean; reason: string }>();
 
+  // Build calldata for get_validities
+  // The function expects Span<(u32, ContractAddress, u256)>
+  // In Cairo calldata, a Span is represented as: [length, ...elements]
+  // Each element is (order_id, collection, token_id_low, token_id_high)
+  const calldata: string[] = [orders.length.toString()];
+
+  for (const order of orders) {
+    const tokenIdBigInt = typeof order.tokenId === 'bigint'
+      ? order.tokenId
+      : BigInt(order.tokenId.toString());
+    const tokenIdU256 = toUint256Hex(tokenIdBigInt);
+
+    calldata.push(
+      order.orderId.toString(),
+      order.collection,
+      ...tokenIdU256,
+    );
+  }
+
+  const response = await provider.callContract(
+    {
+      contractAddress: MARKETPLACE_ADDRESS,
+      entrypoint: "get_validities",
+      calldata,
+    },
+    "latest"
+  );
+
+  const rawResult = Array.isArray(response) ? response : (response as any).result;
+
+  if (!Array.isArray(rawResult)) {
+    throw new Error("Invalid response format");
+  }
+
+  // Response is Span<(bool, felt252)>
+  // Format: [length, ...pairs] where each pair is (valid, reason)
+  const resultLength = parseInt(rawResult[0], 16) || parseInt(rawResult[0], 10) || 0;
+
+  for (let i = 0; i < Math.min(resultLength, orders.length); i++) {
+    const baseIdx = 1 + (i * 2);
+    if (baseIdx + 1 >= rawResult.length) break;
+
+    const isValid = rawResult[baseIdx] === "0x1" || rawResult[baseIdx] === "1";
+    const reasonFelt = rawResult[baseIdx + 1];
+
+    let reason = "";
+    if (reasonFelt && reasonFelt !== "0x0" && reasonFelt !== "0") {
+      try {
+        const hexStr = reasonFelt.startsWith("0x") ? reasonFelt.slice(2) : reasonFelt;
+        const bytes = [];
+        for (let j = 0; j < hexStr.length; j += 2) {
+          const byte = parseInt(hexStr.substr(j, 2), 16);
+          if (byte > 0) bytes.push(byte);
+        }
+        reason = String.fromCharCode(...bytes);
+      } catch {
+        reason = reasonFelt;
+      }
+    }
+
+    results.set(orders[i].orderId.toString(), { valid: isValid, reason });
+  }
+
+  return results;
+}
+
+/**
+ * Batch check order validities using the marketplace contract's get_validities helper.
+ * Processes orders in chunks to avoid overwhelming the RPC provider.
+ * If a chunk fails, only that chunk falls back to individual calls.
+ * @returns Map of "orderId" -> { valid: boolean, reason: string }
+ */
+export async function getOrderValidities(
+  provider: ProviderInterface,
+  orders: Array<{ orderId: number | string; collection: string; tokenId: BigNumberish }>,
+  { chunkSize = 50, delayBetweenChunksMs = 200 }: { chunkSize?: number; delayBetweenChunksMs?: number } = {},
+): Promise<Map<string, { valid: boolean; reason: string }>> {
+  const results = new Map<string, { valid: boolean; reason: string }>();
+
   if (orders.length === 0) return results;
 
-  try {
-    // Build calldata for get_validities
-    // The function expects Span<(u32, ContractAddress, u256)>
-    // In Cairo calldata, a Span is represented as: [length, ...elements]
-    // Each element is (order_id, collection, token_id_low, token_id_high)
-    const calldata: string[] = [orders.length.toString()];
+  for (let i = 0; i < orders.length; i += chunkSize) {
+    const chunk = orders.slice(i, i + chunkSize);
 
-    for (const order of orders) {
-      const tokenIdBigInt = typeof order.tokenId === 'bigint'
-        ? order.tokenId
-        : BigInt(order.tokenId.toString());
-      const tokenIdU256 = toUint256Hex(tokenIdBigInt);
-
-      calldata.push(
-        order.orderId.toString(),
-        order.collection,
-        ...tokenIdU256,
-      );
-    }
-
-    const response = await provider.callContract(
-      {
-        contractAddress: MARKETPLACE_ADDRESS,
-        entrypoint: "get_validities",
-        calldata,
-      },
-      "latest"
-    );
-
-    const rawResult = Array.isArray(response) ? response : (response as any).result;
-
-    if (!Array.isArray(rawResult)) {
-      throw new Error("Invalid response format");
-    }
-
-    // Response is Span<(bool, felt252)>
-    // Format: [length, ...pairs] where each pair is (valid, reason)
-    const resultLength = parseInt(rawResult[0], 16) || parseInt(rawResult[0], 10) || 0;
-
-    for (let i = 0; i < Math.min(resultLength, orders.length); i++) {
-      const baseIdx = 1 + (i * 2);
-      if (baseIdx + 1 >= rawResult.length) break;
-
-      const isValid = rawResult[baseIdx] === "0x1" || rawResult[baseIdx] === "1";
-      const reasonFelt = rawResult[baseIdx + 1];
-
-      let reason = "";
-      if (reasonFelt && reasonFelt !== "0x0" && reasonFelt !== "0") {
-        try {
-          const hexStr = reasonFelt.startsWith("0x") ? reasonFelt.slice(2) : reasonFelt;
-          const bytes = [];
-          for (let j = 0; j < hexStr.length; j += 2) {
-            const byte = parseInt(hexStr.substr(j, 2), 16);
-            if (byte > 0) bytes.push(byte);
-          }
-          reason = String.fromCharCode(...bytes);
-        } catch {
-          reason = reasonFelt;
-        }
+    try {
+      const chunkResults = await getOrderValiditiesBatch(provider, chunk);
+      for (const [key, value] of chunkResults) {
+        results.set(key, value);
       }
+    } catch (error) {
+      console.warn(`[getOrderValidities] Chunk ${Math.floor(i / chunkSize) + 1} failed, falling back to individual checks:`, error);
 
-      results.set(orders[i].orderId.toString(), { valid: isValid, reason });
+      // Per-chunk fallback: check each order in the failed chunk individually
+      for (const order of chunk) {
+        const validity = await getOrderValidity(provider, order.orderId, order.collection, order.tokenId);
+        results.set(order.orderId.toString(), validity);
+        // Small delay between individual fallback calls
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
     }
 
-    return results;
-  } catch (error) {
-    console.warn("[getOrderValidities] Contract call failed, falling back to individual checks:", error);
-
-    // Fallback: check each order individually
-    for (const order of orders) {
-      const validity = await getOrderValidity(provider, order.orderId, order.collection, order.tokenId);
-      results.set(order.orderId.toString(), validity);
+    // Delay between chunks to avoid rate limiting
+    if (i + chunkSize < orders.length) {
+      await new Promise((resolve) => setTimeout(resolve, delayBetweenChunksMs));
     }
-
-    return results;
   }
+
+  return results;
 }
 
 /**

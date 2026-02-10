@@ -1,12 +1,15 @@
 import { useEffect, useRef, useCallback } from "react";
 import type { AccountInterface } from "starknet";
 import type { Listing } from "../../../services/marketplace/types";
-import { validateListingOwnership, getOrderValidities, getProvider } from "../../../services/marketplace/approvals";
+import { getOrderValidities, getProvider } from "../../../services/marketplace/approvals";
 import { batchCheckOrderStatuses } from "../../../services/marketplace/arcadeSqlClient";
 import { BEASTS_COLLECTION_ADDRESS } from "../../../services/marketplace/constants";
 
-// How often to re-validate all listings (in ms)
-const VALIDATION_INTERVAL = 3 * 60 * 1000; // 3 minutes (reduced from 5)
+// How often to run a validation cycle (in ms)
+const VALIDATION_INTERVAL = 2 * 60 * 1000; // 2 minutes
+
+// How long a validation result is considered fresh (in ms)
+const STALE_THRESHOLD = 5 * 60 * 1000; // 5 minutes
 
 interface UseBackgroundListingValidationProps {
   account: AccountInterface | undefined;
@@ -17,11 +20,11 @@ interface UseBackgroundListingValidationProps {
 }
 
 /**
- * Hook that validates listing ownership in the background
- * and marks invalid listings as sold so they're filtered out.
+ * Hook that validates listings in the background using SQL status checks
+ * and contract-level get_validities calls, then marks invalid listings as sold.
  *
- * This runs automatically when listings load and then periodically
- * every 2 minutes to catch stale listings.
+ * Uses incremental time-based revalidation: only re-checks listings whose
+ * last validation is older than STALE_THRESHOLD.
  */
 export function useBackgroundListingValidation({
   account,
@@ -30,38 +33,40 @@ export function useBackgroundListingValidation({
   isSold,
   markAsSold,
 }: UseBackgroundListingValidationProps): void {
-  const validatedRef = useRef<Set<string>>(new Set());
+  // Map of listingId -> timestamp of last successful validation
+  const validatedRef = useRef<Map<string, number>>(new Map());
   const isValidatingRef = useRef(false);
 
-  const validateListingsInBackground = useCallback(async (forceRevalidate = false) => {
+  const validateListingsInBackground = useCallback(async () => {
     if (!account || listings.length === 0 || isLoading) return;
     if (isValidatingRef.current) return; // Prevent concurrent runs
 
     const provider = getProvider(account);
-    const OWNERSHIP_BATCH_SIZE = 10; // Validate 10 at a time to avoid overwhelming RPC
-    const BATCH_DELAY = 300; // 300ms between batches
+    const now = Date.now();
 
-    // On periodic revalidation, clear the validated set to re-check everything
-    if (forceRevalidate) {
-      validatedRef.current.clear();
+    // Clean up entries for listings no longer in the data
+    const currentListingIds = new Set(listings.map((l) => l.listingId));
+    for (const key of validatedRef.current.keys()) {
+      if (!currentListingIds.has(key)) {
+        validatedRef.current.delete(key);
+      }
     }
 
-    // Get listings that haven't been validated yet
-    const toValidate = listings.filter(
-      (l) => !isSold(l.listingId) && !validatedRef.current.has(l.listingId)
-    );
+    // Get listings that are stale or haven't been validated yet
+    const toValidate = listings.filter((l) => {
+      if (isSold(l.listingId)) return false;
+      const lastValidated = validatedRef.current.get(l.listingId);
+      return !lastValidated || now - lastValidated > STALE_THRESHOLD;
+    });
 
     if (toValidate.length === 0) return;
 
     isValidatingRef.current = true;
-    console.log(`[BackgroundValidation] Validating ${toValidate.length} listings...`);
-
-    // Mark all as in-progress to avoid duplicate validation
-    toValidate.forEach((l) => validatedRef.current.add(l.listingId));
+    console.log(`[BackgroundValidation] Validating ${toValidate.length} listings (${listings.length} total)...`);
 
     let invalidCount = 0;
     let statusInvalidCount = 0;
-    let ownershipInvalidCount = 0;
+    let contractInvalidCount = 0;
 
     try {
       // STEP 1: Fast batch check of order statuses via arcade-main
@@ -90,10 +95,7 @@ export function useBackgroundListingValidation({
       }
 
       // STEP 2: Contract validation using get_validities (authoritative)
-      // This catches expired orders and other contract-level invalidations
-      let contractInvalidCount = 0;
-      let listingsAfterContractCheck = stillActiveListings;
-
+      // This checks order status, ownership, expiration, etc.
       if (stillActiveListings.length > 0) {
         console.log(`[BackgroundValidation] Validating ${stillActiveListings.length} listings via contract...`);
 
@@ -106,7 +108,6 @@ export function useBackgroundListingValidation({
 
           const validityResults = await getOrderValidities(provider, ordersToValidate);
 
-          listingsAfterContractCheck = [];
           for (const listing of stillActiveListings) {
             const validity = validityResults.get(String(listing.orderId ?? listing.listingId));
             if (validity && !validity.valid) {
@@ -115,7 +116,8 @@ export function useBackgroundListingValidation({
               invalidCount++;
               contractInvalidCount++;
             } else {
-              listingsAfterContractCheck.push(listing);
+              // Mark as freshly validated
+              validatedRef.current.set(listing.listingId, now);
             }
           }
 
@@ -123,57 +125,22 @@ export function useBackgroundListingValidation({
             console.log(`[BackgroundValidation] Found ${contractInvalidCount} invalid orders via contract check`);
           }
         } catch (err) {
-          console.warn(`[BackgroundValidation] Contract validation failed, continuing with ownership check:`, err);
-          // Continue with remaining listings if contract call fails
+          console.warn(`[BackgroundValidation] Contract validation failed, will retry next cycle:`, err);
         }
       }
 
-      // STEP 3: Ownership validation for remaining active listings
-      // This catches cases where seller transferred NFT without cancelling
-      if (listingsAfterContractCheck.length > 0) {
-        console.log(`[BackgroundValidation] Checking ownership for ${listingsAfterContractCheck.length} active listings...`);
-
-        for (let i = 0; i < listingsAfterContractCheck.length; i += OWNERSHIP_BATCH_SIZE) {
-          const batch = listingsAfterContractCheck.slice(i, i + OWNERSHIP_BATCH_SIZE);
-
-          // Validate batch in parallel
-          const results = await Promise.all(
-            batch.map(async (listing) => {
-              try {
-                const isValid = await validateListingOwnership(
-                  provider,
-                  BEASTS_COLLECTION_ADDRESS,
-                  BigInt(listing.tokenId),
-                  listing.seller
-                );
-                return { listingId: listing.listingId, isValid };
-              } catch (err) {
-                // On error, assume valid (don't hide listing due to RPC issues)
-                console.warn(`[BackgroundValidation] Error validating ${listing.listingId}:`, err);
-                return { listingId: listing.listingId, isValid: true };
-              }
-            })
-          );
-
-          // Mark invalid listings as sold
-          for (const result of results) {
-            if (!result.isValid) {
-              console.log(`[BackgroundValidation] Marking ${result.listingId} as sold (seller no longer owns)`);
-              markAsSold(result.listingId);
-              invalidCount++;
-              ownershipInvalidCount++;
-            }
-          }
-
-          // Small delay between batches to avoid rate limiting
-          if (i + OWNERSHIP_BATCH_SIZE < listingsAfterContractCheck.length) {
-            await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY));
+      // Mark Step 1-only validated listings as fresh too
+      for (const listing of stillActiveListings) {
+        if (!validatedRef.current.has(listing.listingId) || validatedRef.current.get(listing.listingId)! < now) {
+          // Only set if not already set by Step 2 success
+          if (!validatedRef.current.has(listing.listingId)) {
+            validatedRef.current.set(listing.listingId, now);
           }
         }
       }
 
       if (invalidCount > 0) {
-        console.log(`[BackgroundValidation] Completed. Found ${invalidCount} invalid listings (${statusInvalidCount} SQL status, ${contractInvalidCount} contract, ${ownershipInvalidCount} ownership).`);
+        console.log(`[BackgroundValidation] Completed. Found ${invalidCount} invalid listings (${statusInvalidCount} SQL status, ${contractInvalidCount} contract).`);
       }
     } finally {
       isValidatingRef.current = false;
@@ -182,7 +149,7 @@ export function useBackgroundListingValidation({
 
   // Run validation on initial load and when listings change
   useEffect(() => {
-    validateListingsInBackground(false).catch((err) => {
+    validateListingsInBackground().catch((err) => {
       console.error("[BackgroundValidation] Error:", err);
     });
   }, [validateListingsInBackground]);
@@ -193,7 +160,7 @@ export function useBackgroundListingValidation({
 
     const intervalId = setInterval(() => {
       console.log("[BackgroundValidation] Running periodic revalidation...");
-      validateListingsInBackground(true).catch((err) => {
+      validateListingsInBackground().catch((err) => {
         console.error("[BackgroundValidation] Periodic validation error:", err);
       });
     }, VALIDATION_INTERVAL);
