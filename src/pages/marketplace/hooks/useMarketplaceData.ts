@@ -54,7 +54,7 @@ export function useMarketplaceData(address: string | undefined) {
       }
     }
 
-    // Sort by recency and take top 60
+    // Sort by recency and take top 102
     return Array.from(listingsByTokenId.values())
       .sort((a, b) => {
         // Use createdAt if available, otherwise fall back to orderId
@@ -72,7 +72,7 @@ export function useMarketplaceData(address: string | undefined) {
         // If neither has a timestamp, fall back to orderId (higher = more recent)
         return (b.orderId ?? 0) - (a.orderId ?? 0);
       })
-      .slice(0, 60);
+      .slice(0, 102);
   }, [listingsHook.listings]);
 
   return {
