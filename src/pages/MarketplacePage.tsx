@@ -158,6 +158,7 @@ export default function MarketplacePage() {
   } | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [detailModalListing, setDetailModalListing] = useState<Listing | null>(null);
+  const [detailModalSaleBeast, setDetailModalSaleBeast] = useState<Beast | null>(null);
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<string | null>(null);
   const [activityTypeFilter, setActivityTypeFilter] = useState<"listing" | "sale" | null>(null);
   const [activityPage, setActivityPage] = useState(1);
@@ -684,18 +685,20 @@ export default function MarketplacePage() {
    */
   const handleCloseDetailModal = useCallback(() => {
     setDetailModalListing(null);
+    setDetailModalSaleBeast(null);
   }, []);
 
   /**
    * Create beast object for detail modal with seller as owner
    */
   const detailModalBeast = useMemo(() => {
+    if (detailModalSaleBeast) return detailModalSaleBeast;
     if (!detailModalListing?.beast) return null;
     return {
       ...detailModalListing.beast,
       owner: detailModalListing.seller,
     };
-  }, [detailModalListing]);
+  }, [detailModalListing, detailModalSaleBeast]);
 
   /**
    * Calculate floor price in USD - finds the absolute lowest price across all currencies
@@ -1961,10 +1964,12 @@ export default function MarketplacePage() {
                               onClick={() => {
                                 if (activity.listing) {
                                   handleCardClick(activity.listing);
+                                } else if (activity.beast) {
+                                  setDetailModalSaleBeast({ ...activity.beast, owner: activity.from });
                                 }
                               }}
-                              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-                              disabled={!activity.listing}
+                              className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+                              disabled={!activity.listing && !activity.beast}
                             >
                               <div className="w-8 h-8 rounded overflow-hidden bg-gray-800 flex-shrink-0">
                                 {activity.beast?.image ? (
