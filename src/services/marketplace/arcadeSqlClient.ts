@@ -51,10 +51,11 @@ export async function batchCheckOrderStatuses(
 
     // Map results: status 1 = active, anything else = inactive
     for (const row of rows) {
-      const statusNum = row.status.startsWith("0x")
-        ? parseInt(row.status, 16)
-        : parseInt(row.status, 10);
-      result.set(row.id, statusNum === 1);
+      const raw = String(row.status);
+      const statusNum = raw.startsWith("0x")
+        ? parseInt(raw, 16)
+        : parseInt(raw, 10);
+      result.set(String(row.id), statusNum === 1);
     }
 
     // Any order not in results is assumed inactive (deleted/not found)
