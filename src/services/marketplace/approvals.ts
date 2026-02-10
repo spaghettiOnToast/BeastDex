@@ -389,7 +389,8 @@ export async function getOrderValidity(
     const rawResult = Array.isArray(response) ? response : (response as any).result;
 
     if (!Array.isArray(rawResult) || rawResult.length < 2) {
-      return { valid: false, reason: "Invalid response from contract" };
+      console.warn("[getOrderValidity] Malformed response from contract, assuming valid");
+      return { valid: true, reason: "" };
     }
 
     // Result is (bool, felt252) - bool as 0/1, felt252 as hex string

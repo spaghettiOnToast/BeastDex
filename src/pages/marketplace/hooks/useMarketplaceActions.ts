@@ -114,7 +114,7 @@ export function useMarketplaceActions({
         // Validate order using contract's get_validity helper (authoritative check)
         const orderValidity = await getOrderValidity(
           provider,
-          listing.orderId ?? 0,
+          listing.orderId ?? listing.listingId,
           BEASTS_COLLECTION_ADDRESS,
           tokenIdBigInt
         );
@@ -264,7 +264,7 @@ export function useMarketplaceActions({
 
         // Batch validate order status via contract
         const ordersToValidate = activeListings.map(listing => ({
-          orderId: listing.orderId ?? 0,
+          orderId: listing.orderId ?? listing.listingId,
           collection: BEASTS_COLLECTION_ADDRESS,
           tokenId: toBigInt(listing.tokenId),
         }));
@@ -273,7 +273,7 @@ export function useMarketplaceActions({
 
         // Process validation results
         for (const listing of activeListings) {
-          const validity = validityResults.get(String(listing.orderId ?? 0));
+          const validity = validityResults.get(String(listing.orderId ?? listing.listingId));
 
           if (validity && !validity.valid) {
             if (markListingAsSold) {
