@@ -25,11 +25,37 @@ export function useMarketplaceData(address: string | undefined) {
   /**
    * Recent listings - automatically derived from main listings
    * Only shows active listings, sorted by most recently created/edited
+   * Deduplicated by tokenId - keeps only the most recent listing per beast
    * Falls back to orderId when createdAt is missing (e.g., for edited listings)
    */
   const recentListings = useMemo(() => {
-    return [...listingsHook.listings]
-      .filter((listing) => listing.active)
+    // First deduplicate by tokenId, keeping the most recent listing per beast
+    const listingsByTokenId = new Map<string, typeof listingsHook.listings[0]>();
+
+    for (const listing of listingsHook.listings) {
+      if (!listing.active) continue;
+
+      const tokenId = String(listing.tokenId).trim();
+      const existing = listingsByTokenId.get(tokenId);
+
+      if (!existing) {
+        listingsByTokenId.set(tokenId, listing);
+      } else {
+        // Keep the one with most recent createdAt, fall back to orderId
+        const existingTime = existing.createdAt && existing.createdAt > 0 ? existing.createdAt : 0;
+        const currentTime = listing.createdAt && listing.createdAt > 0 ? listing.createdAt : 0;
+
+        const isNewer = currentTime > existingTime ||
+          (currentTime === existingTime && (listing.orderId ?? 0) > (existing.orderId ?? 0));
+
+        if (isNewer) {
+          listingsByTokenId.set(tokenId, listing);
+        }
+      }
+    }
+
+    // Sort by recency and take top 102
+    return Array.from(listingsByTokenId.values())
       .sort((a, b) => {
         // Use createdAt if available, otherwise fall back to orderId
         const aTime = a.createdAt && a.createdAt > 0 ? a.createdAt : 0;
@@ -46,7 +72,7 @@ export function useMarketplaceData(address: string | undefined) {
         // If neither has a timestamp, fall back to orderId (higher = more recent)
         return (b.orderId ?? 0) - (a.orderId ?? 0);
       })
-      .slice(0, 60);
+      .slice(0, 102);
   }, [listingsHook.listings]);
 
   return {

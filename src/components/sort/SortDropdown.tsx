@@ -39,10 +39,14 @@ export function sortOptionToBeastSortField(sortOption: SortOption): BeastSortFie
 type SortDropdownProps = {
   value: SortOption;
   onChange: (value: SortOption) => void;
+  /** Sort options to exclude from the dropdown */
+  excludeOptions?: SortOption[];
 };
 
-const OPTIONS: Array<{ label: string; value: SortOption }> = [
+/** All available sort options */
+export const ALL_SORT_OPTIONS: Array<{ label: string; value: SortOption }> = [
   { label: "Default (Power)", value: "default" },
+  { label: "Most Recent", value: "recent-desc" },
   { label: "Price (Low → High)", value: "price-asc" },
   { label: "Price (High → Low)", value: "price-desc" },
   { label: "Beast (A → Z)", value: "beast-asc" },
@@ -57,8 +61,22 @@ const OPTIONS: Array<{ label: string; value: SortOption }> = [
   { label: "Last Death (Oldest)", value: "last-death-asc" },
 ];
 
-export function SortDropdown({ value, onChange }: SortDropdownProps) {
-  const currentOption = OPTIONS.find(option => option.value === value) || OPTIONS[0];
+/** Sort options to exclude from the homepage */
+export const HOMEPAGE_EXCLUDED_OPTIONS: SortOption[] = [
+  "recent-desc",    // Most Recent (based on listing time, not beast death)
+  "price-asc",      // Price options don't apply to non-listed beasts
+  "price-desc",
+  "last-death-asc", // Last death not relevant for homepage browsing
+  "last-death-desc",
+];
+
+export function SortDropdown({ value, onChange, excludeOptions }: SortDropdownProps) {
+  // Filter out excluded options
+  const options = excludeOptions
+    ? ALL_SORT_OPTIONS.filter(opt => !excludeOptions.includes(opt.value))
+    : ALL_SORT_OPTIONS;
+
+  const currentOption = options.find(option => option.value === value) || options[0];
 
   return (
     <DropdownMenu>
@@ -77,7 +95,7 @@ export function SortDropdown({ value, onChange }: SortDropdownProps) {
         align="end"
         className="min-w-[140px] border border-gray-800 bg-black/90 text-gray-200 backdrop-blur-md"
       >
-        {OPTIONS.map((option) => (
+        {options.map((option) => (
           <DropdownMenuItem
             key={option.value}
             onClick={() => onChange(option.value)}

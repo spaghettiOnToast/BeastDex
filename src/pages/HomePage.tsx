@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from "react";
-import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
+import SortDropdown, { type SortOption, sortOptionToBeastSortField, HOMEPAGE_EXCLUDED_OPTIONS } from "../components/sort/SortDropdown";
 import { useSearchParams } from "react-router-dom";
 import { useAccount } from "@starknet-react/core";
 import TopBar from "../components/header/TopBar";
@@ -17,6 +17,7 @@ import {
   fetchBeastStats,
   fetchBeastHighlights,
   fetchTopBeasts,
+  hasCompleteMetadata,
   type BeastAttributeFilters,
   type BeastStats,
   type BeastHighlights,
@@ -135,7 +136,12 @@ function HomePage() {
   });
 
   // Use initial beasts while full list is loading, then switch to full list
-  const beasts = fullBeasts.length > 0 ? fullBeasts : initialBeasts;
+  // Filter out beasts with incomplete metadata (missing name, image, or attributes)
+  const rawBeasts = fullBeasts.length > 0 ? fullBeasts : initialBeasts;
+  const beasts = useMemo(
+    () => rawBeasts.filter(hasCompleteMetadata),
+    [rawBeasts]
+  );
   const loading = initialLoading && fullLoading;
 
   const ownerAddresses = useMemo(
@@ -501,7 +507,7 @@ function HomePage() {
   const filtersAndSortControls = (
     <div className="flex items-center gap-2 sm:gap-4">
       {filtersControl}
-      <SortDropdown value={sortOption} onChange={setSortOption} />
+      <SortDropdown value={sortOption} onChange={setSortOption} excludeOptions={HOMEPAGE_EXCLUDED_OPTIONS} />
     </div>
   );
 

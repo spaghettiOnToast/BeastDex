@@ -130,10 +130,16 @@ export function useMarketplaceFilters({
         if (!existing.beast && listing.beast) {
           listingsByTokenId.set(tokenId, listing as Listing & { beast: Beast | null });
         } else if (existing.beast && listing.beast) {
-          // Both have beast data - keep the one with later expiration
-          const existingExp = existing.expiration ?? 0;
-          const currentExp = listing.expiration ?? 0;
-          if (currentExp > existingExp) {
+          // Both have beast data - keep the one with most recent createdAt
+          // Fall back to orderId if createdAt is missing (higher = more recent)
+          const existingTime = existing.createdAt && existing.createdAt > 0 ? existing.createdAt : 0;
+          const currentTime = listing.createdAt && listing.createdAt > 0 ? listing.createdAt : 0;
+
+          // Compare by createdAt, then by orderId as fallback
+          const isNewer = currentTime > existingTime ||
+            (currentTime === existingTime && (listing.orderId ?? 0) > (existing.orderId ?? 0));
+
+          if (isNewer) {
             listingsByTokenId.set(tokenId, listing as Listing & { beast: Beast | null });
           }
         }
@@ -293,14 +299,18 @@ export function useMarketplaceFilters({
   }, [userBeasts]);
 
   /**
-   * Get user's active listings
+   * Get user's active listings - NO DEDUPLICATION
+   * Shows ALL of user's listings so they can manage duplicates (e.g., cancel one)
    * Also filters out listings for NFTs the user no longer owns
    * (e.g., if they accepted an offer, the NFT transferred but the listing wasn't cancelled)
    */
   const myActiveListings = useMemo(() => {
     if (!address) return [] as Listing[];
     const lower = address.toLowerCase();
-    const base = showAllMyListings ? listings : sortedListings;
+
+    // Always use raw listings (no deduplication) so user can see and manage all their listings
+    // Including duplicate listings for the same beast
+    const base = listings;
 
     // Use pre-computed token IDs for owned beasts
     const ownedTokenIds = new Set(normalizedBeastTokenIds.values());
@@ -309,8 +319,17 @@ export function useMarketplaceFilters({
     // Only apply ownership check if userBeasts has finished loading at least once
     // (prevents flicker where listings disappear then reappear, and prevents
     // showing 0 listings before beasts are loaded when autoLoad is false)
-    return base.filter((listing) => {
+    const userListings = base.filter((listing) => {
       if (listing.seller.toLowerCase() !== lower) return false;
+
+      // Skip hidden listings (unless showAllMyListings is enabled)
+      if (!showAllMyListings && hiddenListingIds.has(listing.listingId)) return false;
+
+      // Skip non-active listings (unless showAllMyListings is enabled to see cancelled/expired)
+      if (!showAllMyListings && listing.status !== "active") return false;
+
+      // Apply attribute filters if beast data exists (unless showAllMyListings is enabled)
+      if (!showAllMyListings && listing.beast && !matchesAttributeFilters(listing as Listing & { beast: Beast }, attributeFilters)) return false;
 
       // Skip ownership check if beasts haven't been loaded yet or are currently loading
       // This ensures listings show correctly before the first beasts load completes
@@ -320,7 +339,15 @@ export function useMarketplaceFilters({
       const normalizedTokenId = String(listing.tokenId).trim();
       return ownedTokenIds.has(normalizedTokenId);
     });
-  }, [sortedListings, listings, address, showAllMyListings, normalizedBeastTokenIds, userBeastsLoading, userBeastsHasLoaded]);
+
+    // Sort by most recent first (createdAt or orderId)
+    return userListings.sort((a, b) => {
+      const aTime = a.createdAt && a.createdAt > 0 ? a.createdAt : 0;
+      const bTime = b.createdAt && b.createdAt > 0 ? b.createdAt : 0;
+      if (aTime !== bTime) return bTime - aTime;
+      return (b.orderId ?? 0) - (a.orderId ?? 0);
+    });
+  }, [listings, address, showAllMyListings, hiddenListingIds, hideExpired, attributeFilters, normalizedBeastTokenIds, userBeastsLoading, userBeastsHasLoaded]);
 
   /**
    * Track which token IDs are already actively listed

@@ -10,6 +10,7 @@ import {
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import type { Beast } from "../../services/beast";
+import type { Listing } from "../../services/marketplace/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import {
   BEASTS_COLLECTION_ADDRESS,
@@ -18,9 +19,10 @@ import {
   MARKETPLACE_ADDRESS,
   ROYALTIES_ENABLED,
   CREATOR_ROYALTY_BP,
+  getPaymentTokenByAddress,
 } from "../../services/marketplace/constants";
 import { useArcadeBookConfig } from "../../hooks/useArcadeBookConfig";
-import { toWei, fromWei } from "../../utils/price";
+import { toWei, fromWei, formatPrice } from "../../utils/price";
 import { toast } from "sonner";
 import TokenSelect from "./TokenSelect";
 import { useSelectedToken, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
@@ -31,19 +33,37 @@ import {
   useExpirationDetails,
   DURATION_SELECT_OPTIONS,
 } from "../../hooks/useExpirationDetails";
+import { AlertTriangle } from "lucide-react";
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   beast: Beast | null;
   onListed?: () => void;
+  /** Existing active listings for this beast (to warn about duplicates) */
+  existingListings?: Listing[];
 };
 
-export default function ListDialog({ open, onOpenChange, beast, onListed }: Props) {
+export default function ListDialog({ open, onOpenChange, beast, onListed, existingListings = [] }: Props) {
   const { account } = useAccount();
   const [price, setPrice] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [acknowledgedDuplicate, setAcknowledgedDuplicate] = useState(false);
+
+  // Check if beast already has active listings
+  const activeExistingListings = useMemo(() => {
+    if (!beast || !existingListings.length) return [];
+    const beastTokenId = (beast.id.split(":").pop() || beast.id).trim();
+    const normalizedTokenId = beastTokenId.startsWith("0x")
+      ? BigInt(beastTokenId).toString()
+      : beastTokenId;
+    return existingListings.filter(
+      (l) => String(l.tokenId).trim() === normalizedTokenId && l.status === "active"
+    );
+  }, [beast, existingListings]);
+
+  const hasExistingListing = activeExistingListings.length > 0;
 
   // Token selection - default to LORDS
   const [currencyAddress, setCurrencyAddress] = useState(DEFAULT_PAYMENT_TOKEN.address);
@@ -69,6 +89,7 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
     if (open) {
       resetExpiration();
       setError(null);
+      setAcknowledgedDuplicate(false);
     }
   }, [open, resetExpiration]);
 
@@ -92,14 +113,19 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
   }, [price, tokenDecimals]);
 
   const canSubmit = useMemo(() => {
-    return (
+    const baseConditions = (
       !!account &&
       !!beast &&
       priceBigInt !== null &&
       !expirationDetails.error &&
       expirationDetails.expirationSeconds != null
     );
-  }, [account, beast, priceBigInt, expirationDetails.error, expirationDetails.expirationSeconds]);
+    // If there's an existing listing, require explicit acknowledgment
+    if (hasExistingListing && !acknowledgedDuplicate) {
+      return false;
+    }
+    return baseConditions;
+  }, [account, beast, priceBigInt, expirationDetails.error, expirationDetails.expirationSeconds, hasExistingListing, acknowledgedDuplicate]);
 
   const onSubmit = async () => {
     if (!account || !beast) return;
@@ -192,6 +218,57 @@ export default function ListDialog({ open, onOpenChange, beast, onListed }: Prop
               <p className="text-sm text-gray-400">Beast</p>
               <p className="text-sm font-medium">{beast.name}</p>
             </div>
+
+            {/* Warning: Beast already has active listing(s) */}
+            {hasExistingListing && (
+              <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-3 space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-yellow-300">
+                      This beast already has {activeExistingListings.length} active listing{activeExistingListings.length > 1 ? "s" : ""}
+                    </p>
+                    <p className="text-xs text-yellow-200/70 mt-1">
+                      Creating another listing will result in duplicate listings. Consider cancelling the existing listing first.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Show existing listing details */}
+                <div className="mt-2 space-y-1.5 pl-7">
+                  {activeExistingListings.slice(0, 3).map((listing) => {
+                    const token = getPaymentTokenByAddress(listing.paymentToken);
+                    const symbol = token?.symbol ?? "LORDS";
+                    const priceFormatted = formatPrice(listing.price, symbol);
+                    const expiresAt = listing.expiration ? new Date(listing.expiration * 1000) : null;
+                    return (
+                      <div key={listing.listingId} className="text-xs text-gray-300 bg-black/30 rounded px-2 py-1.5">
+                        <span className="font-medium text-white">{priceFormatted} {symbol}</span>
+                        {expiresAt && (
+                          <span className="text-gray-500 ml-2">
+                            expires {expiresAt.toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Acknowledgment checkbox */}
+                <label className="flex items-center gap-2 mt-3 cursor-pointer pl-7">
+                  <input
+                    type="checkbox"
+                    checked={acknowledgedDuplicate}
+                    onChange={(e) => setAcknowledgedDuplicate(e.target.checked)}
+                    className="w-4 h-4 rounded border-yellow-500/50 bg-black/50 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-gray-900"
+                  />
+                  <span className="text-xs text-yellow-200">
+                    I understand and want to create another listing
+                  </span>
+                </label>
+              </div>
+            )}
+
             <div>
               <label className="text-sm text-gray-400">Price</label>
               <Input

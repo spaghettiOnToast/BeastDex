@@ -139,9 +139,9 @@ export function BeastDetailContent({
     return String(value);
   };
 
-  // Fixed dimensions to match beast card
-  const cardHeight = "h-[520px]";
-  const cardWidth = "w-[380px]";
+  // Responsive dimensions - smaller on mobile, larger on desktop
+  const cardHeight = "h-[380px] sm:h-[420px] lg:h-[520px]";
+  const cardWidth = "w-[280px] sm:w-[320px] lg:w-[380px]";
 
   const imageClasses = "block h-full w-full object-contain";
   const fallbackBoxClasses =
@@ -150,7 +150,7 @@ export function BeastDetailContent({
   return (
     <div className="flex flex-col gap-4">
       {/* Main Content: Image + Right Panel */}
-      <div className="flex flex-col lg:flex-row gap-28 justify-center items-start">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-28 justify-center items-start">
         {/* Left: Beast Card */}
         <div className={`${cardWidth} ${cardHeight} flex-shrink-0`}>
           <CometCard>
@@ -197,7 +197,7 @@ export function BeastDetailContent({
           </div>
 
           {/* Panel Content - Height to match card minus tabs */}
-          <div className="h-[480px] rounded-xl border border-gray-800 bg-black/60 overflow-hidden">
+          <div className="h-[340px] sm:h-[380px] lg:h-[480px] rounded-xl border border-gray-800 bg-black/60 overflow-hidden">
             {rightPanelTab === "summit" ? (
               /* Summit Stats Panel */
               <div className="h-full">
