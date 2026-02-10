@@ -58,10 +58,11 @@ export async function batchCheckOrderStatuses(
       result.set(String(row.id), statusNum === 1);
     }
 
-    // Any order not in results is assumed inactive (deleted/not found)
+    // Orders not found in arcade-main are assumed active (fail-open).
+    // The contract check (Step 2) is the authoritative source.
     for (const id of orderIds) {
       if (!result.has(id)) {
-        result.set(id, false);
+        result.set(id, true);
       }
     }
 
