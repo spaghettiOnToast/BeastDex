@@ -247,7 +247,7 @@ export function useArcadeListedTokensForCollection(collectionAddress: string) {
     refetchOnWindowFocus: true, // Refetch when user returns to tab
     refetchOnMount: false, // Don't refetch if data exists
     refetchOnReconnect: false, // Don't refetch on reconnect
-    queryFn: ({ signal }) => fetchArcadeOrdersGraphQL(collectionAddress, 1000, signal),
+    queryFn: ({ signal }) => fetchArcadeOrdersGraphQL(collectionAddress, 2000, signal),
   });
 }
 
