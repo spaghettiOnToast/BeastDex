@@ -107,13 +107,18 @@ export default function CartListDialog({
     return { alreadyListed: listed, availableToList: available };
   }, [beasts, alreadyListedTokenIds]);
 
+  // Reset dialog state when it opens (not when beasts change)
   useEffect(() => {
     if (open) {
       resetExpiration();
-      // Default to the primary currency
       setCurrencyAddress(DEFAULT_PAYMENT_TOKEN.address);
       setError(null);
-      // Initialize empty prices for all beasts
+    }
+  }, [open, resetExpiration]);
+
+  // Initialize prices when beasts change (without resetting currency/expiration)
+  useEffect(() => {
+    if (open) {
       const initialPrices = new Map<string, string>();
       beasts.forEach((beast) => {
         if (!beastPrices.has(beast.id)) {
@@ -124,7 +129,7 @@ export default function CartListDialog({
       });
       setBeastPrices(initialPrices);
     }
-  }, [open, beasts, resetExpiration]);
+  }, [open, beasts]);
 
   const toBigInt = (value: string) => {
     const trimmed = value.trim();

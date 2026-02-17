@@ -1,5 +1,6 @@
 import { useState, useCallback, lazy, Suspense } from "react";
 import { useAccount } from "@starknet-react/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { useGlobalCart } from "../../contexts/GlobalCartContext";
 import { useTermsOfService } from "../../contexts/TermsOfServiceContext";
 import { useMarketplaceListings } from "../../pages/marketplace/hooks/useMarketplaceListings";
@@ -22,6 +23,7 @@ const PurchaseCartDialog = lazy(() => import("./PurchaseCartDialog"));
 
 export function GlobalCartDialogs() {
   const { account } = useAccount();
+  const queryClient = useQueryClient();
   const globalCart = useGlobalCart();
   const { hasAcceptedToS, openToSDialog } = useTermsOfService();
   const { listings: existingListings } = useMarketplaceListings();
@@ -166,7 +168,9 @@ export function GlobalCartDialogs() {
   const handleListed = useCallback(() => {
     globalCart.clearListCart();
     closeListDialog();
-  }, [globalCart, closeListDialog]);
+    // Invalidate homepage listing cache so updated prices show immediately
+    void queryClient.invalidateQueries({ queryKey: ["arcadeListedTokens"] });
+  }, [globalCart, closeListDialog, queryClient]);
 
   return (
     <Suspense fallback={null}>

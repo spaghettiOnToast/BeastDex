@@ -242,9 +242,9 @@ export function useArcadeListedTokensForCollection(collectionAddress: string) {
   return useQuery({
     queryKey,
     enabled: !!collectionAddress,
-    staleTime: 5 * 60_000, // Consider data fresh for 5 minutes (prevents background refetches)
-    gcTime: 10 * 60_000, // Keep in cache for 10 minutes
-    refetchOnWindowFocus: false, // Prevent refetch on window focus
+    staleTime: 30_000, // Consider data fresh for 30 seconds (match marketplace refresh rate)
+    gcTime: 3 * 60_000, // Keep in cache for 3 minutes
+    refetchOnWindowFocus: true, // Refetch when user returns to tab
     refetchOnMount: false, // Don't refetch if data exists
     refetchOnReconnect: false, // Don't refetch on reconnect
     queryFn: ({ signal }) => fetchArcadeOrdersGraphQL(collectionAddress, 1000, signal),

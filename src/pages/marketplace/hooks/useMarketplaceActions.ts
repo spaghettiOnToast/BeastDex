@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { AccountInterface, BigNumberish } from "starknet";
 import type { Beast } from "../../../services/beast";
@@ -52,6 +53,7 @@ export function useMarketplaceActions({
   invalidateSales,
   markListingAsSold,
 }: UseMarketplaceActionsProps) {
+  const queryClient = useQueryClient();
   // Helper to poll for sales updates after a transaction
   const pollForSalesUpdates = useCallback(async (attempts = 3, delayMs = 3000) => {
     if (!invalidateSales) return;
@@ -80,8 +82,10 @@ export function useMarketplaceActions({
 
     await refetchOrders();
     await reloadUserBeasts();
+    // Invalidate homepage listing cache so updated prices show immediately
+    void queryClient.invalidateQueries({ queryKey: ["arcadeListedTokens"] });
     void pollForUpdates();
-  }, [refetchOrders, reloadUserBeasts]);
+  }, [refetchOrders, reloadUserBeasts, queryClient]);
 
   /**
    * Handle purchase of a single listing
