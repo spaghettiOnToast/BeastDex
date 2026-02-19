@@ -48,7 +48,7 @@ function LeaderboardPage() {
         {/* Title */}
         <div className="flex flex-col items-center text-center">
           <h1 className="bg-gradient-to-r from-[#ff7cf7] via-[#7dfbff] to-[#8bff72] bg-clip-text text-3xl font-semibold uppercase tracking-[0.35em] text-transparent">
-            Leaderboards
+            Statistics
           </h1>
           <p className="text-[11px] uppercase tracking-[0.2em] text-gray-500 mt-2">
             Global rankings and statistics
