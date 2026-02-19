@@ -1,7 +1,6 @@
 export type SummitLiveStats = {
   tokenId: number;
   attackStreak: number;
-  blocksHeld: number;
   bonusHealth: number;
   bonusXp: number;
   currentHealth: number;
@@ -28,24 +27,15 @@ export type SummitBeastData = {
   maxBonusLevels: number;
   bonusHealthPercent: number; // 0-100
   maxBonusHealth: number;
-};
-
-export type RawSummitRow = {
-  token_id: number;
-  "live_stats.token_id": number;
-  "live_stats.attack_streak": number;
-  "live_stats.blocks_held": number;
-  "live_stats.bonus_health": number;
-  "live_stats.bonus_xp": number;
-  "live_stats.current_health": number;
-  "live_stats.extra_lives": number;
-  "live_stats.has_claimed_potions": number;
-  "live_stats.last_death_timestamp": string;
-  "live_stats.revival_count": number;
-  "live_stats.stats.diplomacy": number;
-  "live_stats.stats.luck": number;
-  "live_stats.stats.specials": number;
-  "live_stats.stats.spirit": number;
-  "live_stats.stats.wisdom": number;
-  internal_executed_at: string;
+  // Extended fields from Summit API
+  summitRank: number | null;
+  summitHeldSeconds: number;
+  killsClaimed: number;
+  questRewardsClaimed: number;
+  rewardsEarned: number;
+  rewardsClaimed: number;
+  capturedSummit: boolean;
+  diplomacyUnlocked: boolean;
+  prefixId: number;
+  suffixId: number;
 };

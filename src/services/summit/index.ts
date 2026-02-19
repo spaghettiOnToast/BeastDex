@@ -1,7 +1,9 @@
-import { computeSummitBeastData, mapSummitRow } from "./helpers";
-import { buildSummitBeastQuery } from "./queries";
-import { runSummitSql } from "./sqlClient";
-import type { RawSummitRow, SummitBeastData } from "./types";
+import {
+  fetchSummitBeastFromApi,
+  mapApiToSummitBeastData,
+  createDefaultSummitBeastData,
+} from "../summitApi";
+import type { SummitBeastData } from "./types";
 
 export type { SummitBeastData, SummitLiveStats } from "./types";
 export {
@@ -16,24 +18,19 @@ export async function fetchSummitBeastData(
   // Validate tokenId
   if (!tokenId || tokenId <= 0 || !Number.isFinite(tokenId)) {
     console.warn(`[Summit] Invalid tokenId: ${tokenId}`);
-    return computeSummitBeastData(tokenId || 0, null);
+    return createDefaultSummitBeastData(tokenId || 0);
   }
 
   try {
-    const query = buildSummitBeastQuery(tokenId);
-    const rows = await runSummitSql<RawSummitRow[]>(
-      query,
-      `summit-beast-${tokenId}`
-    );
+    const apiBeast = await fetchSummitBeastFromApi(tokenId);
 
-    if (!rows || rows.length === 0) {
-      return computeSummitBeastData(tokenId, null);
+    if (!apiBeast) {
+      return createDefaultSummitBeastData(tokenId);
     }
 
-    const liveStats = mapSummitRow(rows[0]);
-    return computeSummitBeastData(tokenId, liveStats);
+    return mapApiToSummitBeastData(apiBeast);
   } catch (error) {
     console.error(`[Summit] Failed to fetch beast data for ${tokenId}:`, error);
-    return computeSummitBeastData(tokenId, null);
+    return createDefaultSummitBeastData(tokenId);
   }
 }

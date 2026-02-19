@@ -176,7 +176,6 @@ function BeastDetailPage() {
         <BeastDetailContent
           beast={beast}
           ownerUsername={ownerUsername}
-          imageSize="detail"
           summitData={summitData}
           summitLoading={summitLoading}
         />

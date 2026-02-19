@@ -39,6 +39,7 @@ import { Button } from "../components/ui/button";
 import type { OverviewCard } from "@/components/account/OverviewCards";
 import { TOTAL_BEAST_VARIETIES } from "../utils/beastCollection";
 import { normaliseStarknetAddress } from "../utils/address";
+import { fetchOwnerSummitRankFromApi, type OwnerSummitRank } from "../services/summitApi";
 
 function isValidHexAddress(value: string): boolean {
   if (!value.startsWith("0x") || value.length < 3) {
@@ -71,6 +72,7 @@ function AccountPage() {
   const [mostPowerfulBeast, setMostPowerfulBeast] = useState<Beast | null>(null);
   const [accountRanking, setAccountRanking] = useState<BeastPowerRank | null>(null);
   const [healthRanking, setHealthRanking] = useState<BeastHealthRank | null>(null);
+  const [summitRank, setSummitRank] = useState<OwnerSummitRank | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const summaryRequestRef = useRef(0);
@@ -277,6 +279,7 @@ function AccountPage() {
       setMostPowerfulBeast(null);
       setAccountRanking(null);
       setHealthRanking(null);
+      setSummitRank(null);
       setSummaryError(identifierError);
       setSummaryLoading(false);
       return;
@@ -289,7 +292,7 @@ function AccountPage() {
 
     try {
       // Fetch all stats in parallel via SQL queries (replaces loading all beasts)
-      const [combinedRanks, stats, collStats, highlights, powerfulBeast] = await Promise.all([
+      const [combinedRanks, stats, collStats, highlights, powerfulBeast, summitRankResult] = await Promise.all([
         fetchBeastCombinedRanks(resolvedAddress).catch((err) => {
           console.error("Failed to fetch combined ranks", err);
           return { powerRank: null, healthRank: null };
@@ -315,6 +318,7 @@ function AccountPage() {
           console.error("Failed to fetch most powerful beast", err);
           return null;
         }),
+        fetchOwnerSummitRankFromApi(resolvedAddress).catch(() => null),
       ]);
 
       if (summaryRequestRef.current !== requestId) {
@@ -327,6 +331,7 @@ function AccountPage() {
       setMostPowerfulBeast(powerfulBeast);
       setAccountRanking(combinedRanks.powerRank);
       setHealthRanking(combinedRanks.healthRank);
+      setSummitRank(summitRankResult);
     } catch (err: unknown) {
       if (summaryRequestRef.current !== requestId) {
         return;
@@ -338,6 +343,7 @@ function AccountPage() {
       setMostPowerfulBeast(null);
       setAccountRanking(null);
       setHealthRanking(null);
+      setSummitRank(null);
       setSummaryError(getUserFriendlyErrorMessage(err, "Failed to load account summary"));
     } finally {
       if (summaryRequestRef.current === requestId) {
@@ -373,6 +379,7 @@ function AccountPage() {
     setBeastHighlights(null);
     setMostPowerfulBeast(null);
     setHealthRanking(null);
+    setSummitRank(null);
 
     void reload();
     void loadSummary();
@@ -504,12 +511,24 @@ function AccountPage() {
         label: "Combined Health",
         value: (healthRanking?.totalHealth ?? 0).toLocaleString(),
       },
+      ...(summitRank?.rank != null
+        ? [
+            {
+              key: "summit",
+              icon: "⛰️",
+              label: "Summit Rank",
+              value: `#${summitRank.rank}`,
+              sub: `of ${summitRank.total_owners}`,
+            },
+          ]
+        : []),
     ],
     [
       ownerStats,
       rankDisplay,
       rankSubheading,
       healthRanking,
+      summitRank,
     ]
   );
 

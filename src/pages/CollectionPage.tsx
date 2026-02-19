@@ -47,6 +47,7 @@ import { getBeastTemplate } from "../data/beastTemplates";
 import { runBeastSql } from "../services/beast/sqlClient";
 import { mapBeastRow } from "../services/beast/helpers";
 import { apiCache } from "../services/apiCache";
+import { fetchOwnerSummitRankFromApi, type OwnerSummitRank } from "../services/summitApi";
 
 const TABS = [
   { key: "all", label: "All" },
@@ -184,6 +185,7 @@ function CollectionPage() {
   const [collectionStats, setCollectionStats] = useState(
     EMPTY_BEAST_COLLECTION_STATS
   );
+  const [summitRank, setSummitRank] = useState<OwnerSummitRank | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
 
@@ -303,6 +305,7 @@ function CollectionPage() {
     if (!resolvedAddress) {
       setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
       setOwnedBeasts([]);
+      setSummitRank(null);
       setSummaryError(identifierError);
       setSummaryLoading(false);
       return;
@@ -314,6 +317,19 @@ function CollectionPage() {
     setSummaryError(null);
 
     try {
+      // Fetch summit rank in parallel with beast loading
+      fetchOwnerSummitRankFromApi(resolvedAddress)
+        .then((result) => {
+          if (summaryRequestRef.current === requestId) {
+            setSummitRank(result);
+          }
+        })
+        .catch(() => {
+          if (summaryRequestRef.current === requestId) {
+            setSummitRank(null);
+          }
+        });
+
       // Load ALL user's beasts efficiently (we only need their collection, not random samples)
       const limit = 300; // Larger batch for faster loading
       let allUserBeasts: Beast[] = [];
@@ -356,6 +372,7 @@ function CollectionPage() {
       console.error("Failed to load collection summary", err);
       setOwnedBeasts([]);
       setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
+      setSummitRank(null);
       setSummaryError(getUserFriendlyErrorMessage(err, "Failed to load collection"));
     } finally {
       if (summaryRequestRef.current === requestId) {
@@ -1056,6 +1073,23 @@ function CollectionPage() {
               icon: "🐾",
               glisten: "",
             },
+            ...(summitRank?.rank != null
+              ? [
+                  {
+                    key: "summit",
+                    label: "Summit Rank",
+                    count: summitRank.rank,
+                    mainValue: `#${summitRank.rank}`,
+                    subValue: "Rewards Leaderboard",
+                    color: "rgb(234, 179, 8)",
+                    bgGradient:
+                      "bg-gradient-to-br from-yellow-500/15 to-orange-500/5",
+                    borderColor: "border-yellow-400/30",
+                    icon: "⛰️",
+                    glisten: "",
+                  },
+                ]
+              : []),
           ].map((card) => (
             <div
               key={card.key}

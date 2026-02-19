@@ -1,26 +1,82 @@
+import { useEffect, useState } from "react";
 import type { SummitBeastData } from "../../services/summit";
 import type { Beast } from "../../services/beast";
 import {
   REVIVAL_COOLDOWN_HOURS,
   SPIRIT_HOUR_REDUCTION_MULTIPLIER,
 } from "../../services/summit/constants";
+import {
+  fetchDiplomacyBeastsFromApi,
+  type SummitApiDiplomacyBeast,
+} from "../../services/summitApi";
+import { getAttributeValue as getBeastAttribute, getNumericAttribute } from "../../utils/beast";
+
+/** Reverse lookup: prefix name → numeric ID */
+const PREFIX_NAME_TO_ID: Record<string, number> = {
+  Agony: 1, Apocalypse: 2, Armageddon: 3, Beast: 4, Behemoth: 5,
+  Blight: 6, Blood: 7, Bramble: 8, Brimstone: 9, Brood: 10,
+  Carrion: 11, Cataclysm: 12, Chimeric: 13, Corpse: 14, Corruption: 15,
+  Damnation: 16, Death: 17, Demon: 18, Dire: 19, Dragon: 20,
+  Dread: 21, Doom: 22, Dusk: 23, Eagle: 24, Empyrean: 25,
+  Fate: 26, Foe: 27, Gale: 28, Ghoul: 29, Gloom: 30,
+  Glyph: 31, Golem: 32, Grim: 33, Hate: 34, Havoc: 35,
+  Honour: 36, Horror: 37, Hypnotic: 38, Kraken: 39, Loath: 40,
+  Maelstrom: 41, Mind: 42, Miracle: 43, Morbid: 44, Oblivion: 45,
+  Onslaught: 46, Pain: 47, Pandemonium: 48, Phoenix: 49, Plague: 50,
+  Rage: 51, Rapture: 52, Rune: 53, Skull: 54, Sol: 55,
+  Soul: 56, Sorrow: 57, Spirit: 58, Storm: 59, Tempest: 60,
+  Torment: 61, Vengeance: 62, Victory: 63, Viper: 64, Vortex: 65,
+  Woe: 66, Wrath: 67, Lights: 68, Shimmering: 69,
+};
+
+/** Reverse lookup: suffix name → numeric ID */
+const SUFFIX_NAME_TO_ID: Record<string, number> = {
+  Bane: 1, Root: 2, Bite: 3, Song: 4, Roar: 5,
+  Grasp: 6, Instrument: 7, Glow: 8, Bender: 9, Shadow: 10,
+  Whisper: 11, Shout: 12, Growl: 13, Tear: 14, Peak: 15,
+  Form: 16, Sun: 17, Moon: 18,
+};
+
+/**
+ * Parse prefix and suffix IDs from a beast name like `"Tempest Roar" Manticore`.
+ * Returns [prefixId, suffixId] or [0, 0] if parsing fails.
+ */
+function parsePrefixSuffixFromName(name: string): [number, number] {
+  const match = name.match(/^"(\w+)\s+(\w+)"/);
+  if (!match) return [0, 0];
+  const prefixId = PREFIX_NAME_TO_ID[match[1]] ?? 0;
+  const suffixId = SUFFIX_NAME_TO_ID[match[2]] ?? 0;
+  return [prefixId, suffixId];
+}
+
+/** Derive beast tier from beast_id (groups of 5 within each 25-beast type group) */
+function getBeastTier(beastId: number): number {
+  return Math.ceil((((beastId - 1) % 25) + 1) / 5);
+}
+
+function formatSummitTime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  if (days > 0) return `${days}d ${hours}h`;
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+function computeDiplomacyBonus(allies: SummitApiDiplomacyBeast[]): number {
+  if (allies.length < 2) return 0;
+  const totalPower = allies.reduce((sum, ally) => {
+    const tier = getBeastTier(ally.beast_id);
+    return sum + (6 - tier) * ally.current_level;
+  }, 0);
+  return Math.floor(totalPower / 250);
+}
 
 type SummitStatsProps = {
   beast: Beast;
   summitData: SummitBeastData | null;
   loading?: boolean;
-  size?: "modal" | "detail";
 };
-
-function getAttributeValue(
-  beast: Beast,
-  traitType: string,
-): string | number | null {
-  const attr = beast.attributes.find(
-    (a) => a.trait_type.toLowerCase() === traitType.toLowerCase(),
-  );
-  return attr?.value ?? null;
-}
 
 // Compact ability icons for beast cards
 export type AbilityIconsProps = {
@@ -208,15 +264,47 @@ export function SummitStats({
   beast,
   summitData,
   loading,
-  size: _size = "detail",
 }: SummitStatsProps) {
-  const tier = getAttributeValue(beast, "tier");
-  const level = getAttributeValue(beast, "level");
-  const beastType = getAttributeValue(beast, "type");
-  const power = beast.power ?? getAttributeValue(beast, "power");
-  const health = getAttributeValue(beast, "health");
+  const tier = getBeastAttribute(beast, "tier") ?? "—";
+  const level = getBeastAttribute(beast, "level") ?? "—";
+  const beastType = getBeastAttribute(beast, "type") ?? "—";
+  const power = beast.power ?? getNumericAttribute(beast, "power");
+  const health = getBeastAttribute(beast, "health") ?? "—";
 
   const liveStats = summitData?.liveStats;
+
+  // Fetch diplomacy allies when diplomacy is unlocked
+  const [allies, setAllies] = useState<SummitApiDiplomacyBeast[]>([]);
+  const [alliesLoading, setAlliesLoading] = useState(false);
+
+  // Resolve prefix/suffix IDs: prefer API data, fall back to parsing beast name
+  let prefixId = summitData?.prefixId ?? 0;
+  let suffixId = summitData?.suffixId ?? 0;
+  if ((!prefixId || !suffixId) && beast.name) {
+    const [parsedPrefix, parsedSuffix] = parsePrefixSuffixFromName(beast.name);
+    if (!prefixId) prefixId = parsedPrefix;
+    if (!suffixId) suffixId = parsedSuffix;
+  }
+
+  useEffect(() => {
+    if (!summitData?.diplomacyUnlocked || !prefixId || !suffixId) {
+      setAllies([]);
+      return;
+    }
+    let cancelled = false;
+    setAlliesLoading(true);
+    fetchDiplomacyBeastsFromApi(prefixId, suffixId)
+      .then((result) => {
+        if (!cancelled) setAllies(result);
+      })
+      .catch(() => {
+        if (!cancelled) setAllies([]);
+      })
+      .finally(() => {
+        if (!cancelled) setAlliesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [summitData?.diplomacyUnlocked, prefixId, suffixId]);
 
   if (loading) {
     return (
@@ -235,7 +323,7 @@ export function SummitStats({
         <StatBox label="Type" value={beastType} />
       </div>
 
-      {/* Power / Health */}
+      {/* Power / Health / Summit Rank */}
       <div className="flex gap-1 shrink-0">
         <div className="flex-1 rounded-md border border-gray-700 bg-[#2a2a35] px-2 py-2 text-center">
           <p className="text-[8px] uppercase tracking-wider text-gray-400">
@@ -276,6 +364,24 @@ export function SummitStats({
             )}
           </p>
         </div>
+        {summitData?.summitRank != null && (
+          <div className="flex-1 rounded-md border border-yellow-600/50 bg-yellow-900/20 px-2 py-2 text-center">
+            <p className="text-[8px] uppercase tracking-wider text-yellow-400">
+              Summit Rank
+            </p>
+            <p className="text-sm font-bold text-yellow-300 flex items-center justify-center gap-1">
+              <svg className="h-3.5 w-3.5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              </svg>
+              #{summitData.summitRank}
+            </p>
+            {summitData.summitHeldSeconds > 0 && (
+              <p className="text-[8px] text-yellow-400/70 mt-0.5">
+                {formatSummitTime(summitData.summitHeldSeconds)}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Summit-specific data */}
@@ -465,7 +571,81 @@ export function SummitStats({
             </div>
           </div>
 
-          {/* Revival Time & Potions - compact */}
+          {/* Diplomacy Strength Boost */}
+          {summitData.diplomacyUnlocked && (
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-300">
+                Diplomacy Alliance
+              </p>
+              <div className="rounded border border-purple-500/30 bg-purple-900/10 px-2 py-1.5">
+                {alliesLoading ? (
+                  <p className="text-[10px] text-gray-400">Loading allies...</p>
+                ) : allies.length >= 2 ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-6 w-6 rounded-full bg-purple-900/50 flex items-center justify-center">
+                      <svg className="h-3.5 w-3.5 text-purple-400" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-[10px] font-bold text-purple-300">
+                        +{allies.length} allies • +{computeDiplomacyBonus(allies)} defense bonus
+                      </p>
+                      <p className="text-[8px] text-purple-400/70">
+                        Combined alliance power / 250
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-gray-400">
+                    No allies found with matching name
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Rewards & Claims */}
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-300">
+              Rewards & Claims
+            </p>
+            <div className="flex gap-1">
+              <div className="flex-1 flex items-center gap-1.5 rounded border border-gray-700 bg-[#2a2a35] px-2 py-1.5">
+                <svg className="h-3.5 w-3.5 text-gray-300" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z" />
+                </svg>
+                <div>
+                  <p className="text-[10px] font-bold text-white">{summitData.killsClaimed}</p>
+                  <p className="text-[7px] text-gray-400">SKULLS</p>
+                </div>
+              </div>
+              <div className="flex-1 flex items-center gap-1.5 rounded border border-gray-700 bg-[#2a2a35] px-2 py-1.5">
+                <svg className="h-3.5 w-3.5 text-blue-400" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
+                </svg>
+                <div>
+                  <p className="text-[10px] font-bold text-white">{summitData.questRewardsClaimed}</p>
+                  <p className="text-[7px] text-gray-400">QUESTS</p>
+                </div>
+              </div>
+              <div className="flex-1 flex items-center gap-1.5 rounded border border-gray-700 bg-[#2a2a35] px-2 py-1.5">
+                <svg className="h-3.5 w-3.5 text-yellow-400" viewBox="0 0 24 24" fill="currentColor">
+                  <circle cx="12" cy="12" r="10" />
+                </svg>
+                <div>
+                  <p className="text-[10px] font-bold text-white">
+                    {summitData.rewardsEarned > 0 ? (summitData.rewardsEarned / 100000).toFixed(1) : "0"}
+                  </p>
+                  <p className="text-[7px] text-gray-400">
+                    EARNED{summitData.rewardsClaimed > 0 ? ` / ${(summitData.rewardsClaimed / 100000).toFixed(1)} CLAIMED` : ""}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Revival Time & Potions */}
           <div className="flex items-center justify-between text-[10px]">
             <div className="flex items-center gap-1">
               <span className="uppercase tracking-wide text-gray-400 font-semibold">
@@ -487,16 +667,6 @@ export function SummitStats({
                 <path d="M5 19h14v2H5v-2zm7-18c-1.1 0-2 .9-2 2v2H8v2h2v3.26c-1.75.67-3 2.34-3 4.31 0 2.54 2.06 4.61 4.6 4.65h.8c2.54-.04 4.6-2.11 4.6-4.65 0-1.97-1.25-3.64-3-4.31V7h2V5h-2V3c0-1.1-.9-2-2-2zm1 14h-2v-2h2v2zm0-4h-2V7h2v4z" />
               </svg>
             </div>
-          </div>
-
-          {/* Blocks - compact */}
-          <div className="flex items-center justify-between text-[10px]">
-            <span className="uppercase tracking-wide text-gray-400 font-semibold">
-              Blocks:
-            </span>
-            <span className="font-bold text-white text-sm">
-              {liveStats.blocksHeld.toLocaleString()}
-            </span>
           </div>
         </>
       ) : (

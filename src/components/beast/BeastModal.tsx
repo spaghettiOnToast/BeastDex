@@ -208,7 +208,6 @@ export const BeastModal = memo(function BeastModal({
               ownerUsername={ownerUsername}
               summitData={summitData}
               summitLoading={summitLoading}
-              imageSize="modal"
               hideFooter
             />
           </div>
