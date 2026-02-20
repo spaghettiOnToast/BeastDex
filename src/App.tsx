@@ -16,6 +16,7 @@ import { FloatingCarts } from "./components/marketplace/FloatingCarts";
 import { GlobalCartDialogs } from "./components/marketplace/GlobalCartDialogs";
 import { TermsOfServiceDialog } from "./components/legal/TermsOfServiceDialog";
 import { Toaster } from "sonner";
+import { Analytics } from "@vercel/analytics/react";
 
 // Lazy load pages for better performance
 const HomePage = lazy(() => import("./pages/HomePage"));
@@ -97,6 +98,7 @@ function App() {
             </Suspense>
             {/* Terms of Service dialog */}
             <TermsOfServiceDialog />
+            <Analytics />
           </ErrorBoundary>
           </TermsOfServiceProvider>
           </SoldListingsProvider>
