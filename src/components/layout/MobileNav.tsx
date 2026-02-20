@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, Trophy, Home, Store, type LucideIcon } from "lucide-react";
+import { Menu, X, BarChart3, Home, Store, type LucideIcon } from "lucide-react";
 import { Button } from "../ui/button";
 
 type NavItem = {
@@ -27,7 +27,7 @@ export function MobileNav({ onNavigate }: Props) {
   const navItems: NavItem[] = [
     { to: "/", label: "Home", icon: Home },
     { to: "/marketplace", label: "Marketplace", icon: Store, color: "text-[#0ef]" },
-    { to: "/leaderboard", label: "Leaderboard", icon: Trophy, color: "text-[#39ff14]" },
+    { to: "/statistics", label: "Statistics", icon: BarChart3, color: "text-[#39ff14]" },
   ];
 
   const mobileMenu = isOpen ? (

@@ -87,6 +87,7 @@ function HomePage() {
   const { getToken } = useTokenMap();
   const { markAsSold, notifyOfferMade, notifyPurchase } = useSoldListings();
   const [makeOfferOpen, setMakeOfferOpen] = useState(false);
+  const [offerBeast, setOfferBeast] = useState<Beast | null>(null);
   const [purchaseConfirmOpen, setPurchaseConfirmOpen] = useState(false);
   const [purchasingListing, setPurchasingListing] = useState<Listing | null>(null);
   const [purchaseProcessing, setPurchaseProcessing] = useState(false);
@@ -436,6 +437,7 @@ function HomePage() {
             variant="outline"
             size="default"
             onClick={() => {
+              setOfferBeast(selectedBeast);
               handleCloseModal();
               setMakeOfferOpen(true);
             }}
@@ -483,6 +485,7 @@ function HomePage() {
           variant="outline"
           size="default"
           onClick={() => {
+            setOfferBeast(selectedBeast);
             handleCloseModal();
             setMakeOfferOpen(true);
           }}
@@ -561,9 +564,12 @@ function HomePage() {
       <Suspense fallback={null}>
         <MakeOfferDialog
           open={makeOfferOpen}
-          onOpenChange={setMakeOfferOpen}
-          beast={selectedBeast}
-          tokenId={selectedBeast?.numericId?.toString() || selectedBeast?.id.split(":").pop() || ""}
+          onOpenChange={(open) => {
+            setMakeOfferOpen(open);
+            if (!open) setOfferBeast(null);
+          }}
+          beast={offerBeast}
+          tokenId={offerBeast?.numericId?.toString() || offerBeast?.id.split(":").pop() || ""}
           onOfferMade={() => {
             // Notify other pages that an offer was made (for refreshing offer lists)
             notifyOfferMade();
