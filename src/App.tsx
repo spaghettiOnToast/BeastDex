@@ -89,7 +89,7 @@ function App() {
                 <Route path="/account/:identifier" element={<AccountPage />} />
                 <Route path="/collection/:identifier" element={<CollectionPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/leaderboard" element={<LeaderboardPage />} />
+                <Route path="/statistics" element={<LeaderboardPage />} />
                 <Route path="/marketplace" element={<MarketplacePage />} />
               </Routes>
               {/* Global floating carts and dialogs */}
