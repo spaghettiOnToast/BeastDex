@@ -73,6 +73,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/summit-torii/, ""),
       },
+      "/summit-api": {
+        target: "https://summit-api-production.up.railway.app",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/summit-api/, ""),
+      },
     },
   },
 });

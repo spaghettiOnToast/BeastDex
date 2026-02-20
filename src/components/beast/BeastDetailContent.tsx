@@ -10,7 +10,6 @@ type BeastDetailContentProps = {
   beast: Beast;
   ownerUsername?: string | null;
   actionSlot?: ReactNode;
-  imageSize?: "modal" | "detail";
   summitData?: SummitBeastData | null;
   summitLoading?: boolean;
   hideFooter?: boolean;
@@ -97,7 +96,6 @@ export function BeastDetailContent({
   beast,
   ownerUsername,
   actionSlot,
-  imageSize = "detail",
   summitData,
   summitLoading,
   hideFooter = false,
@@ -197,7 +195,7 @@ export function BeastDetailContent({
           </div>
 
           {/* Panel Content - Height to match card minus tabs */}
-          <div className="h-[340px] sm:h-[380px] lg:h-[480px] rounded-xl border border-gray-800 bg-black/60 overflow-hidden">
+          <div className="h-[370px] sm:h-[410px] lg:h-[510px] rounded-xl border border-gray-800 bg-black/60 overflow-y-auto">
             {rightPanelTab === "summit" ? (
               /* Summit Stats Panel */
               <div className="h-full">
@@ -205,7 +203,6 @@ export function BeastDetailContent({
                   beast={beast}
                   summitData={summitData ?? null}
                   loading={summitLoading}
-                  size={imageSize}
                 />
               </div>
             ) : (
