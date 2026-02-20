@@ -133,7 +133,6 @@ export type SummitApiLeaderboardEntry = {
   amount: number;
 };
 
-
 /** GET /quest-rewards/total */
 export type SummitApiQuestRewardsTotal = {
   total: number;

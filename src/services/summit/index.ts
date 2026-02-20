@@ -6,11 +6,6 @@ import {
 import type { SummitBeastData } from "./types";
 
 export type { SummitBeastData, SummitLiveStats } from "./types";
-export {
-  MAX_BONUS_HEALTH,
-  MAX_BONUS_LEVELS,
-  REVIVAL_COOLDOWN_SECONDS,
-} from "./constants";
 
 export async function fetchSummitBeastData(
   tokenId: number
