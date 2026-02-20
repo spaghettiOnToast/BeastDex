@@ -586,38 +586,38 @@ export function SummitStats({
           </div>
 
           {/* Diplomacy Alliance */}
-          {summitData.diplomacyUnlocked && (
-            <div className="space-y-1">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-300">
-                Diplomacy Alliance
-              </p>
-              <div className="rounded border border-purple-500/30 bg-purple-900/10 px-2 py-1.5">
-                {alliesLoading ? (
-                  <p className="text-[10px] text-gray-400">Loading allies...</p>
-                ) : allies.length >= 2 ? (
-                    <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-full bg-purple-900/50 flex items-center justify-center">
-                        <svg className="h-3.5 w-3.5 text-purple-400" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-                        </svg>
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-[10px] font-bold text-purple-300">
-                          +{allies.length} allies • +{diplomacyBonus} defense bonus • +{diplomacyBonus} str boost
-                        </p>
-                        <p className="text-[8px] text-purple-400/70">
-                          Combined alliance power / 250
-                        </p>
-                      </div>
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-300">
+              Diplomacy Alliance
+            </p>
+            <div className="rounded border border-purple-500/30 bg-purple-900/10 px-2 py-1.5">
+              {!summitData.diplomacyUnlocked ? (
+                <p className="text-[10px] text-gray-400">No allies on this beast</p>
+              ) : alliesLoading ? (
+                <p className="text-[10px] text-gray-400">Loading allies...</p>
+              ) : allies.length >= 2 ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-6 w-6 rounded-full bg-purple-900/50 flex items-center justify-center">
+                      <svg className="h-3.5 w-3.5 text-purple-400" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                      </svg>
                     </div>
-                ) : (
-                  <p className="text-[10px] text-gray-400">
-                    No allies found with matching name
-                  </p>
-                )}
-              </div>
+                    <div className="flex-1">
+                      <p className="text-[10px] font-bold text-purple-300">
+                        +{allies.length} allies • +{diplomacyBonus} defense bonus • +{diplomacyBonus} str boost
+                      </p>
+                      <p className="text-[8px] text-purple-400/70">
+                        Combined alliance power / 250
+                      </p>
+                    </div>
+                  </div>
+              ) : (
+                <p className="text-[10px] text-gray-400">
+                  No allies found with matching name
+                </p>
+              )}
             </div>
-          )}
+          </div>
 
           {/* Quests */}
           <div className="space-y-1">
