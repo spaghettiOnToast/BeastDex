@@ -195,7 +195,7 @@ export function BeastDetailContent({
           </div>
 
           {/* Panel Content - Height to match card minus tabs */}
-          <div className="h-[340px] sm:h-[380px] lg:h-[480px] rounded-xl border border-gray-800 bg-black/60 overflow-y-auto">
+          <div className="h-[370px] sm:h-[410px] lg:h-[510px] rounded-xl border border-gray-800 bg-black/60 overflow-y-auto">
             {rightPanelTab === "summit" ? (
               /* Summit Stats Panel */
               <div className="h-full">

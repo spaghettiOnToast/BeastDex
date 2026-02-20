@@ -31,10 +31,14 @@ export type SummitBeastData = {
   summitRank: number | null;
   summitHeldSeconds: number;
   killsClaimed: number;
+  adventurersKilled: number;
   questRewardsClaimed: number;
   rewardsEarned: number;
   rewardsClaimed: number;
   capturedSummit: boolean;
+  maxAttackStreak: boolean;
+  usedRevivalPotion: boolean;
+  usedAttackPotion: boolean;
   diplomacyUnlocked: boolean;
   prefixId: number;
   suffixId: number;
