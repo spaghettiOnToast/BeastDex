@@ -461,9 +461,9 @@ export function buildBeastsByIdListQuery({
       t.id,
       t.metadata,
       b.account_address,
-      ${POWER_SELECT_FRAGMENT}
+      NULL as power
     FROM tokens t
-    JOIN current_owners b
+    LEFT JOIN current_owners b
       ON t.id = b.token_id
       AND t.contract_address = b.contract_address
       AND b.rn = 1

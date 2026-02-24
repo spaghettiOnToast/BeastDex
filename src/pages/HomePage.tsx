@@ -38,7 +38,7 @@ import type { Listing } from "../services/marketplace/types";
 // Lazy load marketplace dialogs - only needed when modal opens (~20% of users)
 const MakeOfferDialog = lazy(() => import("../components/marketplace/MakeOfferDialog"));
 const PurchaseConfirmDialog = lazy(() => import("../components/marketplace/PurchaseConfirmDialog"));
-import { executePurchaseWithApproval } from "../services/marketplace/approvals";
+import { executePurchaseWithApproval, getOrderValidity, getPublicProvider } from "../services/marketplace/approvals";
 import { toast } from "sonner";
 import { isUserRejection } from "../utils/transaction";
 import { useSoldListings } from "../contexts/SoldListingsContext";
@@ -349,11 +349,30 @@ function HomePage() {
   // Find listing for selected beast (if any) - uses lightweight lookup (no beast hydration)
   const selectedBeastListing = useMemo(() => {
     if (!selectedBeast) return null;
-    // Get the token ID from the beast
-    const beastTokenId = selectedBeast.numericId?.toString() || selectedBeast.id.split(":").pop() || "";
-    // Look up listing for this beast (O(1) lookup from cached Arcade data)
-    return getListingForToken(beastTokenId);
+    const tokenId = selectedBeast.numericId?.toString() || selectedBeast.id.split(":").pop() || "";
+    return getListingForToken(tokenId);
   }, [selectedBeast, getListingForToken]);
+
+  // Layer 2: On-chain contract check when modal opens with a listing (1 RPC call)
+  useEffect(() => {
+    if (!selectedBeastListing) return;
+
+    let cancelled = false;
+    const { orderId, tokenId, listingId } = selectedBeastListing;
+
+    getOrderValidity(
+      getPublicProvider(),
+      orderId,
+      BEASTS_COLLECTION_ADDRESS,
+      tokenId,
+    ).then(({ valid }) => {
+      if (!cancelled && !valid) {
+        markAsSold(listingId);
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [selectedBeastListing, markAsSold]);
 
   // Format price with USD for the listing
   const formatPriceWithUsd = useCallback((listing: Listing) => {

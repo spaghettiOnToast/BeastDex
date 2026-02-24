@@ -69,6 +69,12 @@ export async function summitApiFetch<T>(
       clearTimeout(timer);
       if (isTimeout) {
         lastError = new Error(`Summit API request timed out after ${timeoutMs}ms`);
+      } else if (
+        err instanceof Error &&
+        err.message.startsWith("Summit API error:")
+      ) {
+        // Non-retryable client error (4xx except 429) — re-throw immediately
+        throw err;
       } else {
         lastError = err;
       }

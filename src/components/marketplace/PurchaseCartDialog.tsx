@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useAccount } from "@starknet-react/core";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +13,7 @@ import { X, AlertTriangle } from "lucide-react";
 import { formatPrice } from "../../utils/price";
 import { getPaymentTokenByAddress, BEASTS_COLLECTION_ADDRESS, CLIENT_FEE_BP } from "../../services/marketplace/constants";
 import { toBigIntSafe } from "../../utils/bigint";
-import { validateListingOwnership, getProvider } from "../../services/marketplace/approvals";
+import { getOrderValidities, getPublicProvider } from "../../services/marketplace/approvals";
 import { useEkuboTokens, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
 import { useSoldListings } from "../../contexts/SoldListingsContext";
 
@@ -37,7 +36,6 @@ export default function PurchaseCartDialog({
   onPurchaseAll,
   isProcessing,
 }: Props) {
-  const { account } = useAccount();
   const [invalidListingIds, setInvalidListingIds] = useState<Set<string>>(new Set());
   const [isValidating, setIsValidating] = useState(false);
   const [hasValidated, setHasValidated] = useState(false);
@@ -71,36 +69,29 @@ export default function PurchaseCartDialog({
 
   // Validate all listings when dialog opens or listings change
   const validateListings = useCallback(async () => {
-    if (!account || listings.length === 0) return;
+    if (listings.length === 0) return;
 
     setIsValidating(true);
     const invalid = new Set<string>();
 
     try {
-      const provider = getProvider(account);
+      const provider = getPublicProvider();
 
-      // Validate each listing in parallel via ownerOf calls
-      const validationPromises = listings.map(async (listing) => {
-        try {
-          const tokenIdBigInt = BigInt(listing.tokenId);
-          const isValid = await validateListingOwnership(
-            provider,
-            BEASTS_COLLECTION_ADDRESS,
-            tokenIdBigInt,
-            listing.seller
-          );
-          return { listingId: listing.listingId, isValid };
-        } catch {
-          return { listingId: listing.listingId, isValid: false };
-        }
-      });
+      // Batch validate via on-chain contract (1 RPC call per chunk)
+      const orders = listings.map((listing) => ({
+        orderId: listing.orderId ?? listing.listingId,
+        collection: BEASTS_COLLECTION_ADDRESS,
+        tokenId: BigInt(listing.tokenId),
+      }));
 
-      const results = await Promise.all(validationPromises);
-      for (const result of results) {
-        if (!result.isValid) {
-          invalid.add(result.listingId);
-          // Mark as sold globally so it's hidden from listings tab
-          markAsSold(result.listingId);
+      const validityMap = await getOrderValidities(provider, orders);
+
+      for (const listing of listings) {
+        const key = String(listing.orderId ?? listing.listingId);
+        const validity = validityMap.get(key);
+        if (validity && !validity.valid) {
+          invalid.add(listing.listingId);
+          markAsSold(listing.listingId);
         }
       }
     } catch (error) {
@@ -110,7 +101,7 @@ export default function PurchaseCartDialog({
     setInvalidListingIds(invalid);
     setIsValidating(false);
     setHasValidated(true);
-  }, [account, listings, markAsSold]);
+  }, [listings, markAsSold]);
 
   // Validate when dialog opens
   useEffect(() => {

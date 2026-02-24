@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef, lazy, Suspense } from "react";
+import { normaliseStarknetAddress } from "../utils/address";
 import { useAccount } from "@starknet-react/core";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
@@ -162,6 +163,7 @@ export default function MarketplacePage() {
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<string | null>(null);
   const [activityTypeFilter, setActivityTypeFilter] = useState<"listing" | "sale" | null>(null);
   const [activityPage, setActivityPage] = useState(1);
+  const [soldPage, setSoldPage] = useState(1);
   const [recentViewMode, setRecentViewMode] = useState<"cards" | "table">("cards");
   const [listingsViewMode, setListingsViewMode] = useState<"cards" | "table">("cards");
 
@@ -301,7 +303,7 @@ export default function MarketplacePage() {
   // Recent sales hook (from indexer)
   const { namedRecentSales, invalidateAndRefetch: invalidateRecentSales } = useRecentSales({
     listings: dataHook.listings,
-    limit: 20,
+    limit: 500,
   });
 
   // Combined invalidation function for all sales data
@@ -323,6 +325,34 @@ export default function MarketplacePage() {
 
   // Defer username lookups to allow listings to render first
   const { usernames: ownerUsernames } = useControllerUsernames(filtersHook.ownerAddresses, { delayMs: 300 });
+
+  // Collect unique from/to addresses from recent sales for username resolution
+  const saleAddresses = useMemo(() => {
+    const addrs = new Set<string>();
+    for (const sale of namedRecentSales) {
+      if (sale.from) addrs.add(sale.from);
+      if (sale.to) addrs.add(sale.to);
+    }
+    return Array.from(addrs);
+  }, [namedRecentSales]);
+
+  const { usernames: saleUsernames } = useControllerUsernames(saleAddresses, { delayMs: 300 });
+
+  // Merge listing owner usernames with sale participant usernames
+  const allUsernames = useMemo(
+    () => ({ ...ownerUsernames, ...saleUsernames }),
+    [ownerUsernames, saleUsernames]
+  );
+
+  // Lookup helper that normalises the address before accessing the map
+  const getUsername = useCallback(
+    (addr: string | null | undefined) => {
+      if (!addr) return undefined;
+      const key = normaliseStarknetAddress(addr);
+      return key ? allUsernames[key] : undefined;
+    },
+    [allUsernames]
+  );
 
   // Fetch offers for selected token when offers dialog is open
   const { data: arcadeOffers, isLoading: offersLoading } = useOffersForToken(
@@ -1419,7 +1449,7 @@ export default function MarketplacePage() {
                                       </div>
                                     </td>
                                     <td className="px-3 py-2.5 text-gray-400">
-                                      {ownerUsernames[listing.seller?.toLowerCase()] ||
+                                      {getUsername(listing.seller) ||
                                         `${listing.seller?.slice(0, 6)}...${listing.seller?.slice(-4)}`}
                                     </td>
                                     <td className="px-3 py-2.5">
@@ -1648,7 +1678,7 @@ export default function MarketplacePage() {
                                     </div>
                                   </td>
                                   <td className="px-3 py-2.5 text-gray-400">
-                                    {ownerUsernames[listing.seller?.toLowerCase()] ||
+                                    {getUsername(listing.seller) ||
                                       `${listing.seller?.slice(0, 6)}...${listing.seller?.slice(-4)}`}
                                   </td>
                                   <td className="px-3 py-2.5">
@@ -1725,7 +1755,11 @@ export default function MarketplacePage() {
                   </p>
                 ) : (
                   <div className="space-y-3">
-                    {namedRecentSales.map(({ sale, beast, tokenId, price, from, to, time }, idx) => {
+                    {(() => {
+                      const SOLD_PAGE_SIZE = 25;
+                      const startIdx = (soldPage - 1) * SOLD_PAGE_SIZE;
+                      return namedRecentSales.slice(startIdx, startIdx + SOLD_PAGE_SIZE);
+                    })().map(({ sale, beast, tokenId, price, from, to, time }, idx) => {
                       const tokenAddress = sale.order?.currency;
                       const token = tokenAddress ? getPaymentTokenByAddress(tokenAddress) : null;
                       const tokenInfo = tokenAddress ? getToken(tokenAddress) : null;
@@ -1772,7 +1806,7 @@ export default function MarketplacePage() {
                               )}
                             </div>
                             <p className="text-xs text-gray-500 truncate">
-                              {from.slice(0, 6)}...{from.slice(-4)} → {to.slice(0, 6)}...{to.slice(-4)}
+                              {getUsername(from) || `${from.slice(0, 6)}...${from.slice(-4)}`} → {getUsername(to) || `${to.slice(0, 6)}...${to.slice(-4)}`}
                             </p>
                           </div>
                           {/* Time & Date */}
@@ -1789,6 +1823,22 @@ export default function MarketplacePage() {
                     })}
                   </div>
                 )}
+                {(() => {
+                  const SOLD_PAGE_SIZE = 25;
+                  const totalSoldPages = Math.ceil(namedRecentSales.length / SOLD_PAGE_SIZE);
+                  if (totalSoldPages > 1) {
+                    return (
+                      <Pagination
+                        currentPage={soldPage}
+                        totalPages={totalSoldPages}
+                        totalItems={namedRecentSales.length}
+                        itemsPerPage={SOLD_PAGE_SIZE}
+                        onPageChange={setSoldPage}
+                      />
+                    );
+                  }
+                  return null;
+                })()}
               </>
             ) : (
               /* Activity Tab - Combined listings and sales table */
@@ -2000,12 +2050,12 @@ export default function MarketplacePage() {
                           <td className="px-3 py-2.5 text-gray-400">
                             <div className="flex flex-col">
                               <span>
-                                {ownerUsernames[activity.from?.toLowerCase()] ||
+                                {getUsername(activity.from) ||
                                   `${activity.from?.slice(0, 6)}...${activity.from?.slice(-4)}`}
                               </span>
                               {activity.to && (
                                 <span className="text-[10px] text-gray-500">
-                                  → {ownerUsernames[activity.to?.toLowerCase()] ||
+                                  → {getUsername(activity.to) ||
                                     `${activity.to?.slice(0, 6)}...${activity.to?.slice(-4)}`}
                                 </span>
                               )}
@@ -2998,7 +3048,7 @@ export default function MarketplacePage() {
           {detailModalBeast && (
             <BeastModal
               beast={detailModalBeast}
-              ownerUsernames={ownerUsernames}
+              ownerUsernames={allUsernames}
               onClose={handleCloseDetailModal}
               customActionSlot={detailModalActionSlot}
               listingExpiration={detailModalListing?.expiration}
@@ -3019,6 +3069,9 @@ export default function MarketplacePage() {
           onHealthRangeChange={filtersHook.handleHealthRangeChange}
           onLevelRangeChange={filtersHook.handleLevelRangeChange}
           onAdventurersKilledRangeChange={filtersHook.handleAdventurersKilledRangeChange}
+          unclaimedSkullsFilter={filtersHook.unclaimedSkullsFilter}
+          onUnclaimedSkullsChange={filtersHook.handleUnclaimedSkullsChange}
+          skullsLoading={filtersHook.skullsLoading}
           onResetFilters={filtersHook.handleResetFilters}
         />
 

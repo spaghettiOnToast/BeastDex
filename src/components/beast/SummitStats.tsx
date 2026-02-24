@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { SummitBeastData } from "../../services/summit";
+import { fetchSkullsClaimed } from "../../services/summit";
 import type { Beast } from "../../services/beast";
 import {
   REVIVAL_COOLDOWN_HOURS,
@@ -10,6 +11,9 @@ import {
   type SummitApiDiplomacyBeast,
 } from "../../services/summitApi";
 import { getAttributeValue as getBeastAttribute, getNumericAttribute } from "../../utils/beast";
+import { useTokenMap } from "../../hooks/useEkuboTokens";
+
+const SKULL_TOKEN_ADDRESS = "0x01c3c8284d7eed443b42f47e764032a56eaf50a9079d67993b633930e3689814";
 
 /** Reverse lookup: prefix name → numeric ID */
 const PREFIX_NAME_TO_ID: Record<string, number> = {
@@ -350,11 +354,33 @@ export function SummitStats({
   const health = getBeastAttribute(beast, "health") ?? "—";
 
   const liveStats = summitData?.liveStats;
+  const { getToken } = useTokenMap();
+  const skullToken = getToken(SKULL_TOKEN_ADDRESS);
 
   // Fetch diplomacy allies when diplomacy is unlocked
   const [allies, setAllies] = useState<SummitApiDiplomacyBeast[]>([]);
   const [alliesLoading, setAlliesLoading] = useState(false);
   const diplomacyBonus = computeDiplomacyBonus(allies);
+
+  // Extract real NFT token ID from beast.id (format: "contract:0x{64-hex}")
+  // beast.numericId can be the beast type ID from metadata, not the NFT token ID
+  const tokenId = (() => {
+    if (!beast.id) return 0;
+    const hex = beast.id.includes(":") ? beast.id.slice(beast.id.lastIndexOf(":") + 1) : beast.id;
+    if (/^0x[0-9a-f]+$/i.test(hex)) return Number.parseInt(hex, 16);
+    return beast.numericId || 0;
+  })();
+
+  // Fetch on-chain skulls claimed from Skull contract (null = pending/failed)
+  const [skullsClaimed, setSkullsClaimed] = useState<number | null>(null);
+  useEffect(() => {
+    if (!tokenId) return;
+    let cancelled = false;
+    fetchSkullsClaimed(tokenId).then((v) => {
+      if (!cancelled) setSkullsClaimed(v);
+    });
+    return () => { cancelled = true; };
+  }, [tokenId]);
 
   // Resolve prefix/suffix IDs: prefer API data, fall back to parsing beast name
   let prefixId = summitData?.prefixId ?? 0;
@@ -394,7 +420,7 @@ export function SummitStats({
   }
 
   return (
-    <div className="h-full p-4 flex flex-col gap-2">
+    <div className="min-h-full p-4 flex flex-col gap-2">
       {/* Summit Rank / Tier / Level / Type */}
       <div className="flex gap-1 shrink-0">
         {summitData?.summitRank != null && (
@@ -668,6 +694,34 @@ export function SummitStats({
           </div>
         </div>
       )}
+
+      {/* Skulls — always visible (data comes from NFT metadata + on-chain Skull contract) */}
+      {(() => {
+        const earned = getNumericAttribute(beast, "Adventurers Killed") ?? 0;
+        const claimable = skullsClaimed !== null ? earned - skullsClaimed : null;
+        return (
+          <div className="space-y-1">
+            <div className="flex items-center gap-1">
+              {skullToken?.logoUrl && (
+                <img src={skullToken.logoUrl} alt="SKULL" className="h-4 w-4 rounded-full" />
+              )}
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-300">
+                Skulls
+              </p>
+            </div>
+            <div className="flex gap-1">
+              <StatBox label="Earned" value={earned} />
+              <StatBox label="Claimed" value={skullsClaimed ?? "..."} />
+              <div className="flex-1 rounded-md border border-gray-700 bg-[#2a2a35] px-1.5 py-1 text-center">
+                <p className="text-[7px] uppercase tracking-wider text-gray-400">Claimable</p>
+                <p className={`text-xs font-bold ${claimable !== null && claimable > 0 ? "text-green-400" : "text-white"}`}>
+                  {claimable ?? "..."}
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

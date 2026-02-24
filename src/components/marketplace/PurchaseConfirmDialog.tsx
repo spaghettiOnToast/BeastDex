@@ -13,6 +13,8 @@ import { getPaymentTokenByAddress, CLIENT_FEE_BP } from "../../services/marketpl
 import { toBigIntSafe } from "../../utils/bigint";
 import TokenIcon from "../ui/TokenIcon";
 import { useSelectedToken, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
+import { useControllerUsernames } from "../../hooks/useControllerUsernames";
+import { normaliseStarknetAddress } from "../../utils/address";
 
 type Props = {
   open: boolean;
@@ -32,8 +34,13 @@ export default function PurchaseConfirmDialog({
   isProcessing,
 }: Props) {
   const { decimals: tokenDecimals, usdPrice } = useSelectedToken(listing?.paymentToken ?? undefined);
+  const { usernames: sellerUsernames } = useControllerUsernames([listing?.seller]);
 
   if (!listing) return null;
+
+  const normalizedSeller = normaliseStarknetAddress(listing.seller);
+  const sellerDisplay = (normalizedSeller && sellerUsernames[normalizedSeller]) ||
+    `${listing.seller.slice(0, 6)}...${listing.seller.slice(-4)}`;
 
   const priceBigInt = toBigIntSafe(listing.price);
   // Buyer pays platform fee (basis points out of 10000)
@@ -130,7 +137,7 @@ export default function PurchaseConfirmDialog({
             <div className="flex justify-between">
               <span className="text-sm text-gray-400">Seller:</span>
               <span className="text-xs font-mono text-gray-300">
-                {listing.seller.slice(0, 6)}...{listing.seller.slice(-4)}
+                {sellerDisplay}
               </span>
             </div>
           </div>

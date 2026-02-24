@@ -14,6 +14,9 @@ type FiltersDrawerProps = {
   onHealthRangeChange?: (min: number, max: number) => void;
   onLevelRangeChange?: (min: number, max: number) => void;
   onAdventurersKilledRangeChange?: (min: number, max: number) => void;
+  unclaimedSkullsFilter?: boolean;
+  onUnclaimedSkullsChange?: (value: boolean) => void;
+  skullsLoading?: boolean;
   onResetFilters: () => void;
 };
 
@@ -47,6 +50,46 @@ const MULTI_SELECT_TRAITS = new Set([
   "suffix",
 ]);
 
+// Traits rendered as boolean toggles (Yes/No/Any)
+const BOOLEAN_FILTER_TRAITS = new Set(["shiny", "animated"]);
+
+// Traits rendered as free-text search
+const SEARCH_FIELD_TRAITS = new Set([
+  "beast id", "beastid",
+  "token id", "tokenid",
+  "last killed by", "lastkilledby",
+]);
+
+// Traits rendered as generic range sliders
+const RANGE_SLIDER_TRAITS = new Set(["health", "level", "power"]);
+
+// Traits that are either invalid or rendered via dedicated sections
+const REMOVED_TRAITS = new Set([
+  "last death timestamp", "lastdeathtimestamp",
+  "adventurerkilledcount", "adventurer killed count",
+  "lastkilledby", "last killed by",
+  "tier", "type",
+  "health", "level", "adventurers killed",
+  "genesis",
+]);
+
+// Sort priority for filter sections
+const FILTER_SORT_ORDER = [
+  "shiny",
+  "animated",
+  "beast",
+  "prefix",
+  "suffix",
+  "tier",
+  "type",
+  "rank",
+  "health",
+  "level",
+  "beast id",
+  "token id",
+  "power",
+];
+
 // Rank range options (max rank is 1243)
 const RANK_RANGES = [
   { label: "1-10", min: 1, max: 10 },
@@ -71,6 +114,9 @@ export function FiltersDrawer({
   onHealthRangeChange,
   onLevelRangeChange,
   onAdventurersKilledRangeChange,
+  unclaimedSkullsFilter = false,
+  onUnclaimedSkullsChange,
+  skullsLoading = false,
   onResetFilters,
 }: FiltersDrawerProps) {
   // Compute dynamic max values from available filters (Level and Adventurers Killed only)
@@ -147,8 +193,8 @@ export function FiltersDrawer({
   }, [healthFilterActive, levelFilterActive, adventurersKilledFilterActive, dynamicLevelMax, dynamicAdventurersKilledMax]);
 
   const hasFiltersApplied = useMemo(
-    () => Object.keys(attributeFilters || {}).length > 0,
-    [attributeFilters]
+    () => Object.keys(attributeFilters || {}).length > 0 || unclaimedSkullsFilter,
+    [attributeFilters, unclaimedSkullsFilter]
   );
 
   useEffect(() => {
@@ -186,7 +232,7 @@ export function FiltersDrawer({
             <h2 className="text-base font-semibold text-lsGold">Filters</h2>
             <p className="text-xs text-gray-400">
               {hasFiltersApplied
-                ? `${Object.keys(attributeFilters || {}).length} active`
+                ? `${Object.keys(attributeFilters || {}).length + (unclaimedSkullsFilter ? 1 : 0)} active`
                 : "No filters applied"}
             </p>
           </div>
@@ -346,66 +392,15 @@ export function FiltersDrawer({
 
               {(Object.entries(availableFilters || {}) as Array<[string, string[]]>)
                 .sort(([a], [b]) => {
-                  // Custom sort order for filters
-                  const order = [
-                    "shiny",
-                    "animated",
-                    "genesis",
-                    "beast",
-                    "prefix",
-                    "suffix",
-                    "tier",
-                    "type",
-                    "rank",
-                    "health",
-                    "level",
-                    "beast id",
-                    "token id",
-                    "power",
-                  ];
-
-                  const aLower = a.toLowerCase();
-                  const bLower = b.toLowerCase();
-                  const aIndex = order.indexOf(aLower);
-                  const bIndex = order.indexOf(bLower);
-
-                  // If both are in the order array, sort by their position
-                  if (aIndex !== -1 && bIndex !== -1) {
-                    return aIndex - bIndex;
-                  }
-                  // If only a is in the order array, it comes first
+                  const aIndex = FILTER_SORT_ORDER.indexOf(a.toLowerCase());
+                  const bIndex = FILTER_SORT_ORDER.indexOf(b.toLowerCase());
+                  if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
                   if (aIndex !== -1) return -1;
-                  // If only b is in the order array, it comes first
                   if (bIndex !== -1) return 1;
-                  // Otherwise, sort alphabetically
                   return a.localeCompare(b);
                 })
                 .map(([trait, values]) => {
                   const normalisedTrait = trait.toLowerCase();
-                  const BOOLEAN_FILTER_TRAITS = new Set([
-                    "shiny",
-                    "animated",
-                    "genesis",
-                  ]);
-
-                  // Special handling for different filter types
-                  const SEARCH_FIELD_TRAITS = new Set([
-                    "beast id", "beastid",
-                    "token id", "tokenid",
-                    "last killed by", "lastkilledby"
-                  ]);
-
-                  const RANGE_SLIDER_TRAITS = new Set([
-                    "health", "level", "power"
-                  ]);
-
-                  const REMOVED_TRAITS = new Set([
-                    "last death timestamp", "lastdeathtimestamp",
-                    "adventurerkilledcount", "adventurer killed count",
-                    "lastkilledby", "last killed by",
-                    "tier", "type", // Rendered as special sections above
-                    "health", "level", "adventurers killed" // Rendered as special sliders at bottom
-                  ]);
 
                   // Skip removed traits
                   if (REMOVED_TRAITS.has(normalisedTrait)) {
@@ -560,6 +555,40 @@ export function FiltersDrawer({
                     </div>
                   );
                 }).filter(Boolean)}
+              {/* Unclaimed Skulls Toggle - below animated (same UI as shiny/animated) */}
+              {onUnclaimedSkullsChange && (
+                <div className="flex flex-col gap-2 text-xs text-gray-300">
+                  <span className="font-semibold capitalize text-gray-200">
+                    Unclaimed Skulls
+                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-400 flex items-center gap-1.5">
+                      {unclaimedSkullsFilter ? "Yes" : "Any"}
+                      {skullsLoading && (
+                        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-gray-600 border-t-lsGreen" />
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onUnclaimedSkullsChange(!unclaimedSkullsFilter)}
+                      aria-pressed={unclaimedSkullsFilter}
+                      aria-label={`Unclaimed Skulls filter: ${unclaimedSkullsFilter ? "Yes" : "Any"}`}
+                      className="p-1 rounded-full border border-transparent hover:border-lsGreen focus:outline-none focus:ring-2 focus:ring-lsGreen"
+                    >
+                      <span
+                        className={`block h-4 w-4 rounded-full border transition flex items-center justify-center text-[8px] font-bold ${
+                          unclaimedSkullsFilter
+                            ? "border-[#39ff14] bg-[#39ff14] shadow-[0_0_8px_#39ff14] text-black"
+                            : "border-gray-700 bg-gray-800"
+                        }`}
+                      >
+                        {unclaimedSkullsFilter ? "✓" : ""}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {Object.keys(availableFilters || {}).length === 0 && (
                 <p className="text-xs text-gray-400">
                   No metadata filters available.
@@ -748,6 +777,7 @@ export function FiltersDrawer({
                   </div>
                 </div>
               )}
+
             </div>
           )}
         </div>

@@ -2,7 +2,6 @@ import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { AccountInterface, BigNumberish } from "starknet";
-import type { Beast } from "../../../services/beast";
 import type { Listing } from "../../../services/marketplace/types";
 import type { OrderModel } from "@cartridge/arcade";
 import {
@@ -832,126 +831,6 @@ export function useMarketplaceActions({
     []
   );
 
-  /**
-   * Execute unified cart (purchases only for now)
-   */
-  const handleExecuteUnifiedCart = useCallback(
-    async (
-      cartBeasts: Beast[],
-      purchaseCart: Listing[],
-      beastPrices: Map<string, string>,
-      validBuyItems?: Listing[]
-    ) => {
-      if (!account?.address) {
-        toast.error("Please connect your wallet");
-        return;
-      }
-
-      const itemsToPurchase = validBuyItems ?? purchaseCart;
-      const hasListings = cartBeasts.length > 0;
-      const hasPurchases = itemsToPurchase.length > 0;
-
-      if (!hasListings && !hasPurchases) {
-        toast.error("Cart is empty");
-        return;
-      }
-
-      const toastId = toast.loading("Processing cart...");
-
-      try {
-        if (hasListings) {
-          setListingBatch(true);
-          const beastsWithPrices = cartBeasts.filter((beast) => {
-            const priceStr = beastPrices.get(beast.id);
-            return priceStr && priceStr.trim() !== "" && Number(priceStr) > 0;
-          });
-
-          if (beastsWithPrices.length === 0) {
-            toast.error("Please set prices for all beasts", { id: toastId });
-            setListingBatch(false);
-            return;
-          }
-
-          toast.error(
-            "Unified cart listing is not yet implemented. Please use the List dialog for each beast.",
-            { id: toastId }
-          );
-          setListingBatch(false);
-          return;
-        }
-
-        if (hasPurchases) {
-          setPurchasingBatch(true);
-          const provider = getProvider(account);
-          let successCount = 0;
-
-          for (const listing of itemsToPurchase) {
-            try {
-              if (!listing.active) continue;
-
-              const tokenIdBigInt = toBigInt(listing.tokenId);
-              const priceBigInt = toBigInt(listing.price);
-              const currency = listing.paymentToken ?? DEFAULT_PAYMENT_TOKEN.address;
-              const orderId = toBigInt(listing.orderId);
-
-              const isValidListing = await validateListingOwnership(
-                provider,
-                BEASTS_COLLECTION_ADDRESS,
-                tokenIdBigInt,
-                listing.seller
-              );
-
-              if (!isValidListing) continue;
-
-              const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
-              const totalAmount = priceBigInt + feeAmount;
-
-              const { sufficient } = await checkSufficientBalance(account, currency, totalAmount);
-              if (!sufficient) continue;
-
-              await executePurchaseWithApproval(
-                account,
-                orderId,
-                BEASTS_COLLECTION_ADDRESS,
-                tokenIdBigInt,
-                0n, // quantity: 0 for ERC721 (non-fungible)
-                ROYALTIES_ENABLED, // creator royalties (5%)
-                currency,
-                priceBigInt,
-                BigInt(CLIENT_FEE_BP),
-                CLIENT_FEE_RECEIVER
-              );
-
-              successCount++;
-            } catch {
-              // Continue with next purchase
-            }
-          }
-
-          if (successCount > 0) {
-            toast.success(`Purchased ${successCount} beast(s)!`, { id: toastId });
-          }
-        }
-
-        await refetchOrders();
-        await reloadUserBeasts();
-        return true;
-      } catch (error) {
-        if (isUserRejection(error)) {
-          toast.info("Cart operations cancelled", { id: toastId });
-        } else {
-          const errorMessage = (error as Error).message || "Failed to execute cart operations";
-          toast.error(errorMessage, { id: toastId });
-        }
-        return false;
-      } finally {
-        setListingBatch(false);
-        setPurchasingBatch(false);
-      }
-    },
-    [account, refetchOrders, reloadUserBeasts]
-  );
-
   // Reset function to clear stuck batch states (escape hatch)
   const resetBatchState = useCallback(() => {
     setPurchasingBatch(false);
@@ -972,7 +851,6 @@ export function useMarketplaceActions({
     handlePurchase,
     handlePurchaseAll,
     handleAcceptOffer,
-    handleExecuteUnifiedCart,
     resetBatchState,
 
     // Direct marketplace actions
