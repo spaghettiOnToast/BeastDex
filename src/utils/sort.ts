@@ -38,7 +38,8 @@ function getComparablePrice(listing: Listing): { currency: string; value: bigint
  */
 export function sortListings(
   listings: Listing[],
-  option: SortOption
+  option: SortOption,
+  unclaimedSkullsMap?: Map<number, number>
 ): Listing[] {
   if (listings.length <= 1) return [...listings];
 
@@ -101,6 +102,12 @@ export function sortListings(
       case "last-death-desc":
         return {
           primary: getBeastLastDeathTimestamp(beast) ?? 0,
+          secondary: tokenId,
+        };
+
+      case "skulls-desc":
+        return {
+          primary: unclaimedSkullsMap?.get(Number(tokenId)) ?? -1,
           secondary: tokenId,
         };
 
@@ -173,7 +180,7 @@ export function sortListings(
  * @param option - Sort option to apply
  * @returns Sorted array of beasts (new array, original not mutated)
  */
-export function sortBeasts(beasts: Beast[], option: SortOption): Beast[] {
+export function sortBeasts(beasts: Beast[], option: SortOption, unclaimedSkullsMap?: Map<number, number>): Beast[] {
   if (beasts.length <= 1) return [...beasts];
 
   // Pre-compute sort keys once (O(n)) instead of during each comparison (O(n*log(n)))
@@ -196,6 +203,8 @@ export function sortBeasts(beasts: Beast[], option: SortOption): Beast[] {
       case "last-death-asc":
       case "last-death-desc":
         return getBeastLastDeathTimestamp(beast) ?? 0;
+      case "skulls-desc":
+        return unclaimedSkullsMap?.get(beast.numericId) ?? -1;
       case "default":
       default:
         return beast.power ?? -Infinity;

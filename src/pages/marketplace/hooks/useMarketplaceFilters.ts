@@ -112,12 +112,13 @@ export function useMarketplaceFilters({
   }, [availableFilters]);
 
   /**
-   * Fetch unclaimed skulls for beasts with kills > 0 when the filter is active.
+   * Fetch unclaimed skulls for beasts with kills > 0 when the filter or sort is active.
    * Uses a ref (skullsFetchedIdsRef) to track already-fetched token IDs so we
    * never re-fetch the same token, even when listings change reference.
    */
+  const needsSkullsData = unclaimedSkullsFilter || sortOption === "skulls-desc";
   useEffect(() => {
-    if (!unclaimedSkullsFilter) return;
+    if (!needsSkullsData) return;
 
     const fetchedIds = skullsFetchedIdsRef.current;
 
@@ -167,7 +168,7 @@ export function useMarketplaceFilters({
     }).catch(() => {
       if (fetchId === skullsFetchRef.current) setSkullsLoading(false);
     });
-  }, [unclaimedSkullsFilter, listings, recentListings, userBeasts]);
+  }, [needsSkullsData, listings, recentListings, userBeasts]);
 
   /**
    * Filter listings based on current filters and deduplicate by tokenId
@@ -249,21 +250,16 @@ export function useMarketplaceFilters({
    * Sort filtered listings
    */
   const sortedListings = useMemo(
-    () => sortListings(filteredListings, sortOption),
-    [filteredListings, sortOption]
+    () => sortListings(filteredListings, sortOption, unclaimedSkullsMap),
+    [filteredListings, sortOption, unclaimedSkullsMap]
   );
 
   /**
-   * Filter recent listings (only those with names) and apply attribute filters + sorting
+   * Filter recent listings and apply attribute filters + sorting
    */
   const namedRecentListings = useMemo(() => {
-    // First filter to only those with beast names
-    const withNames = recentListings.filter(
-      (listing) => listing.beast?.name && listing.beast.name.trim().length > 0
-    );
-
-    // Apply attribute filters
-    let filtered = withNames.filter((listing) =>
+    // Apply attribute filters (only to listings that have beast data)
+    let filtered = recentListings.filter((listing) =>
       matchesAttributeFilters(listing, attributeFilters)
     );
 
@@ -275,7 +271,7 @@ export function useMarketplaceFilters({
     }
 
     // Apply user's chosen sort
-    return sortListings(filtered, sortOption);
+    return sortListings(filtered, sortOption, unclaimedSkullsMap);
   }, [recentListings, attributeFilters, sortOption, unclaimedSkullsFilter, unclaimedSkullsMap]);
 
   /**
@@ -338,7 +334,7 @@ export function useMarketplaceFilters({
    * Sort user beasts and optionally filter duplicates
    */
   const sortedUserBeasts = useMemo(() => {
-    let beasts = sortBeasts(filteredUserBeasts, sortOption);
+    let beasts = sortBeasts(filteredUserBeasts, sortOption, unclaimedSkullsMap);
 
     if (showDuplicatesOnly) {
       // Count occurrences using pre-computed keys (O(n))
@@ -356,7 +352,7 @@ export function useMarketplaceFilters({
     }
 
     return beasts;
-  }, [filteredUserBeasts, sortOption, showDuplicatesOnly, beastTypeKeyMap]);
+  }, [filteredUserBeasts, sortOption, showDuplicatesOnly, beastTypeKeyMap, unclaimedSkullsMap]);
 
   /**
    * Get listings to render based on pagination
@@ -640,6 +636,7 @@ export function useMarketplaceFilters({
     activeTab,
     currentPage,
     unclaimedSkullsFilter,
+    unclaimedSkullsMap,
     skullsLoading,
 
     // Setters

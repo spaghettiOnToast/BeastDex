@@ -1,8 +1,11 @@
-import { ChevronDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
@@ -22,7 +25,8 @@ export type SortOption =
   | "last-death-desc"
   | "price-asc"
   | "price-desc"
-  | "recent-desc";
+  | "recent-desc"
+  | "skulls-desc";
 
 /**
  * Converts a SortOption (with direction) to a BeastSortField (without direction)
@@ -43,7 +47,14 @@ type SortDropdownProps = {
   excludeOptions?: SortOption[];
 };
 
-/** All available sort options */
+/** A standalone item with no asc/desc pair */
+type SingleItem = { type: "single"; label: string; value: SortOption };
+/** A paired item with asc and desc directions */
+type PairedItem = { type: "paired"; label: string; asc: SortOption; desc: SortOption };
+type SortGroupItem = SingleItem | PairedItem;
+type SortGroup = { groupLabel: string | null; items: SortGroupItem[] };
+
+/** Flat list kept for backward compatibility (trigger label lookup, external consumers) */
 export const ALL_SORT_OPTIONS: Array<{ label: string; value: SortOption }> = [
   { label: "Default (Power)", value: "default" },
   { label: "Most Recent", value: "recent-desc" },
@@ -59,6 +70,45 @@ export const ALL_SORT_OPTIONS: Array<{ label: string; value: SortOption }> = [
   { label: "Rank (∞ → 1)", value: "rank-desc" },
   { label: "Last Death (Recent)", value: "last-death-desc" },
   { label: "Last Death (Oldest)", value: "last-death-asc" },
+  { label: "Unclaimed Skulls (High → Low)", value: "skulls-desc" },
+];
+
+/** Sort options organized into groups with paired direction toggles */
+const SORT_GROUPS: SortGroup[] = [
+  {
+    groupLabel: null,
+    items: [
+      { type: "single", label: "Default (Power)", value: "default" },
+      { type: "single", label: "Most Recent", value: "recent-desc" },
+    ],
+  },
+  {
+    groupLabel: "Price",
+    items: [
+      { type: "paired", label: "Price", asc: "price-asc", desc: "price-desc" },
+    ],
+  },
+  {
+    groupLabel: "Name",
+    items: [
+      { type: "paired", label: "Name", asc: "beast-asc", desc: "beast-desc" },
+    ],
+  },
+  {
+    groupLabel: "Stats",
+    items: [
+      { type: "paired", label: "Tier", asc: "tier-asc", desc: "tier-desc" },
+      { type: "paired", label: "Health", asc: "health-asc", desc: "health-desc" },
+      { type: "paired", label: "Rank", asc: "rank-asc", desc: "rank-desc" },
+      { type: "single", label: "Unclaimed Skulls", value: "skulls-desc" },
+    ],
+  },
+  {
+    groupLabel: "Activity",
+    items: [
+      { type: "paired", label: "Last Death", asc: "last-death-asc", desc: "last-death-desc" },
+    ],
+  },
 ];
 
 /** Sort options to exclude from the homepage */
@@ -68,15 +118,26 @@ export const HOMEPAGE_EXCLUDED_OPTIONS: SortOption[] = [
   "price-desc",
   "last-death-asc", // Last death not relevant for homepage browsing
   "last-death-desc",
+  "skulls-desc",    // Unclaimed skulls not relevant for homepage
 ];
 
-export function SortDropdown({ value, onChange, excludeOptions }: SortDropdownProps) {
-  // Filter out excluded options
-  const options = excludeOptions
-    ? ALL_SORT_OPTIONS.filter(opt => !excludeOptions.includes(opt.value))
-    : ALL_SORT_OPTIONS;
+/** Check whether a group item has any visible options after exclusions */
+function isItemVisible(item: SortGroupItem, excluded?: SortOption[]): boolean {
+  if (!excluded) return true;
+  if (item.type === "single") return !excluded.includes(item.value);
+  // Paired: visible if at least one direction is not excluded
+  return !excluded.includes(item.asc) || !excluded.includes(item.desc);
+}
 
-  const currentOption = options.find(option => option.value === value) || options[0];
+export function SortDropdown({ value, onChange, excludeOptions }: SortDropdownProps) {
+  // Filter groups, removing excluded items and empty groups
+  const filteredGroups = SORT_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => isItemVisible(item, excludeOptions)),
+  })).filter((group) => group.items.length > 0);
+
+  const currentOption =
+    ALL_SORT_OPTIONS.find((option) => option.value === value) || ALL_SORT_OPTIONS[0];
 
   return (
     <DropdownMenu>
@@ -93,19 +154,94 @@ export function SortDropdown({ value, onChange, excludeOptions }: SortDropdownPr
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="min-w-[140px] border border-gray-800 bg-black/90 text-gray-200 backdrop-blur-md"
+        className="min-w-[180px] border border-gray-800 bg-black/90 text-gray-200 backdrop-blur-md"
       >
-        {options.map((option) => (
-          <DropdownMenuItem
-            key={option.value}
-            onClick={() => onChange(option.value)}
-            className="cursor-pointer font-medium text-xs sm:text-sm text-gray-200 hover:bg-gray-800 hover:text-lsGold"
-          >
-            {option.label}
-          </DropdownMenuItem>
+        {filteredGroups.map((group, groupIndex) => (
+          <DropdownMenuGroup key={group.groupLabel ?? "default"}>
+            {groupIndex > 0 && (
+              <DropdownMenuSeparator className="bg-gray-800" />
+            )}
+            {group.groupLabel && (
+              <DropdownMenuLabel className="text-[11px] text-gray-500 uppercase tracking-wider font-semibold px-2 py-1">
+                {group.groupLabel}
+              </DropdownMenuLabel>
+            )}
+            {group.items.map((item) =>
+              item.type === "single" ? (
+                <DropdownMenuItem
+                  key={item.value}
+                  onClick={() => onChange(item.value)}
+                  className="cursor-pointer font-medium text-xs sm:text-sm text-gray-200 hover:bg-gray-800 hover:text-lsGold"
+                >
+                  {item.label}
+                </DropdownMenuItem>
+              ) : (
+                <PairedSortRow
+                  key={item.label}
+                  item={item}
+                  currentValue={value}
+                  onChange={onChange}
+                  excludeOptions={excludeOptions}
+                />
+              )
+            )}
+          </DropdownMenuGroup>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function PairedSortRow({
+  item,
+  currentValue,
+  onChange,
+  excludeOptions,
+}: {
+  item: PairedItem;
+  currentValue: SortOption;
+  onChange: (value: SortOption) => void;
+  excludeOptions?: SortOption[];
+}) {
+  const ascHidden = excludeOptions?.includes(item.asc);
+  const descHidden = excludeOptions?.includes(item.desc);
+  const isAscActive = currentValue === item.asc;
+  const isDescActive = currentValue === item.desc;
+
+  return (
+    <div className="flex items-center justify-between px-2 py-1.5 text-xs sm:text-sm font-medium text-gray-200">
+      <span>{item.label}</span>
+      <span className="flex items-center gap-0.5 ml-3">
+        {!ascHidden && (
+          <button
+            type="button"
+            onClick={() => onChange(item.asc)}
+            className={`rounded p-0.5 transition-colors ${
+              isAscActive
+                ? "bg-lsGold/20 text-lsGold"
+                : "text-gray-500 hover:bg-gray-800 hover:text-gray-200"
+            }`}
+            title="Ascending"
+          >
+            <ArrowUp className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {!descHidden && (
+          <button
+            type="button"
+            onClick={() => onChange(item.desc)}
+            className={`rounded p-0.5 transition-colors ${
+              isDescActive
+                ? "bg-lsGold/20 text-lsGold"
+                : "text-gray-500 hover:bg-gray-800 hover:text-gray-200"
+            }`}
+            title="Descending"
+          >
+            <ArrowDown className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </span>
+    </div>
   );
 }
 

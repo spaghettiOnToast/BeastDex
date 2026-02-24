@@ -110,12 +110,13 @@ export function matchesBeastFilters(
   beast: Beast | null | undefined,
   filters: BeastAttributeFilters
 ): boolean {
-  if (!beast) return false;
-
   const entries = Object.entries(filters || {});
   if (entries.length === 0) {
     return true;
   }
+
+  // Can't match specific filters without beast data
+  if (!beast) return false;
 
   return entries.every(([trait, values]) => {
     if (!Array.isArray(values) || values.length === 0) {
