@@ -11,6 +11,9 @@ import {
   type SummitApiDiplomacyBeast,
 } from "../../services/summitApi";
 import { getAttributeValue as getBeastAttribute, getNumericAttribute } from "../../utils/beast";
+import { useTokenMap } from "../../hooks/useEkuboTokens";
+
+const SKULL_TOKEN_ADDRESS = "0x01c3c8284d7eed443b42f47e764032a56eaf50a9079d67993b633930e3689814";
 
 /** Reverse lookup: prefix name → numeric ID */
 const PREFIX_NAME_TO_ID: Record<string, number> = {
@@ -351,6 +354,8 @@ export function SummitStats({
   const health = getBeastAttribute(beast, "health") ?? "—";
 
   const liveStats = summitData?.liveStats;
+  const { getToken } = useTokenMap();
+  const skullToken = getToken(SKULL_TOKEN_ADDRESS);
 
   // Fetch diplomacy allies when diplomacy is unlocked
   const [allies, setAllies] = useState<SummitApiDiplomacyBeast[]>([]);
@@ -696,9 +701,14 @@ export function SummitStats({
         const claimable = skullsClaimed !== null ? earned - skullsClaimed : null;
         return (
           <div className="space-y-1">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-300">
-              Skulls
-            </p>
+            <div className="flex items-center gap-1">
+              {skullToken?.logoUrl && (
+                <img src={skullToken.logoUrl} alt="SKULL" className="h-4 w-4 rounded-full" />
+              )}
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-300">
+                Skulls
+              </p>
+            </div>
             <div className="flex gap-1">
               <StatBox label="Earned" value={earned} />
               <StatBox label="Claimed" value={skullsClaimed ?? "..."} />
