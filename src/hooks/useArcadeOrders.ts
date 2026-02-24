@@ -181,61 +181,6 @@ async function fetchArcadeOrdersGraphQL(
     .filter(Boolean) as ArcadeOrderWithTime[];
 }
 
-async function fetchArcadeOrderByTokenGraphQL(
-  collectionAddress: string,
-  tokenId: string,
-  signal?: AbortSignal
-): Promise<ArcadeOrderWithTime | null> {
-  const tokenIdHex = `0x${parseInt(tokenId, 10).toString(16)}`;
-
-  const query = `
-    query GetArcadeListingByToken($collection: String!, $tokenId: String!) {
-      arcadeListingModels(
-        where: {
-          order: {
-            collection: $collection,
-            token_id: $tokenId,
-            status: 1,
-            category: 2
-          }
-        },
-        limit: 1
-      ) {
-        edges {
-          node {
-            order_id
-            time
-            order {
-              id
-              status
-              category
-              collection
-              token_id
-              price
-              currency
-              owner
-              expiration
-              quantity
-            }
-          }
-        }
-      }
-    }
-  `;
-
-  type Response = { arcadeListingModels?: { edges?: Array<{ node: any }> } };
-  const data = await graphqlFetch<Response>(
-    query,
-    { collection: collectionAddress, tokenId: tokenIdHex },
-    signal
-  );
-
-  const edges = data?.arcadeListingModels?.edges ?? [];
-  if (edges.length === 0) return null;
-
-  return parseGraphQLListing(edges[0].node);
-}
-
 export function useArcadeListedTokensForCollection(collectionAddress: string) {
   const queryKey = useMemo(() => ["arcadeListedTokens", collectionAddress], [collectionAddress]);
 
@@ -248,22 +193,6 @@ export function useArcadeListedTokensForCollection(collectionAddress: string) {
     refetchOnMount: false, // Don't refetch if data exists
     refetchOnReconnect: false, // Don't refetch on reconnect
     queryFn: ({ signal }) => fetchArcadeOrdersGraphQL(collectionAddress, 2000, signal),
-  });
-}
-
-export function useArcadeIsTokenListed(collectionAddress: string, tokenId: string) {
-  const queryKey = useMemo(() => ["arcadeIsTokenListed", collectionAddress, tokenId], [collectionAddress, tokenId]);
-
-  return useQuery({
-    queryKey,
-    enabled: !!collectionAddress && !!tokenId,
-    staleTime: 30_000, // Consider data fresh for 30 seconds
-    refetchOnWindowFocus: false, // Prevent refetch on tab switch
-    queryFn: async ({ signal }) => {
-      const listing = await fetchArcadeOrderByTokenGraphQL(collectionAddress, tokenId, signal);
-      return { isListed: listing !== null, listing };
-    },
-    initialData: { isListed: false, listing: null } as { isListed: boolean; listing: ArcadeOrderWithTime | null },
   });
 }
 

@@ -46,7 +46,7 @@ export function useMarketplaceListings(): UseMarketplaceListingsResult {
     },
     staleTime: 30_000, // Consider data fresh for 30 seconds (reduced for fresher data)
     gcTime: 3 * 60_000, // Keep in cache for 3 minutes
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
     refetchOnMount: false,
     retry: 2,
   });

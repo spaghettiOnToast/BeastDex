@@ -1,8 +1,9 @@
-import type {
-  AccountInterface,
-  ProviderInterface,
-  Call,
-  BigNumberish,
+import {
+  RpcProvider,
+  type AccountInterface,
+  type ProviderInterface,
+  type Call,
+  type BigNumberish,
 } from "starknet";
 import { BEASTS_COLLECTION_ADDRESS, MARKETPLACE_ADDRESS } from "./constants";
 import { compareStarknetAddresses } from "../../utils/address";
@@ -10,6 +11,19 @@ import {
   toUint256Hex,
   fromUint256Raw,
 } from "../../utils/uint256";
+
+/** Singleton read-only RPC provider (no wallet needed). */
+let _publicProvider: RpcProvider | null = null;
+
+export function getPublicProvider(): RpcProvider {
+  if (!_publicProvider) {
+    const nodeUrl =
+      (import.meta as any)?.env?.VITE_RPC_URL ||
+      "https://api.cartridge.gg/x/starknet/mainnet";
+    _publicProvider = new RpcProvider({ nodeUrl });
+  }
+  return _publicProvider;
+}
 
 export function getProvider(account: AccountInterface): ProviderInterface {
   // Try multiple ways to get the provider for different account types
@@ -566,37 +580,6 @@ export async function validateListingOwnership(
   }
 
   return isValid;
-}
-
-/**
- * Batch validate multiple listings
- * @returns Map of tokenId -> isValid
- */
-export async function batchValidateListings(
-  provider: ProviderInterface,
-  collectionAddress: string,
-  listings: Array<{ tokenId: BigNumberish; seller: string }>,
-): Promise<Map<string, boolean>> {
-  const results = new Map<string, boolean>();
-
-  // Process in parallel for better performance
-  const validationPromises = listings.map(async (listing) => {
-    const isValid = await validateListingOwnership(
-      provider,
-      collectionAddress,
-      listing.tokenId,
-      listing.seller
-    );
-    return { tokenId: listing.tokenId.toString(), isValid };
-  });
-
-  const validationResults = await Promise.all(validationPromises);
-
-  for (const result of validationResults) {
-    results.set(result.tokenId, result.isValid);
-  }
-
-  return results;
 }
 
 /**

@@ -181,23 +181,32 @@ export async function fetchBeastsByIds(
     return [];
   }
 
-  // Flatten hex arrays and deduplicate
-  const tokenHexes = Array.from(
-    new Set(
-      identifiers
-        .flatMap((identifier) => deriveTokenHex(identifier))
-        .map((hex) => hex.toLowerCase())
-    )
-  );
+  // Batch into chunks to avoid oversized SQL IN clauses
+  const BATCH_SIZE = 50;
+  const allBeasts: Beast[] = [];
 
-  const query = buildBeastsByIdListQuery({
-    identifiers,
-    tokenHexes,
-  });
-  const rows = await runBeastSql<BeastRow[]>(query, "fetchBeastsByIds", {
-    timeoutMs: 60_000, // Increased timeout for large batches
-  });
-  return rows.map(mapBeastRow);
+  for (let i = 0; i < identifiers.length; i += BATCH_SIZE) {
+    const batch = identifiers.slice(i, i + BATCH_SIZE);
+
+    const tokenHexes = Array.from(
+      new Set(
+        batch
+          .flatMap((identifier) => deriveTokenHex(identifier))
+          .map((hex) => hex.toLowerCase())
+      )
+    );
+
+    const query = buildBeastsByIdListQuery({
+      identifiers: batch,
+      tokenHexes,
+    });
+    const rows = await runBeastSql<BeastRow[]>(query, "fetchBeastsByIds", {
+      timeoutMs: 60_000,
+    });
+    allBeasts.push(...rows.map(mapBeastRow));
+  }
+
+  return allBeasts;
 }
 
 export async function fetchBeastAttributeFilters(): Promise<BeastAttributeFilters> {

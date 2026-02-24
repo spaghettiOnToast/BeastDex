@@ -198,7 +198,7 @@ export function BeastDetailContent({
           <div className="h-[370px] sm:h-[410px] lg:h-[510px] rounded-xl border border-gray-800 bg-black/60 overflow-y-auto">
             {rightPanelTab === "summit" ? (
               /* Summit Stats Panel */
-              <div className="h-full">
+              <div className="min-h-full">
                 <SummitStats
                   beast={beast}
                   summitData={summitData ?? null}

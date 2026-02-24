@@ -1,10 +1,32 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import type { Beast, BeastAttributeFilters } from "../../../services/beast";
 import type { Listing } from "../../../services/marketplace/types";
 import type { SortOption } from "../../../components/sort/SortDropdown";
 import type { RatesInSTRK } from "../../../services/marketplace/rates";
 import { matchesAttributeFilters, matchesBeastFilters, sortListings, sortBeasts } from "../utils";
+import { getNumericAttribute } from "../../../utils/beast";
+import { fetchUnclaimedSkullsBatch } from "../../../services/summit";
 import type { MarketplaceView } from "../types";
+
+/** Parse a numeric token ID from a beast's hex/composite id string. */
+function parseBeastTokenId(beastId: string): number {
+  const raw = beastId.split(":").pop() || beastId;
+  return raw.startsWith("0x") ? Number(BigInt(raw)) : Number(raw);
+}
+
+/**
+ * Check whether a beast has confirmed unclaimed skulls.
+ * Looks up pre-computed unclaimed count from the map (fetched via Summit API).
+ */
+function hasConfirmedUnclaimedSkulls(
+  tokenId: string | number,
+  unclaimedMap: Map<number, number>,
+): boolean {
+  const numericId = typeof tokenId === "string" ? Number(tokenId) : tokenId;
+  const unclaimed = unclaimedMap.get(numericId);
+  if (unclaimed === undefined) return false; // no data yet — don't show
+  return unclaimed > 0;
+}
 
 export interface UseMarketplaceFiltersProps {
   listings: Listing[];
@@ -39,6 +61,13 @@ export function useMarketplaceFilters({
   const [showAllMyListings, setShowAllMyListings] = useState(false);
   const [activeTab, setActiveTab] = useState<MarketplaceView>("explore");
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Unclaimed skulls filter: when true, only show beasts with confirmed unclaimed skulls
+  const [unclaimedSkullsFilter, setUnclaimedSkullsFilter] = useState(false);
+  const [unclaimedSkullsMap, setSkullsClaimedMap] = useState<Map<number, number>>(new Map());
+  const [skullsLoading, setSkullsLoading] = useState(false);
+  const skullsFetchRef = useRef(0); // track latest fetch to avoid stale updates
+  const skullsFetchedIdsRef = useRef<Set<number>>(new Set()); // track already-fetched/attempted token IDs
 
   // Pagination - fewer items on mobile for better performance
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
@@ -81,6 +110,64 @@ export function useMarketplaceFilters({
       return Object.fromEntries(nextEntries) as BeastAttributeFilters;
     });
   }, [availableFilters]);
+
+  /**
+   * Fetch unclaimed skulls for beasts with kills > 0 when the filter is active.
+   * Uses a ref (skullsFetchedIdsRef) to track already-fetched token IDs so we
+   * never re-fetch the same token, even when listings change reference.
+   */
+  useEffect(() => {
+    if (!unclaimedSkullsFilter) return;
+
+    const fetchedIds = skullsFetchedIdsRef.current;
+
+    // Collect tokens with kills > 0 that we haven't already fetched
+    const tokensToFetch = new Map<number, number>(); // id → kills
+
+    for (const listing of [...listings, ...recentListings]) {
+      if (!listing.beast) continue;
+      const kills = getNumericAttribute(listing.beast, "Adventurers Killed");
+      if (kills && kills > 0) {
+        const id = Number(listing.tokenId);
+        if (!isNaN(id) && !fetchedIds.has(id)) {
+          tokensToFetch.set(id, kills);
+        }
+      }
+    }
+
+    for (const beast of userBeasts) {
+      const kills = getNumericAttribute(beast, "Adventurers Killed");
+      if (kills && kills > 0) {
+        const tokenId = parseBeastTokenId(beast.id);
+        if (!isNaN(tokenId) && tokenId > 0 && !fetchedIds.has(tokenId)) {
+          tokensToFetch.set(tokenId, kills);
+        }
+      }
+    }
+
+    if (tokensToFetch.size === 0) return;
+
+    // Mark these IDs as fetched immediately so concurrent effect runs skip them
+    for (const id of tokensToFetch.keys()) fetchedIds.add(id);
+
+    const fetchId = ++skullsFetchRef.current;
+    setSkullsLoading(true);
+
+    const tokens = Array.from(tokensToFetch, ([id, kills]) => ({ id, kills }));
+
+    fetchUnclaimedSkullsBatch(tokens, (batchMap) => {
+      // Update map incrementally after each batch so results appear progressively
+      setSkullsClaimedMap((prev) => {
+        const merged = new Map(prev);
+        for (const [k, v] of batchMap) merged.set(k, v);
+        return merged;
+      });
+    }).then(() => {
+      if (fetchId === skullsFetchRef.current) setSkullsLoading(false);
+    }).catch(() => {
+      if (fetchId === skullsFetchRef.current) setSkullsLoading(false);
+    });
+  }, [unclaimedSkullsFilter, listings, recentListings, userBeasts]);
 
   /**
    * Filter listings based on current filters and deduplicate by tokenId
@@ -146,8 +233,17 @@ export function useMarketplaceFilters({
       }
     }
 
-    return Array.from(listingsByTokenId.values());
-  }, [listings, attributeFilters, hiddenListingIds, hideExpired]);
+    let result = Array.from(listingsByTokenId.values());
+
+    // Apply unclaimed skulls filter — only show beasts with confirmed unclaimed skulls
+    if (unclaimedSkullsFilter) {
+      result = result.filter((listing) =>
+        hasConfirmedUnclaimedSkulls(listing.tokenId, unclaimedSkullsMap)
+      );
+    }
+
+    return result;
+  }, [listings, attributeFilters, hiddenListingIds, hideExpired, unclaimedSkullsFilter, unclaimedSkullsMap]);
 
   /**
    * Sort filtered listings
@@ -167,20 +263,27 @@ export function useMarketplaceFilters({
     );
 
     // Apply attribute filters
-    const filtered = withNames.filter((listing) =>
+    let filtered = withNames.filter((listing) =>
       matchesAttributeFilters(listing, attributeFilters)
     );
 
+    // Apply unclaimed skulls filter — only show beasts with confirmed unclaimed skulls
+    if (unclaimedSkullsFilter) {
+      filtered = filtered.filter((listing) =>
+        hasConfirmedUnclaimedSkulls(listing.tokenId, unclaimedSkullsMap)
+      );
+    }
+
     // Apply user's chosen sort
     return sortListings(filtered, sortOption);
-  }, [recentListings, attributeFilters, sortOption]);
+  }, [recentListings, attributeFilters, sortOption, unclaimedSkullsFilter, unclaimedSkullsMap]);
 
   /**
    * Reset to page 1 when filters change
    */
   useEffect(() => {
     setCurrentPage(1);
-  }, [attributeFilters, sortOption, hideExpired, activeTab]);
+  }, [attributeFilters, sortOption, hideExpired, activeTab, unclaimedSkullsFilter]);
 
   /**
    * Set default sort based on active tab
@@ -199,13 +302,20 @@ export function useMarketplaceFilters({
   /**
    * Filter user beasts based on current filters
    */
-  const filteredUserBeasts = useMemo(
-    () =>
-      userBeasts.filter((beast) =>
-        matchesBeastFilters(beast, attributeFilters)
-      ),
-    [userBeasts, attributeFilters]
-  );
+  const filteredUserBeasts = useMemo(() => {
+    let beasts = userBeasts.filter((beast) =>
+      matchesBeastFilters(beast, attributeFilters)
+    );
+
+    // Apply unclaimed skulls filter — only show beasts with confirmed unclaimed skulls
+    if (unclaimedSkullsFilter) {
+      beasts = beasts.filter((beast) =>
+        hasConfirmedUnclaimedSkulls(parseBeastTokenId(beast.id), unclaimedSkullsMap)
+      );
+    }
+
+    return beasts;
+  }, [userBeasts, attributeFilters, unclaimedSkullsFilter, unclaimedSkullsMap]);
 
   /**
    * Pre-compute beast type keys for duplicate detection (O(n) instead of O(n²))
@@ -485,10 +595,20 @@ export function useMarketplaceFilters({
   }, []);
 
   /**
+   * Handle unclaimed skulls filter change
+   */
+  const handleUnclaimedSkullsChange = useCallback((value: boolean) => {
+    setUnclaimedSkullsFilter(value);
+  }, []);
+
+  /**
    * Reset all filters
    */
   const handleResetFilters = useCallback(() => {
     setAttributeFilters({});
+    setUnclaimedSkullsFilter(false);
+    setSkullsClaimedMap(new Map());
+    skullsFetchedIdsRef.current = new Set();
   }, []);
 
   /**
@@ -519,6 +639,8 @@ export function useMarketplaceFilters({
     showAllMyListings,
     activeTab,
     currentPage,
+    unclaimedSkullsFilter,
+    skullsLoading,
 
     // Setters
     setAttributeFilters,
@@ -553,6 +675,7 @@ export function useMarketplaceFilters({
     handleHealthRangeChange,
     handleLevelRangeChange,
     handleAdventurersKilledRangeChange,
+    handleUnclaimedSkullsChange,
     handleResetFilters,
     hideListingById,
     unhideListingById,
