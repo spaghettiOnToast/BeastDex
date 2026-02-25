@@ -181,32 +181,35 @@ export async function fetchBeastsByIds(
     return [];
   }
 
-  // Batch into chunks to avoid oversized SQL IN clauses
+  // Batch into chunks to avoid oversized SQL IN clauses, run in parallel
   const BATCH_SIZE = 50;
-  const allBeasts: Beast[] = [];
-
+  const batches: string[][] = [];
   for (let i = 0; i < identifiers.length; i += BATCH_SIZE) {
-    const batch = identifiers.slice(i, i + BATCH_SIZE);
-
-    const tokenHexes = Array.from(
-      new Set(
-        batch
-          .flatMap((identifier) => deriveTokenHex(identifier))
-          .map((hex) => hex.toLowerCase())
-      )
-    );
-
-    const query = buildBeastsByIdListQuery({
-      identifiers: batch,
-      tokenHexes,
-    });
-    const rows = await runBeastSql<BeastRow[]>(query, "fetchBeastsByIds", {
-      timeoutMs: 60_000,
-    });
-    allBeasts.push(...rows.map(mapBeastRow));
+    batches.push(identifiers.slice(i, i + BATCH_SIZE));
   }
 
-  return allBeasts;
+  const results = await Promise.all(
+    batches.map(async (batch) => {
+      const tokenHexes = Array.from(
+        new Set(
+          batch
+            .flatMap((identifier) => deriveTokenHex(identifier))
+            .map((hex) => hex.toLowerCase())
+        )
+      );
+
+      const query = buildBeastsByIdListQuery({
+        identifiers: batch,
+        tokenHexes,
+      });
+      const rows = await runBeastSql<BeastRow[]>(query, "fetchBeastsByIds", {
+        timeoutMs: 60_000,
+      });
+      return rows.map(mapBeastRow);
+    })
+  );
+
+  return results.flat();
 }
 
 export async function fetchBeastAttributeFilters(): Promise<BeastAttributeFilters> {

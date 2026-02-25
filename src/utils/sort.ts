@@ -14,6 +14,32 @@ import {
 } from "./beast";
 import { toBigIntSafe } from "./bigint";
 
+/** Minimal token info needed for USD price conversion during sorting */
+export type TokenPriceInfo = {
+  decimals: number;
+  usdPrice: number | null;
+};
+
+/** Map of lowercased token address → price info */
+export type TokenPriceMap = Map<string, TokenPriceInfo>;
+
+/**
+ * Convert a raw token amount to a USD value for cross-currency comparison.
+ * Returns -1 if conversion isn't possible (missing price data).
+ */
+function toUsdValue(
+  rawPrice: bigint,
+  currency: string,
+  tokenPriceMap?: TokenPriceMap
+): number {
+  if (!tokenPriceMap) return -1;
+  const info = tokenPriceMap.get(currency);
+  if (!info?.usdPrice) return -1;
+  // Convert from token base units to human-readable, then multiply by USD price
+  const humanAmount = Number(rawPrice) / 10 ** info.decimals;
+  return humanAmount * info.usdPrice;
+}
+
 /**
  * Get comparable price info from a listing
  */
@@ -39,7 +65,8 @@ function getComparablePrice(listing: Listing): { currency: string; value: bigint
 export function sortListings(
   listings: Listing[],
   option: SortOption,
-  unclaimedSkullsMap?: Map<number, number>
+  unclaimedSkullsMap?: Map<number, number>,
+  tokenPriceMap?: TokenPriceMap
 ): Listing[] {
   if (listings.length <= 1) return [...listings];
 
@@ -114,11 +141,11 @@ export function sortListings(
       case "price-asc":
       case "price-desc": {
         const comp = getComparablePrice(listing);
-        // Combine currency and price into a single comparable value
-        // Currency prefix ensures same-currency grouping
+        const usd = toUsdValue(comp.value, comp.currency, tokenPriceMap);
+        // Use USD value for cross-currency comparison; fall back to raw value within same currency
         return {
-          primary: comp.value,
-          secondary: `${comp.currency}:${tokenId}`,
+          primary: usd >= 0 ? usd : -1,
+          secondary: `${comp.currency}:${comp.value.toString()}:${tokenId}`,
         };
       }
 
@@ -144,15 +171,24 @@ export function sortListings(
     let compare: number;
 
     if (isPrice) {
-      // For price, first compare by currency (in secondary), then by value
-      const currA = (a.key.secondary as string).split(":")[0];
-      const currB = (b.key.secondary as string).split(":")[0];
-      if (currA !== currB) {
-        return currA.localeCompare(currB);
+      const usdA = a.key.primary as number;
+      const usdB = b.key.primary as number;
+      // Items without USD data (-1) sort to the end
+      if (usdA < 0 && usdB >= 0) return 1;
+      if (usdB < 0 && usdA >= 0) return -1;
+      if (usdA < 0 && usdB < 0) {
+        // Both lack USD data — fall back to same-currency raw value comparison
+        const secA = a.key.secondary as string;
+        const secB = b.key.secondary as string;
+        const currA = secA.split(":")[0];
+        const currB = secB.split(":")[0];
+        if (currA !== currB) return currA.localeCompare(currB);
+        const rawA = BigInt(secA.split(":")[1]);
+        const rawB = BigInt(secB.split(":")[1]);
+        compare = rawA === rawB ? 0 : rawA < rawB ? -1 : 1;
+      } else {
+        compare = usdA - usdB;
       }
-      const valA = a.key.primary as bigint;
-      const valB = b.key.primary as bigint;
-      compare = valA === valB ? 0 : valA < valB ? -1 : 1;
     } else if (isString) {
       compare = (a.key.primary as string).toLowerCase().localeCompare(
         (b.key.primary as string).toLowerCase()

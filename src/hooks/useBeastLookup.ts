@@ -7,6 +7,9 @@ interface ListingWithBeast {
   beast?: Beast | null;
 }
 
+/** How many tokens to prioritize in the first-page fetch */
+const FIRST_PAGE_SIZE = 50;
+
 /** Index fetched beasts into a map with multiple key formats for reliable lookup. */
 function indexBeasts(beasts: Beast[], into: Map<string, Beast>) {
   for (const beast of beasts) {
@@ -34,7 +37,11 @@ function indexBeasts(beasts: Beast[], into: Map<string, Beast>) {
 
 /**
  * Hook for looking up beast data by token ID
- * Combines beast data from listings with fetched data for missing tokens
+ * Combines beast data from listings with fetched data for missing tokens.
+ *
+ * Uses a two-phase fetch strategy:
+ * - Phase 1: Fetch first page of missing tokens (fast, renders first page instantly)
+ * - Phase 2: Fetch remaining tokens in parallel (populates rest in background)
  */
 export function useBeastLookup(
   listings: ListingWithBeast[],
@@ -51,40 +58,71 @@ export function useBeastLookup(
     return map;
   }, [listings]);
 
-  // Stable, deduplicated + sorted key for additionalTokenIds
-  // This fires the fetch as soon as sale token IDs are known,
-  // without waiting for listings to resolve first.
-  const stableTokenIds = useMemo(() => {
-    const unique = [...new Set(additionalTokenIds)].sort();
-    return unique;
-  }, [additionalTokenIds]);
+  // Only fetch beast data for tokens NOT already known from listings.
+  // Preserves original order so first-page tokens are prioritized.
+  const missingTokenIds = useMemo(() => {
+    const seen = new Set<string>();
+    const missing: string[] = [];
+    for (const id of additionalTokenIds) {
+      if (!seen.has(id) && !beastMapFromListings.has(id)) {
+        seen.add(id);
+        missing.push(id);
+      }
+    }
+    return missing;
+  }, [additionalTokenIds, beastMapFromListings]);
 
-  const queryKey = useMemo(
-    () => ["beastLookup", stableTokenIds.join(",")],
-    [stableTokenIds]
+  // Split into first page (priority) and the rest
+  const firstPageIds = useMemo(
+    () => missingTokenIds.slice(0, FIRST_PAGE_SIZE),
+    [missingTokenIds]
+  );
+  const remainingIds = useMemo(
+    () => missingTokenIds.slice(FIRST_PAGE_SIZE),
+    [missingTokenIds]
   );
 
-  // Fetch beast data for all additional token IDs immediately
-  const { data: fetchedBeasts = [], isLoading } = useQuery({
-    queryKey,
-    enabled: stableTokenIds.length > 0,
-    staleTime: 10 * 60 * 1000, // 10 minutes - beast metadata is relatively stable
-    gcTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
+  // Phase 1: Fast fetch for first page of missing tokens
+  const firstPageKey = useMemo(
+    () => ["beastLookup-first", firstPageIds.join(",")],
+    [firstPageIds]
+  );
+  const { data: firstPageBeasts = [] } = useQuery({
+    queryKey: firstPageKey,
+    enabled: firstPageIds.length > 0,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
-    refetchOnMount: false, // Use cached data when available
-    queryFn: () => fetchBeastsByIds(stableTokenIds),
+    refetchOnMount: false,
+    queryFn: () => fetchBeastsByIds(firstPageIds),
   });
 
-  // Combine: fetched beasts first, then listings overlay (listings win on conflict)
+  // Phase 2: Background fetch for remaining tokens
+  const remainingKey = useMemo(
+    () => ["beastLookup-rest", remainingIds.join(",")],
+    [remainingIds]
+  );
+  const { data: remainingBeasts = [], isLoading } = useQuery({
+    queryKey: remainingKey,
+    enabled: remainingIds.length > 0,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    queryFn: () => fetchBeastsByIds(remainingIds),
+  });
+
+  // Combine all sources: fetched beasts first, then listings overlay (listings win)
   const beastMap = useMemo(() => {
     const map = new Map<string, Beast>();
-    indexBeasts(fetchedBeasts, map);
+    indexBeasts(remainingBeasts, map);
+    indexBeasts(firstPageBeasts, map);
     // Listings data overlays on top (already-hydrated, potentially fresher)
     for (const [key, beast] of beastMapFromListings) {
       map.set(key, beast);
     }
     return map;
-  }, [beastMapFromListings, fetchedBeasts]);
+  }, [beastMapFromListings, firstPageBeasts, remainingBeasts]);
 
   // Memoized helper to get beast by token ID
   const getBeast = useCallback(

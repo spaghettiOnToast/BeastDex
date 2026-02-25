@@ -3,7 +3,7 @@ import type { Beast, BeastAttributeFilters } from "../../../services/beast";
 import type { Listing } from "../../../services/marketplace/types";
 import type { SortOption } from "../../../components/sort/SortDropdown";
 import type { RatesInSTRK } from "../../../services/marketplace/rates";
-import { matchesAttributeFilters, matchesBeastFilters, sortListings, sortBeasts } from "../utils";
+import { matchesAttributeFilters, matchesBeastFilters, sortListings, sortBeasts, type TokenPriceMap } from "../utils";
 import { getNumericAttribute } from "../../../utils/beast";
 import { fetchUnclaimedSkullsBatch } from "../../../services/summit";
 import type { MarketplaceView } from "../types";
@@ -38,6 +38,8 @@ export interface UseMarketplaceFiltersProps {
   userBeastsLoading?: boolean;
   /** Whether user beasts have been loaded at least once */
   userBeastsHasLoaded?: boolean;
+  /** Token price map for cross-currency USD price sorting */
+  tokenPriceMap?: TokenPriceMap;
 }
 
 /**
@@ -51,6 +53,7 @@ export function useMarketplaceFilters({
   availableFilters,
   userBeastsLoading = false,
   userBeastsHasLoaded = false,
+  tokenPriceMap,
 }: UseMarketplaceFiltersProps) {
   // Filter and sort state
   const [attributeFilters, setAttributeFilters] = useState<BeastAttributeFilters>({});
@@ -250,8 +253,8 @@ export function useMarketplaceFilters({
    * Sort filtered listings
    */
   const sortedListings = useMemo(
-    () => sortListings(filteredListings, sortOption, unclaimedSkullsMap),
-    [filteredListings, sortOption, unclaimedSkullsMap]
+    () => sortListings(filteredListings, sortOption, unclaimedSkullsMap, tokenPriceMap),
+    [filteredListings, sortOption, unclaimedSkullsMap, tokenPriceMap]
   );
 
   /**
@@ -271,8 +274,8 @@ export function useMarketplaceFilters({
     }
 
     // Apply user's chosen sort
-    return sortListings(filtered, sortOption, unclaimedSkullsMap);
-  }, [recentListings, attributeFilters, sortOption, unclaimedSkullsFilter, unclaimedSkullsMap]);
+    return sortListings(filtered, sortOption, unclaimedSkullsMap, tokenPriceMap);
+  }, [recentListings, attributeFilters, sortOption, unclaimedSkullsFilter, unclaimedSkullsMap, tokenPriceMap]);
 
   /**
    * Reset to page 1 when filters change

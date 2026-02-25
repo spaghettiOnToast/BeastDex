@@ -16,7 +16,7 @@ import {
 
 // Re-export utilities for backwards compatibility
 export { getAttributeValues, getNumericAttribute, matchesBeastFilters };
-export { sortListings, sortBeasts } from "../../utils/sort";
+export { sortListings, sortBeasts, type TokenPriceMap } from "../../utils/sort";
 export const toBigInt = toBigIntSafe;
 
 /**

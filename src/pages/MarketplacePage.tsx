@@ -111,7 +111,7 @@ function formatRelativeTime(timestamp: number): string {
  */
 export default function MarketplacePage() {
   const { address, account } = useAccount();
-  const { getToken } = useTokenMap();
+  const { tokenMap, getToken } = useTokenMap();
   const globalCart = useGlobalCart();
   const { hasAcceptedToS, openToSDialog } = useTermsOfService();
 
@@ -263,6 +263,15 @@ export default function MarketplacePage() {
   // Data fetching hook
   const dataHook = useMarketplaceData(address);
 
+  // Derive token price map for cross-currency price sorting
+  const tokenPriceMap = useMemo(() => {
+    const map = new Map<string, { decimals: number; usdPrice: number | null }>();
+    for (const [addr, token] of tokenMap) {
+      map.set(addr, { decimals: token.decimals, usdPrice: token.usdPrice });
+    }
+    return map;
+  }, [tokenMap]);
+
   // Filters hook
   const filtersHook = useMarketplaceFilters({
     listings: dataHook.listings,
@@ -272,6 +281,7 @@ export default function MarketplacePage() {
     availableFilters: dataHook.availableFilters,
     userBeastsLoading: dataHook.userBeastsLoading,
     userBeastsHasLoaded: dataHook.userBeastsHasLoaded,
+    tokenPriceMap,
   });
 
   // Track if user beasts have been loaded (to avoid redundant loads)
@@ -303,7 +313,7 @@ export default function MarketplacePage() {
   // Recent sales hook (from indexer)
   const { namedRecentSales, invalidateAndRefetch: invalidateRecentSales } = useRecentSales({
     listings: dataHook.listings,
-    limit: 500,
+    limit: 250,
   });
 
   // Combined invalidation function for all sales data
@@ -1756,7 +1766,7 @@ export default function MarketplacePage() {
                 ) : (
                   <div className="space-y-3">
                     {(() => {
-                      const SOLD_PAGE_SIZE = 25;
+                      const SOLD_PAGE_SIZE = 50;
                       const startIdx = (soldPage - 1) * SOLD_PAGE_SIZE;
                       return namedRecentSales.slice(startIdx, startIdx + SOLD_PAGE_SIZE);
                     })().map(({ sale, beast, tokenId, price, from, to, time }, idx) => {
@@ -1824,7 +1834,7 @@ export default function MarketplacePage() {
                   </div>
                 )}
                 {(() => {
-                  const SOLD_PAGE_SIZE = 25;
+                  const SOLD_PAGE_SIZE = 50;
                   const totalSoldPages = Math.ceil(namedRecentSales.length / SOLD_PAGE_SIZE);
                   if (totalSoldPages > 1) {
                     return (
