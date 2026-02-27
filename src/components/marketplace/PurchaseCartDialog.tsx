@@ -249,7 +249,7 @@ export default function PurchaseCartDialog({
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <p className={`text-sm ${isInvalid ? "text-gray-500 line-through" : "text-lsGold"}`}>
+                    <p className={`text-sm ${isInvalid ? "text-gray-500 line-through" : "text-gold"}`}>
                       {formatListingPrice(listing)}
                     </p>
                     {!isInvalid && (() => {
@@ -355,7 +355,7 @@ export default function PurchaseCartDialog({
                       <div className="flex justify-between text-base font-semibold border-t border-gray-700 pt-1">
                         <span className="text-gray-300">Total ({tokenTotal.tokenSymbol}):</span>
                         <div className="text-right">
-                          <span className="text-lsGold">
+                          <span className="text-gold">
                             {formatPrice(tokenTotal.total, tokenTotal.tokenSymbol)}
                           </span>
                           {tokenTotal.totalUsd !== null && (

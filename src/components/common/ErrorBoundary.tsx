@@ -77,7 +77,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 this.setState({ hasError: false, error: undefined });
               }
             }}
-            className="bg-lsGreen text-black hover:bg-lsGreen/80"
+            className="bg-accent text-black hover:bg-accent/80"
           >
             {isChunkError ? 'Refresh Page' : 'Try Again'}
           </Button>

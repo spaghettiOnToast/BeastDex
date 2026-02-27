@@ -109,7 +109,7 @@ export default function OffersDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#0b0b0f] border-gray-800 max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="bg-surface-overlay border border-white/[0.06] max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Offers on Beast #{tokenId}</DialogTitle>
           <DialogDescription>
@@ -125,11 +125,11 @@ export default function OffersDialog({
 
         <div className="space-y-3">
           {isLoading ? (
-            <p className="text-sm text-gray-400 text-center py-8">
+            <p className="text-sm text-zinc-400 text-center py-8">
               Loading offers...
             </p>
           ) : offers.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-8">
+            <p className="text-sm text-zinc-400 text-center py-8">
               No offers yet. Be the first to make an offer!
             </p>
           ) : (
@@ -138,23 +138,23 @@ export default function OffersDialog({
               return (
                 <div
                   key={`${offer.id}-${index}`}
-                  className="flex items-center justify-between p-4 rounded-lg border border-gray-800 bg-gray-900/50"
+                  className="flex items-center justify-between p-4 rounded-lg border border-white/[0.06] bg-surface-raised/50"
                 >
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center gap-3">
-                      <span className="text-lg font-semibold text-lsGold">
+                      <span className="text-lg font-semibold text-gold">
                         {formatOfferPrice(offer)}
                       </span>
                       {usdValue !== null && (
-                        <span className="text-sm text-gray-400">${usdValue.toFixed(2)}</span>
+                        <span className="text-sm text-zinc-400">${usdValue.toFixed(2)}</span>
                       )}
                       {index === 0 && (
-                        <span className="text-xs bg-lsGold/20 text-lsGold px-2 py-0.5 rounded">
+                        <span className="text-xs bg-gold/15 text-gold px-2 py-0.5 rounded">
                           Highest
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <div className="flex items-center gap-2 text-xs text-zinc-400">
                       <span>From: {formatAddress(offer.owner)}</span>
                       {offer.expiration && (
                         <>
@@ -170,7 +170,7 @@ export default function OffersDialog({
                       size="sm"
                       onClick={() => onAcceptOffer(offer)}
                       disabled={isAccepting}
-                      className="bg-lsGold text-black hover:bg-lsGold/90"
+                      className="bg-gold text-black hover:bg-gold/90"
                     >
                       {isAccepting ? "Accepting..." : "Accept"}
                     </Button>

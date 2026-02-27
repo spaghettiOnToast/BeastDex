@@ -145,24 +145,24 @@ export function SortDropdown({ value, onChange, excludeOptions }: SortDropdownPr
         <Button
           variant="outline"
           size="sm"
-          className="h-8 px-2 sm:px-3 font-medium border border-gray-700 bg-black/40 text-gray-200 hover:bg-gray-900 hover:text-white"
+          className="h-8 px-2 sm:px-3 font-medium border border-white/[0.06] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08] hover:text-white"
         >
-          <span className="mr-1 sm:mr-1.5 text-gray-400 text-xs sm:text-sm">Sort:</span>
+          <span className="mr-1 sm:mr-1.5 text-zinc-500 text-xs sm:text-sm">Sort:</span>
           <span className="text-xs sm:text-sm">{currentOption.label}</span>
-          <ChevronDown className="ml-1 sm:ml-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
+          <ChevronDown className="ml-1 sm:ml-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5 text-zinc-500" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="min-w-[180px] border border-gray-800 bg-black/90 text-gray-200 backdrop-blur-md"
+        className="min-w-[180px] border border-white/[0.06] bg-surface-overlay/95 text-zinc-200 backdrop-blur-xl"
       >
         {filteredGroups.map((group, groupIndex) => (
           <DropdownMenuGroup key={group.groupLabel ?? "default"}>
             {groupIndex > 0 && (
-              <DropdownMenuSeparator className="bg-gray-800" />
+              <DropdownMenuSeparator className="bg-white/[0.06]" />
             )}
             {group.groupLabel && (
-              <DropdownMenuLabel className="text-[11px] text-gray-500 uppercase tracking-wider font-semibold px-2 py-1">
+              <DropdownMenuLabel className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold px-2 py-1">
                 {group.groupLabel}
               </DropdownMenuLabel>
             )}
@@ -171,7 +171,7 @@ export function SortDropdown({ value, onChange, excludeOptions }: SortDropdownPr
                 <DropdownMenuItem
                   key={item.value}
                   onClick={() => onChange(item.value)}
-                  className="cursor-pointer font-medium text-xs sm:text-sm text-gray-200 hover:bg-gray-800 hover:text-lsGold"
+                  className="cursor-pointer font-medium text-xs sm:text-sm text-zinc-200 hover:bg-white/[0.06] hover:text-white"
                 >
                   {item.label}
                 </DropdownMenuItem>
@@ -209,7 +209,7 @@ function PairedSortRow({
   const isDescActive = currentValue === item.desc;
 
   return (
-    <div className="flex items-center justify-between px-2 py-1.5 text-xs sm:text-sm font-medium text-gray-200">
+    <div className="flex items-center justify-between px-2 py-1.5 text-xs sm:text-sm font-medium text-zinc-200">
       <span>{item.label}</span>
       <span className="flex items-center gap-0.5 ml-3">
         {!ascHidden && (
@@ -218,8 +218,8 @@ function PairedSortRow({
             onClick={() => onChange(item.asc)}
             className={`rounded p-0.5 transition-colors ${
               isAscActive
-                ? "bg-lsGold/20 text-lsGold"
-                : "text-gray-500 hover:bg-gray-800 hover:text-gray-200"
+                ? "bg-accent/15 text-accent"
+                : "text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200"
             }`}
             title="Ascending"
           >
@@ -232,8 +232,8 @@ function PairedSortRow({
             onClick={() => onChange(item.desc)}
             className={`rounded p-0.5 transition-colors ${
               isDescActive
-                ? "bg-lsGold/20 text-lsGold"
-                : "text-gray-500 hover:bg-gray-800 hover:text-gray-200"
+                ? "bg-accent/15 text-accent"
+                : "text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200"
             }`}
             title="Descending"
           >

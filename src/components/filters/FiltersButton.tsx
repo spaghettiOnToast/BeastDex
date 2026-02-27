@@ -25,7 +25,7 @@ export function FiltersButton({
 
   const buttonClasses = cn(
     "border border-gray-700 bg-black/40 text-gray-200 hover:bg-gray-900 hover:text-white transition-colors",
-    hasActiveFilters && "border-lsGreen text-lsGreen bg-lsGreen/10 shadow-[0_0_12px_rgba(57,255,20,0.25)]"
+    hasActiveFilters && "border-accent text-accent bg-accent/10 shadow-[0_0_12px_rgba(57,255,20,0.25)]"
   );
 
   return (
@@ -40,7 +40,7 @@ export function FiltersButton({
       {hasActiveFilters ? (
         <Badge
           variant="outline"
-          className="ml-1 sm:ml-2 px-1 sm:px-1.5 py-0 text-[10px] sm:text-xs font-bold border-lsGreen text-lsGreen bg-black/60"
+          className="ml-1 sm:ml-2 px-1 sm:px-1.5 py-0 text-[10px] sm:text-xs font-bold border-accent text-accent bg-black/60"
         >
           {activeFiltersCount}
         </Badge>

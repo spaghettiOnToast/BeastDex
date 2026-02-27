@@ -28,16 +28,16 @@ export default function SearchBar({ value, onChange, onSubmit }: Props) {
       <div className="relative flex-1">
         <Input
           type="text"
-          placeholder="Search..."
+          placeholder="Search beasts..."
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full px-3 sm:px-4 py-2 pr-10 sm:pr-11 text-sm border-gray-700 bg-gray-900 text-gray-100 focus-visible:ring-2 focus-visible:ring-lsGreen focus-visible:border-lsGreen placeholder:text-gray-500"
+          className="w-full px-3 sm:px-4 py-2 pr-10 sm:pr-11 text-sm border-white/[0.06] bg-white/[0.04] text-white focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent/30 placeholder:text-zinc-500 rounded-lg"
         />
         <Button
           type="submit"
           size="sm"
           aria-label="Search beasts"
-          className="absolute inset-y-0 right-1.5 sm:right-2 my-auto h-7 w-7 sm:h-8 sm:w-8 text-gray-300 hover:bg-gray-700 focus:ring-lsGreen"
+          className="absolute inset-y-0 right-1.5 sm:right-2 my-auto h-7 w-7 sm:h-8 sm:w-8 text-zinc-400 hover:text-white hover:bg-white/[0.06]"
         >
           <Search className="h-4 w-4" />
         </Button>

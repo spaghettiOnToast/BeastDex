@@ -23,7 +23,7 @@ export default function TierFilter({ selected, onSelect }: Props) {
         // Base tier styling
         const tierClass =
           tier === "all"
-            ? "text-lsGold border-lsGold"
+            ? "text-gold border-gold"
             : tierColors[tier as number];
 
         return (
@@ -34,7 +34,7 @@ export default function TierFilter({ selected, onSelect }: Props) {
             className={cn(
               "px-4 py-2 font-ls transition border shadow-sm bg-black hover:bg-gray-900",
               tierClass,
-              isSelected && "border-2 border-lsGreen shadow-[0_0_10px_#39ff14]"
+              isSelected && "border-2 border-accent shadow-[0_0_10px_#39ff14]"
             )}
           >
             {tier === "all" ? "All" : `Tier ${tier}`}

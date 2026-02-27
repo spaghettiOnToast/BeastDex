@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAccount, useConnect, useDisconnect } from "@starknet-react/core";
-import { useNavigate } from "react-router-dom";
-import { ChevronDown, User, LogOut, Wallet, Package } from "lucide-react";
+
+
+import { ChevronDown, LogOut, Wallet } from "lucide-react";
 import { controllerConnector } from "../../wallet/controller";
 import controllerIcon from "../../assets/cartridge-icon.svg";
 import { Button } from "../ui/button";
@@ -26,7 +27,6 @@ export function WalletButton() {
   const { address } = useAccount();
   const { connectAsync, connectors } = useConnect();
   const { disconnectAsync } = useDisconnect();
-  const navigate = useNavigate();
   const [username, setUsername] = useState<string | null>(null);
   const { promptToSAcceptance, hasAcceptedToS } = useTermsOfService();
 
@@ -104,8 +104,6 @@ export function WalletButton() {
             ).username?.();
             setUsername(name ?? null);
 
-            // Prompt ToS acceptance after wallet connects
-            // If declined, disconnect the wallet
             promptToSAcceptance(async () => {
               await disconnectAsync();
               await (activeConnector as any).disconnect?.();
@@ -136,7 +134,7 @@ export function WalletButton() {
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-48 border-gray-800 bg-[#0b0b0f] text-xs text-gray-300 shadow-[0_0_20px_rgba(57,255,20,0.1)]"
+        className="w-48 border-white/[0.06] bg-surface-overlay text-xs text-zinc-300"
       >
         <DropdownMenuItem
           onClick={() => {
@@ -148,32 +146,12 @@ export function WalletButton() {
               console.error("Failed to open wallet dashboard", error);
             }
           }}
-          className="cursor-pointer focus:bg-gray-900 focus:text-gray-100"
+          className="cursor-pointer focus:bg-white/[0.06] focus:text-white"
         >
           <Wallet className="h-4 w-4" />
           Wallet Dashboard
         </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => {
-            navigate("/profile");
-          }}
-          className="cursor-pointer focus:bg-gray-900 focus:text-gray-100"
-        >
-          <User className="h-4 w-4" />
-          My Profile
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => {
-            if (address) {
-              navigate(`/collection/${address}`);
-            }
-          }}
-          className="cursor-pointer focus:bg-gray-900 focus:text-gray-100"
-        >
-          <Package className="h-4 w-4" />
-          My Collection
-        </DropdownMenuItem>
-        <DropdownMenuSeparator className="bg-gray-800" />
+        <DropdownMenuSeparator className="bg-white/[0.06]" />
         <DropdownMenuItem
           onClick={async () => {
             try {
@@ -184,7 +162,7 @@ export function WalletButton() {
             }
             setUsername(null);
           }}
-          className="cursor-pointer text-red-400 focus:bg-gray-900 focus:text-red-300"
+          className="cursor-pointer text-red-400 focus:bg-white/[0.06] focus:text-red-300"
         >
           <LogOut className="h-4 w-4" />
           Log Out

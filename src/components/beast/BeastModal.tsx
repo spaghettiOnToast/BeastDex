@@ -189,7 +189,7 @@ export const BeastModal = memo(function BeastModal({
                   <Link
                     to={`/collection/${encodeURIComponent(accountIdentifier)}`}
                     onClick={onClose}
-                    className="text-lsGold font-medium hover:underline"
+                    className="text-gold font-medium hover:underline"
                   >
                     {ownerLabel}
                   </Link>

@@ -53,7 +53,7 @@ export function ProfileStats({
           borderImageSlice: 1,
         }}
       >
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-lsGold">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-gold">
           Beast Collection
         </h3>
         <div
@@ -66,7 +66,7 @@ export function ProfileStats({
               Beasts Collected
             </dt>
             <dd className="text-right text-xs">
-              <span className="font-semibold text-lsGold">
+              <span className="font-semibold text-gold">
                 {uniqueBeastTypes}
                 <span className="text-xs text-gray-500">
                   /{TOTAL_BEAST_VARIETIES} Unique beasts
@@ -114,8 +114,8 @@ export function ProfileStats({
           </div>
 
           <div className="flex items-start justify-between mb-0.5 last:mb-0">
-            <dt className="text-lsGreen">Standard</dt>
-            <dd className="text-right text-lsGreen">
+            <dt className="text-accent">Standard</dt>
+            <dd className="text-right text-accent">
               <span className="font-semibold">
                 {standardCount.toLocaleString()}
               </span>
@@ -136,7 +136,7 @@ export function ProfileStats({
             borderImageSlice: 1,
           }}
         >
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-lsGold">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-gold">
             Highlights
           </h3>
           <dl className="mt-2 space-y-1 text-xs text-gray-300">
@@ -160,7 +160,7 @@ export function ProfileStats({
               <dt className="uppercase tracking-wide text-gray-500">
                 Highest Rank
               </dt>
-              <dd className="font-semibold text-lsGold">
+              <dd className="font-semibold text-gold">
                 {highestRanked ? highestRanked.name : "Unknown"}
               </dd>
             </div>

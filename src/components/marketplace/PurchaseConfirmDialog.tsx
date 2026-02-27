@@ -59,7 +59,7 @@ export default function PurchaseConfirmDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#0b0b0f] border-gray-800">
+      <DialogContent className="bg-surface-overlay border border-white/[0.06]">
         <DialogHeader>
           <DialogTitle>Confirm Purchase</DialogTitle>
           <DialogDescription>
@@ -80,63 +80,63 @@ export default function PurchaseConfirmDialog({
 
           <div className="space-y-2">
             <div className="flex justify-between">
-              <span className="text-sm text-gray-400">Beast:</span>
+              <span className="text-sm text-zinc-400">Beast:</span>
               <span className="text-sm font-medium">
                 {listing.beast?.name || `#${listing.tokenId}`}
               </span>
             </div>
 
             <div className="flex justify-between">
-              <span className="text-sm text-gray-400">Listing Price:</span>
+              <span className="text-sm text-zinc-400">Listing Price:</span>
               <div className="text-right">
                 <span className="text-sm font-medium">{priceLabel}</span>
                 {priceUsd !== null && (
-                  <span className="text-xs text-gray-500 ml-2">${priceUsd.toFixed(2)}</span>
+                  <span className="text-xs text-zinc-500 ml-2">${priceUsd.toFixed(2)}</span>
                 )}
               </div>
             </div>
 
             {CLIENT_FEE_BP > 0 && (
               <div className="flex justify-between">
-                <span className="text-sm text-gray-400">Client Fee ({CLIENT_FEE_BP / 100}%):</span>
+                <span className="text-sm text-zinc-400">Client Fee ({CLIENT_FEE_BP / 100}%):</span>
                 <div className="text-right">
-                  <span className="text-sm font-medium text-gray-400">
+                  <span className="text-sm font-medium text-zinc-400">
                     +{buyerFeeLabel}
                   </span>
                   {feeUsd !== null && (
-                    <span className="text-xs text-gray-500 ml-2">${feeUsd.toFixed(2)}</span>
+                    <span className="text-xs text-zinc-500 ml-2">${feeUsd.toFixed(2)}</span>
                   )}
                 </div>
               </div>
             )}
 
-            <div className="flex justify-between border-t border-gray-700 pt-2 mt-2">
+            <div className="flex justify-between border-t border-white/[0.08] pt-2 mt-2">
               <span className="text-sm font-semibold text-white">
                 Total to Pay:
               </span>
               <div className="text-right">
-                <span className="text-sm font-semibold text-lsGold">
+                <span className="text-sm font-semibold text-gold">
                   {totalLabel}
                 </span>
                 {totalUsd !== null && (
-                  <span className="text-sm text-gray-400 ml-2">${totalUsd.toFixed(2)}</span>
+                  <span className="text-sm text-zinc-400 ml-2">${totalUsd.toFixed(2)}</span>
                 )}
               </div>
             </div>
 
             <div className="flex justify-between">
-              <span className="text-sm text-gray-400">Payment Currency:</span>
+              <span className="text-sm text-zinc-400">Payment Currency:</span>
               <div className="flex items-center gap-2">
                 <TokenIcon symbol={tokenSymbol} size="sm" />
-                <span className="text-sm font-medium text-lsGold">
+                <span className="text-sm font-medium text-gold">
                   {tokenSymbol}
                 </span>
               </div>
             </div>
 
             <div className="flex justify-between">
-              <span className="text-sm text-gray-400">Seller:</span>
-              <span className="text-xs font-mono text-gray-300">
+              <span className="text-sm text-zinc-400">Seller:</span>
+              <span className="text-xs font-mono text-zinc-300">
                 {sellerDisplay}
               </span>
             </div>
@@ -155,14 +155,14 @@ export default function PurchaseConfirmDialog({
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isProcessing}
-            className="flex-1 border-gray-600 hover:border-gray-500"
+            className="flex-1 border-white/[0.10] hover:border-white/[0.15]"
           >
             Cancel
           </Button>
           <Button
             onClick={onConfirm}
             disabled={isProcessing}
-            className="flex-1 font-bold bg-lsGold/20 text-lsGold border border-lsGold hover:bg-lsGold/30"
+            className="flex-1 font-bold bg-gold/15 text-gold border border-gold hover:bg-gold/20"
           >
             {isProcessing ? "Processing..." : "Confirm Purchase"}
           </Button>

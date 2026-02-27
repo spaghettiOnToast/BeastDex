@@ -42,10 +42,10 @@ export function ViewToggle({ value, onChange }: ViewToggleProps) {
             type="button"
             onClick={() => onChange(option.value)}
             className={cn(
-              "flex-1 rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lsGold/70",
+              "flex-1 rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70",
               active
-                ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
-                : "text-gray-400 hover:text-lsGold"
+                ? "bg-gradient-to-r from-gold/25 via-gold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
+                : "text-gray-400 hover:text-gold"
             )}
           >
             <span className="block text-[10px] sm:text-xs font-semibold uppercase tracking-wider">

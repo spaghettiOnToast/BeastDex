@@ -316,7 +316,7 @@ export default function ListDialog({ open, onOpenChange, beast, onListed, existi
                       </div>
                       <div className="flex justify-between border-t border-gray-700 pt-2">
                         <span className="text-sm font-semibold text-white">You Receive:</span>
-                        <span className="text-sm font-semibold text-lsGold">{fromWei(sellerReceives, tokenDecimals)} {tokenSymbol}</span>
+                        <span className="text-sm font-semibold text-gold">{fromWei(sellerReceives, tokenDecimals)} {tokenSymbol}</span>
                       </div>
                     </div>
 
@@ -399,7 +399,7 @@ export default function ListDialog({ open, onOpenChange, beast, onListed, existi
               <Button
                 onClick={onSubmit}
                 disabled={!canSubmit || submitting}
-                className="bg-lsGold/20 text-lsGold border border-lsGold hover:bg-lsGold/30"
+                className="bg-gold/15 text-gold border border-gold hover:bg-gold/20"
               >
                 {submitting ? "Submitting..." : "List"}
               </Button>

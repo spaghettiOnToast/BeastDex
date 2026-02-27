@@ -11,18 +11,20 @@ import { FiltersButton } from "../components/filters/FiltersButton";
 import { FiltersDrawer } from "../components/filters/FiltersDrawer";
 import { AppLayout } from "../components/layout/AppLayout";
 import { Button } from "../components/ui/button";
+import { RefreshCw } from "lucide-react";
 import { useBeasts } from "../hooks/useBeasts";
 import {
   fetchBeastAttributeFilters,
   fetchBeastStats,
   fetchBeastHighlights,
+  fetchTierCollectionStats,
   fetchTopBeasts,
   hasCompleteMetadata,
   type BeastAttributeFilters,
   type BeastStats,
   type BeastHighlights,
-  type BeastHighlightsLeader,
   type Beast,
+  type TierCollectionStats,
 } from "../services/beast";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { getUserFriendlyErrorMessage } from "../utils/error";
@@ -70,6 +72,8 @@ function HomePage() {
   const [highlights, setHighlights] = useState<BeastHighlights | null>(null);
   const [highlightsLoading, setHighlightsLoading] = useState(true);
   const [highlightsError, setHighlightsError] = useState<string | null>(null);
+  const [tierStats, setTierStats] = useState<TierCollectionStats[]>([]);
+  const [tierStatsLoading, setTierStatsLoading] = useState(true);
   const [selectedBeast, setSelectedBeast] = useState<Beast | null>(null);
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -229,6 +233,19 @@ function HomePage() {
       }
     }
 
+    async function loadTierStats() {
+      try {
+        setTierStatsLoading(true);
+        const data = await fetchTierCollectionStats();
+        if (!mounted) return;
+        setTierStats(data);
+      } catch (err) {
+        console.error("Failed to load tier stats:", err);
+      } finally {
+        if (mounted) setTierStatsLoading(false);
+      }
+    }
+
     // Stagger all data loading to avoid overwhelming the indexer
     // Beasts load via useBeasts hook immediately, so defer everything else
     const filtersTimer = setTimeout(() => {
@@ -243,11 +260,16 @@ function HomePage() {
       if (mounted) loadHighlights();
     }, 1500);
 
+    const tierStatsTimer = setTimeout(() => {
+      if (mounted) loadTierStats();
+    }, 2000);
+
     return () => {
       mounted = false;
       clearTimeout(filtersTimer);
       clearTimeout(statsTimer);
       clearTimeout(highlightsTimer);
+      clearTimeout(tierStatsTimer);
     };
   }, []);
 
@@ -297,54 +319,6 @@ function HomePage() {
     setPage(1);
     setAttributeFilters({});
   }, []);
-
-  const formatOwner = useCallback(
-    (leader: BeastHighlightsLeader) => {
-      if (!leader.owner) return "Unknown";
-      // Use the username from the highlights data (already looked up)
-      if (leader.username) return leader.username;
-      if (leader.owner.length <= 12) return leader.owner;
-      return `${leader.owner.slice(0, 6)}…${leader.owner.slice(-4)}`;
-    },
-    []
-  );
-
-  const highlightItems = useMemo(() => {
-    if (!highlights) return [];
-
-    const items: Array<{ title: string; subtitle: string }> = [];
-
-    if (highlights.leaders.overall.value > 0) {
-      items.push({
-        title: `${formatOwner(highlights.leaders.overall)} leads the hunt`,
-        subtitle: `${highlights.leaders.overall.value.toLocaleString()} total beasts`,
-      });
-    }
-    if (highlights.leaders.animatedShiny.value > 0) {
-      items.push({
-        title: `${formatOwner(
-          highlights.leaders.animatedShiny
-        )} loves animated shinies`,
-        subtitle: `${highlights.leaders.animatedShiny.value.toLocaleString()} collected`,
-      });
-    }
-    if (highlights.leaders.shiny.value > 0) {
-      items.push({
-        title: `${formatOwner(highlights.leaders.shiny)} is the shiny master`,
-        subtitle: `${highlights.leaders.shiny.value.toLocaleString()} shinies`,
-      });
-    }
-    if (highlights.leaders.animated.value > 0) {
-      items.push({
-        title: `${formatOwner(
-          highlights.leaders.animated
-        )} owns the animations`,
-        subtitle: `${highlights.leaders.animated.value.toLocaleString()} animated beasts`,
-      });
-    }
-
-    return items;
-  }, [highlights, formatOwner]);
 
   // Find listing for selected beast (if any) - uses lightweight lookup (no beast hydration)
   const selectedBeastListing = useMemo(() => {
@@ -461,7 +435,7 @@ function HomePage() {
               setMakeOfferOpen(true);
             }}
             disabled={!address}
-            className="w-full sm:w-auto font-semibold tracking-wide border-gray-600 hover:border-gray-500"
+            className="w-full sm:w-auto font-semibold tracking-wide border-white/[0.10] hover:border-white/[0.20]"
           >
             Make Offer
           </Button>
@@ -481,7 +455,7 @@ function HomePage() {
             setPurchaseConfirmOpen(true);
           }}
           disabled={!listing.active || !address}
-          className="w-full sm:w-auto font-semibold tracking-wide bg-lsGold/20 text-lsGold border border-lsGold hover:bg-lsGold/30"
+          className="w-full sm:w-auto font-semibold tracking-wide bg-gold/15 text-gold border border-gold/30 hover:bg-gold/25"
         >
           Buy Now - {formatPriceWithUsd(listing)}
         </Button>
@@ -494,8 +468,8 @@ function HomePage() {
           disabled={!listing.active || !address}
           className={`w-full sm:w-auto font-semibold tracking-wide ${
             globalCart.isInPurchaseCart(listing.listingId)
-              ? "bg-[#39ff14]/20 text-[#39ff14] border-[#39ff14]"
-              : "border-gray-600 hover:border-gray-500"
+              ? "bg-accent/15 text-accent border-accent/30"
+              : "border-white/[0.10] hover:border-white/[0.20]"
           }`}
         >
           {globalCart.isInPurchaseCart(listing.listingId) ? "In Cart" : "Add to Cart"}
@@ -509,7 +483,7 @@ function HomePage() {
             setMakeOfferOpen(true);
           }}
           disabled={!address}
-          className="w-full sm:w-auto font-semibold tracking-wide border-gray-600 hover:border-gray-500"
+          className="w-full sm:w-auto font-semibold tracking-wide border-white/[0.10] hover:border-white/[0.20]"
         >
           Make Offer
         </Button>
@@ -526,13 +500,6 @@ function HomePage() {
     />
   );
 
-  const filtersAndSortControls = (
-    <div className="flex items-center gap-2 sm:gap-4">
-      {filtersControl}
-      <SortDropdown value={sortOption} onChange={setSortOption} excludeOptions={HOMEPAGE_EXCLUDED_OPTIONS} />
-    </div>
-  );
-
   return (
     <AppLayout topBar={topBar}>
       <StatsPanel
@@ -540,14 +507,30 @@ function HomePage() {
         uniqueOwners={beastStats?.uniqueOwners || 0}
         mintedLoading={mintedLoading}
         mintedError={mintedError}
-        highlightItems={highlightItems}
+        highlights={highlights}
         highlightsLoading={highlightsLoading}
         highlightsError={highlightsError}
-        onRefresh={() => reload()}
-        refreshing={loading}
-        filtersControl={filtersAndSortControls}
+        tierStats={tierStats}
+        tierStatsLoading={tierStatsLoading}
         globalError={error}
       />
+
+      {/* Slim controls bar */}
+      <div className="flex items-center gap-2 mb-3">
+        {filtersControl}
+        <SortDropdown value={sortOption} onChange={setSortOption} excludeOptions={HOMEPAGE_EXCLUDED_OPTIONS} />
+        <div className="flex-1" />
+        <Button
+          onClick={() => reload()}
+          disabled={loading}
+          variant="ghost"
+          size="sm"
+          className="text-zinc-400 hover:text-white hover:bg-white/[0.06] text-xs h-7 px-2"
+        >
+          <RefreshCw className={`h-3 w-3 mr-1 ${loading ? "animate-spin" : ""}`} />
+          <span className="hidden sm:inline">Refresh</span>
+        </Button>
+      </div>
 
       <BeastGrid
         beasts={beasts}

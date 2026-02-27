@@ -34,23 +34,23 @@ export function TermsOfServiceDialog() {
 
   return (
     <Dialog open={showToSDialog} onOpenChange={() => {/* Prevent closing by clicking outside - must explicitly accept or decline */}}>
-      <DialogContent className="max-w-2xl bg-gradient-to-br from-gray-900 to-black border-gray-700 [&>button.absolute]:hidden">
+      <DialogContent className="max-w-2xl bg-surface-overlay border-white/[0.08] [&>button.absolute]:hidden">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold text-white flex items-center gap-2">
-            <span className="text-lsGold">BeastDex</span> Marketplace Terms of Service
+            <span className="text-gold">BeastDex</span> Marketplace Terms of Service
           </DialogTitle>
-          <DialogDescription className="text-gray-400">
+          <DialogDescription className="text-zinc-400">
             Please read and accept our terms to use the marketplace
           </DialogDescription>
         </DialogHeader>
 
         <div
-          className="h-[45vh] overflow-y-auto pr-4 border border-gray-700/50 rounded-lg bg-black/30"
+          className="h-[45vh] overflow-y-auto pr-4 border border-white/[0.08] rounded-lg bg-surface/30"
           ref={scrollRef}
           onScroll={handleScroll}
         >
-          <div className="p-4 space-y-4 text-sm text-gray-300">
-            <p className="text-xs text-gray-500 italic">
+          <div className="p-4 space-y-4 text-sm text-zinc-300">
+            <p className="text-xs text-zinc-500 italic">
               Last Updated: February 2026 | Version 1.0.0
             </p>
 
@@ -150,8 +150,8 @@ export function TermsOfServiceDialog() {
           </div>
         </div>
 
-        <div className="space-y-3 pt-3 border-t border-gray-700">
-          <p className="text-center text-gray-400 text-xs">
+        <div className="space-y-3 pt-3 border-t border-white/[0.08]">
+          <p className="text-center text-zinc-400 text-xs">
             By clicking "I Accept", you acknowledge that you have read and agree to the Terms of Service.
           </p>
 
@@ -166,7 +166,7 @@ export function TermsOfServiceDialog() {
             <button
               type="button"
               onClick={declineToS}
-              className="px-6 py-2 rounded-md border border-gray-600 text-gray-400 hover:bg-gray-800 hover:text-white transition-colors cursor-pointer"
+              className="px-6 py-2 rounded-md border border-white/[0.10] text-zinc-400 hover:bg-white/[0.06] hover:text-white transition-colors cursor-pointer"
             >
               Decline
             </button>
@@ -185,7 +185,7 @@ export function TermsOfServiceDialog() {
             </button>
           </div>
 
-          <p className="text-center text-gray-500 text-xs">
+          <p className="text-center text-zinc-500 text-xs">
             By declining, your wallet will be disconnected.
           </p>
         </div>

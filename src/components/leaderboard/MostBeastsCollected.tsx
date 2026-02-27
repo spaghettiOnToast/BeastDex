@@ -75,7 +75,7 @@ export function MostBeastsCollected() {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
-          <div className="animate-spin h-8 w-8 border-4 border-lsGreen border-t-transparent rounded-full mx-auto mb-4"></div>
+          <div className="animate-spin h-8 w-8 border-4 border-accent border-t-transparent rounded-full mx-auto mb-4"></div>
           <p className="text-gray-400">Loading leaderboard...</p>
         </div>
       </div>
@@ -88,7 +88,7 @@ export function MostBeastsCollected() {
         <p className="text-red-400 mb-4">❌ {error}</p>
         <button
           onClick={() => setPage(1)}
-          className="px-6 py-3 bg-gradient-to-r from-lsGold to-lsGreen text-black font-bold rounded-lg hover:scale-105 transition-transform shadow-lg hover:shadow-lsGreen/50 uppercase tracking-wider"
+          className="px-6 py-3 bg-gradient-to-r from-gold to-accent text-black font-bold rounded-lg hover:scale-105 transition-transform shadow-lg hover:shadow-accent/50 uppercase tracking-wider"
         >
           Try Again
         </button>
@@ -102,7 +102,7 @@ export function MostBeastsCollected() {
       <div className="bg-gradient-to-br from-gray-900/90 to-black/60 backdrop-blur-sm border border-gray-700/50 rounded-xl overflow-hidden shadow-2xl">
         <div className="grid grid-cols-4 gap-4 px-6 py-3 bg-gradient-to-r from-gray-800/80 to-gray-900/80 border-b border-gray-600/30 text-xs font-bold uppercase tracking-wider text-gray-300">
           <div className="flex items-center">
-            <span className="text-lsGold">🏆</span>
+            <span className="text-gold">🏆</span>
             <span className="ml-2">Rank</span>
           </div>
           <div className="col-span-2 flex items-center">
@@ -134,7 +134,7 @@ export function MostBeastsCollected() {
                     ${entry.rank === 1 ? "text-yellow-400 drop-shadow-[0_0_8px_rgba(255,215,0,0.6)]" :
                       entry.rank === 2 ? "text-gray-300 drop-shadow-[0_0_8px_rgba(192,192,192,0.6)]" :
                       entry.rank === 3 ? "text-orange-400 drop-shadow-[0_0_8px_rgba(255,165,0,0.6)]" :
-                      "text-lsGold"}
+                      "text-gold"}
                   `}>
                     {entry.rank <= 3 && (
                       <span className="text-2xl">
@@ -189,11 +189,11 @@ export function MostBeastsCollected() {
           <button
             onClick={handleLoadMore}
             disabled={loading}
-            className="px-6 py-2 bg-gradient-to-r from-gray-800 to-gray-900 hover:from-lsGold/20 hover:to-[#8bff72]/20 disabled:opacity-50 text-lsGold hover:text-[#8bff72] transition-all duration-300 rounded-xl text-sm font-bold uppercase tracking-wider border border-gray-700 hover:border-[#8bff72]/50 shadow-lg hover:shadow-[#8bff72]/20"
+            className="px-6 py-2 bg-gradient-to-r from-gray-800 to-gray-900 hover:from-gold/20 hover:to-[#8bff72]/20 disabled:opacity-50 text-gold hover:text-[#8bff72] transition-all duration-300 rounded-xl text-sm font-bold uppercase tracking-wider border border-gray-700 hover:border-[#8bff72]/50 shadow-lg hover:shadow-[#8bff72]/20"
           >
             {loading ? (
               <span className="flex items-center gap-3">
-                <div className="w-5 h-5 border-2 border-lsGold border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-5 h-5 border-2 border-gold border-t-transparent rounded-full animate-spin"></div>
                 Loading More...
               </span>
             ) : (

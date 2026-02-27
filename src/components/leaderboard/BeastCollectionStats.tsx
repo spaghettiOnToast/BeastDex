@@ -48,22 +48,22 @@ const CATEGORY_CONFIG: Array<{
   {
     id: "all",
     label: "All",
-    highlightClass: "from-[#8bff72] to-[#39ff14]",
+    highlightClass: "from-accent to-accent",
   },
   {
     id: "animatedShiny",
     label: "Animated Shiny",
-    highlightClass: "from-[#ff7cf7] to-[#7dfbff]",
+    highlightClass: "from-pink-400 to-purple-400",
   },
   {
     id: "shiny",
     label: "Shiny",
-    highlightClass: "from-[#ffe66d] to-[#ffaf1d]",
+    highlightClass: "from-yellow-400 to-amber-400",
   },
   {
     id: "animated",
     label: "Animated",
-    highlightClass: "from-[#7dfbff] to-[#39ff14]",
+    highlightClass: "from-sky-400 to-accent",
   },
   {
     id: "standard",
@@ -169,26 +169,26 @@ export function BeastCollectionStats() {
     {
       label: "Animated Shinies",
       value: highlights?.animatedShinyCount ?? 0,
-      gradient: "from-[#ff7cf7]/30 via-[#7dfbff]/10 to-[#39ff14]/30",
-      accent: "text-[#ff7cf7]",
+      gradient: "from-pink-400/20 via-purple-400/10 to-accent/20",
+      accent: "text-pink-400",
     },
     {
       label: "Shiny Beasts",
       value: highlights?.shinyCount ?? 0,
-      gradient: "from-[#ffe66d]/30 via-[#ffaf1d]/10 to-[#ff6b35]/30",
-      accent: "text-[#ffaf1d]",
+      gradient: "from-yellow-400/20 via-amber-400/10 to-orange-400/20",
+      accent: "text-amber-400",
     },
     {
       label: "Animated Beasts",
       value: highlights?.animatedCount ?? 0,
-      gradient: "from-[#7dfbff]/30 via-[#39ff14]/10 to-[#1affd5]/30",
-      accent: "text-[#39ff14]",
+      gradient: "from-sky-400/20 via-accent/10 to-teal-400/20",
+      accent: "text-accent",
     },
     {
       label: "Standard Beasts",
       value: highlights?.standardCount ?? 0,
-      gradient: "from-gray-500/30 via-gray-700/10 to-gray-900/30",
-      accent: "text-gray-300",
+      gradient: "from-zinc-500/20 via-zinc-700/10 to-zinc-900/20",
+      accent: "text-zinc-300",
     },
   ];
 
@@ -205,11 +205,11 @@ export function BeastCollectionStats() {
         {summaryTiles.map((tile) => (
           <div
             key={tile.label}
-            className={`relative overflow-hidden rounded-xl border border-gray-700/40 bg-gradient-to-br ${tile.gradient} p-5 shadow-lg`}
+            className={`relative overflow-hidden rounded-xl border border-white/[0.06] bg-gradient-to-br ${tile.gradient} p-5`}
           >
             <div className="absolute inset-0 bg-gradient-to-br from-black/10 via-transparent to-black/40" />
             <div className="relative z-10">
-              <div className="text-xs uppercase tracking-[0.3em] text-gray-400">
+              <div className="text-xs uppercase tracking-[0.3em] text-zinc-400">
                 {tile.label}
               </div>
               <div
@@ -219,7 +219,7 @@ export function BeastCollectionStats() {
                   ? "—"
                   : tile.value.toLocaleString()}
               </div>
-              <div className="mt-2 text-xs text-gray-500">
+              <div className="mt-2 text-xs text-zinc-500">
                 Total collected across all adventurers
               </div>
             </div>
@@ -228,14 +228,14 @@ export function BeastCollectionStats() {
       </div>
 
       {/* Tier Collection Stats */}
-      <div className="bg-gray-900/60 backdrop-blur-sm border border-gray-700/40 rounded-xl p-4 shadow-2xl">
-        <div className="text-xs uppercase tracking-[0.35em] text-gray-500 mb-4">
+      <div className="bg-surface-raised border border-white/[0.06] rounded-xl p-4">
+        <div className="text-xs uppercase tracking-[0.35em] text-zinc-500 mb-4">
           Collection by Tier
         </div>
         <div className="grid gap-3 sm:grid-cols-5">
           {tierStatsLoading ? (
             <div className="col-span-5 flex justify-center py-4">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-lsGreen border-t-transparent" />
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
             </div>
           ) : (
             tierStats.map((tier) => {
@@ -245,15 +245,15 @@ export function BeastCollectionStats() {
               return (
                 <div
                   key={tier.tier}
-                  className={`relative overflow-hidden rounded-lg border ${colors.border} bg-gradient-to-br from-gray-800/50 to-gray-900/50 p-3`}
+                  className={`relative overflow-hidden rounded-lg border ${colors.border} bg-white/[0.04] p-3`}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <span className={`text-sm font-bold ${colors.text}`}>T{tier.tier}</span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-zinc-400">
                       {progress.toFixed(1)}%
                     </span>
                   </div>
-                  <div className="h-1.5 w-full bg-gray-700/50 rounded-full overflow-hidden mb-2">
+                  <div className="h-1.5 w-full bg-white/[0.06] rounded-full overflow-hidden mb-2">
                     <div
                       className={`h-full bg-gradient-to-r ${colors.gradient} transition-all`}
                       style={{ width: `${progress}%` }}
@@ -263,7 +263,7 @@ export function BeastCollectionStats() {
                     <span className={`font-semibold ${colors.text}`}>
                       {tier.collected.toLocaleString()}
                     </span>
-                    <span className={`font-semibold ${remaining <= 100 ? "text-red-400" : "text-gray-400"}`}>
+                    <span className={`font-semibold ${remaining <= 100 ? "text-red-400" : "text-zinc-400"}`}>
                       {remaining.toLocaleString()} left
                     </span>
                   </div>
@@ -274,30 +274,30 @@ export function BeastCollectionStats() {
         </div>
       </div>
 
-      <div className="bg-gray-900/60 backdrop-blur-sm border border-gray-700/40 rounded-xl p-4 shadow-2xl">
+      <div className="bg-surface-raised border border-white/[0.06] rounded-xl p-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="text-xs uppercase tracking-[0.35em] text-gray-500">
+            <div className="text-xs uppercase tracking-[0.35em] text-zinc-500">
               Leaderboard
             </div>
             <div className="mt-2 flex items-center gap-2 text-lg font-semibold text-white">
               <span
-                className={`inline-flex items-center rounded-full border border-gray-700 bg-gradient-to-r ${activeCategoryMeta?.highlightClass ?? ""} px-3 py-1 text-xs font-bold uppercase tracking-wide text-gray-900`}
+                className={`inline-flex items-center rounded-full border border-white/[0.06] bg-gradient-to-r ${activeCategoryMeta?.highlightClass ?? ""} px-3 py-1 text-xs font-bold uppercase tracking-wide text-surface`}
               >
                 {activeCategoryMeta?.label ?? ""}
               </span>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2 rounded-xl bg-gray-900/60 p-1.5">
+          <div className="flex flex-wrap gap-2 rounded-xl bg-white/[0.04] p-1.5">
             {CATEGORY_CONFIG.map((category) => (
               <button
                 key={category.id}
                 onClick={() => setActiveCategory(category.id)}
                 className={`min-w-[140px] rounded-lg px-4 py-2 text-sm font-bold uppercase tracking-wider transition-all duration-200 ${
                   activeCategory === category.id
-                    ? "bg-gradient-to-r from-[#8bff72] to-[#39ff14] text-gray-900 shadow-[0_0_20px_rgba(139,255,114,0.25)]"
-                    : "text-gray-300 hover:bg-gray-800/70 hover:text-[#8bff72]"
+                    ? "bg-accent text-surface"
+                    : "text-zinc-300 hover:bg-white/[0.06] hover:text-white"
                 }`}
               >
                 {category.label}
@@ -309,25 +309,25 @@ export function BeastCollectionStats() {
         <div className="mt-4 flex justify-center">
           <button
             onClick={toggleSortOrder}
-            className="inline-flex items-center gap-2 rounded-xl border border-gray-700 bg-gradient-to-r from-gray-800 to-gray-900 px-4 py-2 text-sm font-bold uppercase tracking-wider text-lsGold shadow-lg transition-all duration-200 hover:border-[#8bff72]/50 hover:bg-gray-800 hover:text-[#8bff72]"
+            className="inline-flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.04] px-4 py-2 text-sm font-bold uppercase tracking-wider text-zinc-300 transition-all duration-200 hover:bg-white/[0.08] hover:text-white"
           >
             <span>{ascending ? "📉" : "📈"}</span>
             <span>Sort by: {ascending ? "Least" : "Most"} Collected</span>
           </button>
         </div>
 
-        <div className="mt-6 rounded-xl border border-gray-800/60 bg-gradient-to-br from-gray-900/90 to-black/70 shadow-inner">
-          <div className={`grid ${activeCategory === "all" ? "grid-cols-5" : "grid-cols-4"} gap-4 px-6 py-3 border-b border-gray-700/30 bg-gray-900/70 text-xs font-bold uppercase tracking-wider text-gray-300`}>
+        <div className="mt-6 rounded-xl border border-white/[0.06] bg-surface-raised">
+          <div className={`grid ${activeCategory === "all" ? "grid-cols-5" : "grid-cols-4"} gap-4 px-6 py-3 border-b border-white/[0.06] bg-white/[0.04] text-xs font-bold uppercase tracking-wider text-zinc-300`}>
             <div className="flex items-center">
-              <span className="text-lsGold">🏆</span>
+              <span className="text-gold">🏆</span>
               <span className="ml-2">Rank</span>
             </div>
             <div className="col-span-2 flex items-center">
-              <span className="text-[#8bff72]">🐾</span>
+              <span className="text-accent">🐾</span>
               <span className="ml-2">Beast</span>
             </div>
             <div className="flex items-center justify-end text-right">
-              <span className="text-[#8bff72]">📦</span>
+              <span className="text-accent">📦</span>
               <span className="ml-2">Collected</span>
             </div>
             {activeCategory === "all" && (
@@ -341,8 +341,8 @@ export function BeastCollectionStats() {
           {isInitialLoading ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
-                <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-lsGreen border-t-transparent" />
-                <p className="text-gray-400">Loading leaderboard...</p>
+                <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-accent border-t-transparent" />
+                <p className="text-zinc-400">Loading leaderboard...</p>
               </div>
             </div>
           ) : error && leaderboard.length === 0 ? (
@@ -356,19 +356,19 @@ export function BeastCollectionStats() {
                   setLoadState("loading");
                   setReloadNonce((prev) => prev + 1);
                 }}
-                className="rounded-lg border border-gray-600/70 bg-gradient-to-r from-gray-800 to-gray-900 px-5 py-2 text-sm font-bold uppercase tracking-wider text-lsGold transition-all duration-200 hover:border-[#8bff72]/50 hover:bg-gray-800/70 hover:text-[#8bff72]"
+                className="rounded-lg border border-white/[0.06] bg-white/[0.04] px-5 py-2 text-sm font-bold uppercase tracking-wider text-zinc-300 transition-all duration-200 hover:bg-white/[0.08] hover:text-white"
               >
                 Retry
               </button>
             </div>
           ) : (
-            <div className="divide-y divide-gray-800/40">
+            <div className="divide-y divide-white/[0.06]">
               {leaderboard.map((entry) => {
                 const remaining = MAX_BEASTS_PER_TYPE - entry.value;
                 return (
                   <div
                     key={`${entry.rank}-${entry.beast_name}-${activeCategory}-${ascending}`}
-                    className={`grid ${activeCategory === "all" ? "grid-cols-5" : "grid-cols-4"} gap-4 px-6 py-3 transition-all duration-300 hover:bg-gray-900/50 ${
+                    className={`grid ${activeCategory === "all" ? "grid-cols-5" : "grid-cols-4"} gap-4 px-6 py-3 transition-all duration-300 hover:bg-white/[0.04] ${
                       entry.rank <= 3
                         ? "bg-gradient-to-r from-yellow-500/5 to-orange-500/5"
                         : ""
@@ -378,12 +378,12 @@ export function BeastCollectionStats() {
                       <div
                         className={`flex items-center gap-2 text-xl font-black ${
                           entry.rank === 1
-                            ? "text-yellow-400 drop-shadow-[0_0_6px_rgba(255,215,0,0.6)]"
+                            ? "text-yellow-400"
                             : entry.rank === 2
-                            ? "text-gray-300 drop-shadow-[0_0_6px_rgba(192,192,192,0.6)]"
+                            ? "text-zinc-300"
                             : entry.rank === 3
-                            ? "text-orange-400 drop-shadow-[0_0_6px_rgba(255,165,0,0.6)]"
-                            : "text-lsGold"
+                            ? "text-orange-400"
+                            : "text-gold"
                         }`}
                       >
                         {entry.rank <= 3 && (
@@ -404,7 +404,7 @@ export function BeastCollectionStats() {
                         className={`font-medium transition-all duration-200 ${
                           entry.rank <= 3
                             ? "text-white text-lg font-bold"
-                            : "text-gray-200"
+                            : "text-zinc-200"
                         }`}
                       >
                         {entry.beast_name}
@@ -414,15 +414,11 @@ export function BeastCollectionStats() {
                     <div className="flex items-center justify-end text-right">
                       <div>
                         <div
-                          className={`text-lg font-bold text-[#8bff72] ${
-                            entry.rank <= 3
-                              ? "drop-shadow-[0_0_4px_rgba(139,255,114,0.5)]"
-                              : ""
-                          }`}
+                          className="text-lg font-bold text-accent"
                         >
                           {entry.value.toLocaleString()}
                         </div>
-                        <div className="text-xs uppercase tracking-wide text-gray-500">
+                        <div className="text-xs uppercase tracking-wide text-zinc-500">
                           collected
                         </div>
                       </div>
@@ -434,15 +430,15 @@ export function BeastCollectionStats() {
                           <div
                             className={`text-lg font-bold ${
                               remaining === 0
-                                ? "text-gray-500"
+                                ? "text-zinc-500"
                                 : remaining <= 10
-                                ? "text-red-400 drop-shadow-[0_0_4px_rgba(248,113,113,0.5)]"
+                                ? "text-red-400"
                                 : "text-orange-400"
                             }`}
                           >
                             {remaining.toLocaleString()}
                           </div>
-                          <div className="text-xs uppercase tracking-wide text-gray-500">
+                          <div className="text-xs uppercase tracking-wide text-zinc-500">
                             remaining
                           </div>
                         </div>
@@ -460,11 +456,11 @@ export function BeastCollectionStats() {
             <button
               onClick={handleLoadMore}
               disabled={loadState === "loading"}
-              className="inline-flex items-center justify-center gap-3 rounded-xl border border-gray-700 bg-gradient-to-r from-gray-800 to-gray-900 px-6 py-2 text-sm font-bold uppercase tracking-wider text-lsGold shadow-lg transition-all duration-200 hover:border-[#8bff72]/50 hover:bg-gray-800 hover:text-[#8bff72] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.04] px-6 py-2 text-sm font-bold uppercase tracking-wider text-zinc-300 transition-all duration-200 hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loadState === "loading" ? (
                 <>
-                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-lsGold border-t-transparent" />
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
                   Loading…
                 </>
               ) : (
@@ -474,7 +470,7 @@ export function BeastCollectionStats() {
           </div>
         )}
         {!hasMore && leaderboard.length > 0 && (
-          <div className="mt-4 text-center text-sm text-gray-500">
+          <div className="mt-4 text-center text-sm text-zinc-500">
             You've reached the end of the leaderboard
           </div>
         )}

@@ -24,9 +24,9 @@ type RightPanelTab = "summit" | "metadata";
 const getAttributeStyle = (trait: string | undefined) => {
   if (!trait)
     return {
-      bg: "bg-gray-800/60",
-      border: "border-gray-700/50",
-      text: "text-gray-300",
+      bg: "bg-white/[0.06]",
+      border: "border-white/[0.08]",
+      text: "text-zinc-300",
     };
   const t = trait.toLowerCase();
 
@@ -80,15 +80,15 @@ const getAttributeStyle = (trait: string | undefined) => {
     };
   if (t === "shiny" || t === "animated" || t === "genesis")
     return {
-      bg: "bg-[#39ff14]/10",
-      border: "border-[#39ff14]/30",
-      text: "text-[#39ff14]",
+      bg: "bg-[#22c55e]/10",
+      border: "border-[#22c55e]/30",
+      text: "text-[#22c55e]",
     };
 
   return {
-    bg: "bg-gray-800/60",
-    border: "border-gray-700/50",
-    text: "text-gray-300",
+    bg: "bg-white/[0.06]",
+    border: "border-white/[0.08]",
+    text: "text-zinc-300",
   };
 };
 
@@ -143,7 +143,7 @@ export function BeastDetailContent({
 
   const imageClasses = "block h-full w-full object-contain";
   const fallbackBoxClasses =
-    "flex h-full w-full items-center justify-center bg-black/70 px-6 text-gray-600";
+    "flex h-full w-full items-center justify-center bg-surface/70 px-6 text-zinc-600";
 
   return (
     <div className="flex flex-col gap-4">
@@ -167,15 +167,15 @@ export function BeastDetailContent({
         {/* Right: Tabs + Content - Same dimensions as card */}
         <div className={`${cardWidth} flex flex-col gap-2 flex-shrink-0`}>
           {/* Tab Buttons - Compact */}
-          <div className="flex rounded-lg border border-gray-800 bg-black/60 p-0.5">
+          <div className="flex rounded-lg border border-white/[0.06] bg-surface/60 p-0.5">
             <button
               type="button"
               onClick={() => setRightPanelTab("metadata")}
               className={cn(
                 "flex-1 rounded-md px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all",
                 rightPanelTab === "metadata"
-                  ? "bg-lsGold/20 text-lsGold border border-lsGold/30"
-                  : "text-gray-500 hover:text-lsGold",
+                  ? "bg-gold/15 text-gold border border-gold/20"
+                  : "text-zinc-500 hover:text-gold",
               )}
             >
               Metadata
@@ -186,8 +186,8 @@ export function BeastDetailContent({
               className={cn(
                 "flex-1 rounded-md px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all",
                 rightPanelTab === "summit"
-                  ? "bg-[#39ff14]/20 text-[#39ff14] border border-[#39ff14]/30"
-                  : "text-gray-500 hover:text-[#39ff14]",
+                  ? "bg-accent/20 text-accent border border-accent/30"
+                  : "text-zinc-500 hover:text-accent",
               )}
             >
               Summit
@@ -195,7 +195,7 @@ export function BeastDetailContent({
           </div>
 
           {/* Panel Content - Height to match card minus tabs */}
-          <div className="h-[370px] sm:h-[410px] lg:h-[510px] rounded-xl border border-gray-800 bg-black/60 overflow-y-auto">
+          <div className="h-[370px] sm:h-[410px] lg:h-[510px] rounded-xl border border-white/[0.06] bg-surface/60 overflow-y-auto">
             {rightPanelTab === "summit" ? (
               /* Summit Stats Panel */
               <div className="min-h-full">
@@ -209,12 +209,12 @@ export function BeastDetailContent({
               /* Metadata Panel */
               <div className="h-full flex flex-col">
                 {/* Compact Header */}
-                <div className="flex-shrink-0 px-3 py-2 border-b border-gray-800/50 bg-black/30">
+                <div className="flex-shrink-0 px-3 py-2 border-b border-white/[0.06] bg-surface/30">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-lsGold uppercase tracking-wider">
+                    <span className="text-[10px] font-bold text-gold uppercase tracking-wider">
                       Attributes
                     </span>
-                    <span className="text-[9px] text-gray-500">
+                    <span className="text-[9px] text-zinc-500">
                       {attributes.length}
                     </span>
                   </div>
@@ -231,7 +231,7 @@ export function BeastDetailContent({
                             key={`${attr.trait_type}-${attr.value}-${idx}`}
                             className={`rounded border ${style.border} ${style.bg} px-2 py-1.5`}
                           >
-                            <p className="text-[8px] uppercase tracking-wide text-gray-500 font-medium">
+                            <p className="text-[8px] uppercase tracking-wide text-zinc-500 font-medium">
                               {attr.trait_type}
                             </p>
                             <p
@@ -248,7 +248,7 @@ export function BeastDetailContent({
                     </div>
                   ) : (
                     <div className="flex h-full items-center justify-center">
-                      <p className="text-[10px] text-gray-500">No metadata</p>
+                      <p className="text-[10px] text-zinc-500">No metadata</p>
                     </div>
                   )}
                 </div>
@@ -260,15 +260,15 @@ export function BeastDetailContent({
 
       {/* Footer: Owner + Actions - Only shown when not hidden */}
       {!hideFooter && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-gray-800/50">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-white/[0.06]">
           {/* Owned by */}
-          <div className="rounded-lg border border-gray-800 bg-black/40 px-4 py-2.5 text-sm text-gray-400">
+          <div className="rounded-lg border border-white/[0.06] bg-surface/40 px-4 py-2.5 text-sm text-zinc-400">
             {beast.owner ? (
               <span>
                 Owned by{" "}
                 <Link
                   to={`/collection/${encodeURIComponent(accountIdentifier)}`}
-                  className="text-lsGold font-medium hover:underline"
+                  className="text-gold font-medium hover:underline"
                 >
                   {ownerLabel}
                 </Link>

@@ -184,21 +184,21 @@ export default function SweepControl({
         <Zap className="w-4 h-4 text-purple-400" />
         <span className="text-sm font-medium text-white">Sweep Floor</span>
         {floorUsd !== null && (
-          <span className="text-xs text-gray-400">from ${floorUsd.toFixed(2)}</span>
+          <span className="text-xs text-zinc-400">from ${floorUsd.toFixed(2)}</span>
         )}
-        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+        <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
       </button>
 
       {/* Expanded dropdown panel - absolutely positioned */}
       {isExpanded && (
-        <div className="absolute right-0 top-full mt-2 z-50 min-w-[400px] rounded-lg border border-purple-500/30 bg-[#0b0b0f]/95 backdrop-blur-sm p-4 shadow-xl shadow-purple-900/20">
+        <div className="absolute right-0 top-full mt-2 z-50 min-w-[400px] rounded-lg border border-purple-500/30 bg-surface-overlay/95 backdrop-blur-sm p-4 shadow-xl shadow-purple-900/20">
           {/* Close button */}
           <button
             type="button"
             onClick={() => setIsExpanded(false)}
-            className="absolute top-2 right-2 p-1 rounded hover:bg-gray-800 transition-colors"
+            className="absolute top-2 right-2 p-1 rounded hover:bg-white/[0.06] transition-colors"
           >
-            <X className="w-4 h-4 text-gray-400" />
+            <X className="w-4 h-4 text-zinc-400" />
           </button>
 
           <div className="flex flex-col gap-4">
@@ -206,7 +206,7 @@ export default function SweepControl({
             <div className="flex items-center gap-2">
               <Zap className="w-4 h-4 text-purple-400" />
               <span className="text-sm font-semibold text-white">Sweep Floor</span>
-              <span className="text-xs text-gray-500">Select items to sweep</span>
+              <span className="text-xs text-zinc-500">Select items to sweep</span>
             </div>
 
             {/* Slider and Count */}
@@ -217,7 +217,7 @@ export default function SweepControl({
                 max={maxSweepable}
                 value={Math.min(sweepCount, maxSweepable)}
                 onChange={(e) => setSweepCount(Number(e.target.value))}
-                className="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                className="flex-1 h-2 bg-white/[0.08] rounded-lg appearance-none cursor-pointer accent-purple-500"
                 disabled={disabled || maxSweepable === 0}
               />
               <div className="flex items-center gap-1 flex-shrink-0">
@@ -232,20 +232,20 @@ export default function SweepControl({
                       setSweepCount(val);
                     }
                   }}
-                  className="w-14 px-2 py-1 text-center text-sm font-medium bg-gray-800 border border-gray-700 rounded text-white"
+                  className="w-14 px-2 py-1 text-center text-sm font-medium bg-white/[0.06] border border-white/[0.08] rounded text-white"
                   disabled={disabled}
                 />
-                <span className="text-xs text-gray-400">/ {maxSweepable}</span>
+                <span className="text-xs text-zinc-400">/ {maxSweepable}</span>
               </div>
             </div>
 
             {/* Total and Sweep Button */}
-            <div className="flex items-center justify-between pt-2 border-t border-gray-800">
+            <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
               <div className="flex flex-col">
-                <span className="text-lg font-bold text-lsGold">
+                <span className="text-lg font-bold text-gold">
                   ${totalUsd.toFixed(2)}
                 </span>
-                <span className="text-[10px] text-gray-500">
+                <span className="text-[10px] text-zinc-500">
                   incl. {CLIENT_FEE_BP / 100}% fee
                 </span>
               </div>
