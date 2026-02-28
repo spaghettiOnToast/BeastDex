@@ -849,6 +849,16 @@ export default function MarketplacePage() {
         isFloorPrice: false,
       },
       {
+        label: "Offers",
+        value: visibleOffersReceived.length.toLocaleString(),
+        currency: "",
+        icon: "💬",
+        color: "rgb(251, 146, 60)",
+        bgGradient: "bg-gradient-to-br from-orange-500/15 to-orange-500/5",
+        borderColor: "border-orange-400/30",
+        isFloorPrice: false,
+      },
+      {
         label: "Unique Sellers",
         value: uniqueSellers.toLocaleString(),
         currency: "",
@@ -859,7 +869,7 @@ export default function MarketplacePage() {
         isFloorPrice: false,
       },
     ],
-    [floorPriceParts, filtersHook.myActiveListings.length, totalListingsCount, uniqueSellers]
+    [floorPriceParts, filtersHook.myActiveListings.length, totalListingsCount, visibleOffersReceived.length, uniqueSellers]
   );
 
   /**
@@ -1090,7 +1100,7 @@ export default function MarketplacePage() {
     <AppLayout topBar={<TopBar />}>
       <div className="space-y-4">
           {/* Stats cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
           {heroStats.map((stat) => (
             <div
               key={stat.label}
