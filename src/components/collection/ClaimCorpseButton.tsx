@@ -109,7 +109,10 @@ export function ClaimCorpseButton({ ownerAddress }: ClaimCorpseButtonProps) {
         setAdventurers([]);
       }
     } catch (err) {
-      if (isUserRejection(err)) {
+      if (isAlreadyClaimedError(err)) {
+        toast.info("All corpses already claimed");
+        setAdventurers([]);
+      } else if (isUserRejection(err)) {
         toast.info("Claim cancelled");
       } else {
         console.error("[ClaimCorpse] Claim failed:", err);
@@ -156,4 +159,20 @@ export function ClaimCorpseButton({ ownerAddress }: ClaimCorpseButtonProps) {
       </span>
     </button>
   );
+}
+
+function isAlreadyClaimedError(error: unknown): boolean {
+  // Stringify the entire error to catch nested messages from controller
+  const text = stringifyError(error).toLowerCase();
+  return text.includes("claimed already") || text.includes("already claimed");
+}
+
+function stringifyError(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error instanceof Error) return error.message + (error.stack ?? "");
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
 }

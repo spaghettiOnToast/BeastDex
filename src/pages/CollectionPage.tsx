@@ -1169,41 +1169,62 @@ function CollectionPage() {
         </div>
 
         {/* Controls row */}
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <div className="flex items-center gap-2">
-            <SortDropdown value={sortOption} onChange={setSortOption} />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowDuplicatesOnly(!showDuplicatesOnly)}
-              className={`font-medium text-xs h-8 ${
-                showDuplicatesOnly
-                  ? "border-accent/30 bg-accent/10 text-accent"
-                  : "border-white/[0.06] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08]"
-              }`}
-            >
-              {showDuplicatesOnly ? "Dupes Only" : "Duplicates"}
-            </Button>
-            <div className="flex items-center border border-white/[0.06] rounded-lg bg-white/[0.04]">
+        <div className="mb-4 space-y-2">
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <SortDropdown value={sortOption} onChange={setSortOption} />
               <Button
-                variant={viewMode === "grid" ? "default" : "ghost"}
+                variant="outline"
                 size="sm"
-                onClick={() => setViewMode("grid")}
-                className="rounded-r-none border-0 h-8"
+                onClick={() => setShowDuplicatesOnly(!showDuplicatesOnly)}
+                className={`font-medium text-xs h-8 ${
+                  showDuplicatesOnly
+                    ? "border-accent/30 bg-accent/10 text-accent"
+                    : "border-white/[0.06] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08]"
+                }`}
               >
-                <Grid className="h-4 w-4" />
+                {showDuplicatesOnly ? "Dupes Only" : "Duplicates"}
               </Button>
-              <Button
-                variant={viewMode === "table" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode("table")}
-                className="rounded-l-none border-0 h-8"
+              <div className="flex items-center border border-white/[0.06] rounded-lg bg-white/[0.04]">
+                <Button
+                  variant={viewMode === "grid" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode("grid")}
+                  className="rounded-r-none border-0 h-8"
+                >
+                  <Grid className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant={viewMode === "table" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode("table")}
+                  className="rounded-l-none border-0 h-8"
+                >
+                  <Table className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="hidden sm:flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  apiCache.clearEndpoint("beast-query");
+                  apiCache.clearEndpoint("beast-by-id");
+                  void loadSummary();
+                }}
+                disabled={anyLoading || !resolvedAddress}
+                className="inline-flex items-center gap-2 rounded-lg border border-white/[0.06] px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
+                title="Force refresh collection data"
               >
-                <Table className="h-4 w-4" />
-              </Button>
+                {anyLoading ? (
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
+                ) : null}
+                <span>Refresh</span>
+              </button>
+              <ClaimCorpseButton ownerAddress={resolvedAddress} />
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex sm:hidden items-center gap-2">
             <button
               type="button"
               onClick={() => {
