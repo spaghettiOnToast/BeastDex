@@ -137,7 +137,18 @@ export function ClaimCorpseButton({ ownerAddress }: ClaimCorpseButtonProps) {
     );
   }
 
-  if (adventurers.length === 0) return null;
+  if (adventurers.length === 0) {
+    return (
+      <button
+        type="button"
+        disabled
+        className="inline-flex items-center gap-2 rounded-lg border border-white/[0.06] px-3 py-1.5 text-xs font-medium text-zinc-500 disabled:opacity-50 transition-colors"
+      >
+        <Skull className="h-3 w-3" />
+        <span>No CORPSE to claim</span>
+      </button>
+    );
+  }
 
   return (
     <button
