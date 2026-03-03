@@ -289,14 +289,14 @@ export default function MarketplacePage() {
   // Track if user beasts have been loaded (to avoid redundant loads)
   const userBeastsLoadedRef = useRef(false);
 
-  // Deferred loading: load user beasts when tab changes to "my" or "my-beasts"
+  // Load user beasts when connected (needed for offers count in hero card)
+  // and when switching to my/my-beasts tabs
   useEffect(() => {
-    const needsUserBeasts = filtersHook.activeTab === "my" || filtersHook.activeTab === "my-beasts";
-    if (needsUserBeasts && !userBeastsLoadedRef.current && address) {
+    if (!userBeastsLoadedRef.current && address) {
       userBeastsLoadedRef.current = true;
       dataHook.reloadUserBeasts();
     }
-  }, [filtersHook.activeTab, address, dataHook.reloadUserBeasts]);
+  }, [address, dataHook.reloadUserBeasts]);
 
   // Reset the loaded flag when address changes (user switches account)
   useEffect(() => {
