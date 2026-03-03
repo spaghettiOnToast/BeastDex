@@ -56,6 +56,7 @@ import { apiCache } from "../services/apiCache";
 import { fetchOwnerSummitRankFromApi, type OwnerSummitRank } from "../services/summitApi";
 import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
 import type { OverviewCard } from "../components/account/OverviewCards";
+import { ClaimCorpseButton } from "../components/collection/ClaimCorpseButton";
 
 const TABS = [
   { key: "all", label: "All" },
@@ -1202,22 +1203,25 @@ function CollectionPage() {
               </Button>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              apiCache.clearEndpoint("beast-query");
-              apiCache.clearEndpoint("beast-by-id");
-              void loadSummary();
-            }}
-            disabled={anyLoading || !resolvedAddress}
-            className="inline-flex items-center gap-2 rounded-lg border border-white/[0.06] px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
-            title="Force refresh collection data"
-          >
-            {anyLoading ? (
-              <span className="h-3 w-3 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
-            ) : null}
-            <span>Refresh</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                apiCache.clearEndpoint("beast-query");
+                apiCache.clearEndpoint("beast-by-id");
+                void loadSummary();
+              }}
+              disabled={anyLoading || !resolvedAddress}
+              className="inline-flex items-center gap-2 rounded-lg border border-white/[0.06] px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
+              title="Force refresh collection data"
+            >
+              {anyLoading ? (
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
+              ) : null}
+              <span>Refresh</span>
+            </button>
+            <ClaimCorpseButton ownerAddress={resolvedAddress} />
+          </div>
         </div>
 
         {catalogLoading ? (
