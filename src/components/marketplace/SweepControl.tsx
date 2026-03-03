@@ -191,7 +191,7 @@ export default function SweepControl({
 
       {/* Expanded dropdown panel - absolutely positioned */}
       {isExpanded && (
-        <div className="absolute right-0 top-full mt-2 z-50 min-w-[400px] rounded-lg border border-purple-500/30 bg-surface-overlay/95 backdrop-blur-sm p-4 shadow-xl shadow-purple-900/20">
+        <div className="absolute right-0 top-full mt-2 z-50 min-w-[400px] rounded-lg border border-purple-500/30 bg-[#18181b] p-4 shadow-xl shadow-purple-900/20">
           {/* Close button */}
           <button
             type="button"

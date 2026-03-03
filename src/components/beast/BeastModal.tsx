@@ -137,7 +137,7 @@ export const BeastModal = memo(function BeastModal({
 
   return (
     <Dialog open={!!beast} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-6xl p-0 gap-0 border-muted/50 bg-background/95 backdrop-blur-sm">
+      <DialogContent className="max-w-6xl p-0 gap-0 border-white/[0.06] bg-[#111113]">
         <DialogHeader className="px-4 py-4 border-b border-border/50 bg-muted/30">
           {/* Row 1: Title + Expiry + Duplicate Navigation */}
           <div className="flex items-center justify-between pr-8">

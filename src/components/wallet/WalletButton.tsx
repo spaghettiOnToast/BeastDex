@@ -134,7 +134,13 @@ export function WalletButton() {
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-48 border-white/[0.06] bg-surface-overlay text-xs text-zinc-300"
+        className="w-48 text-xs text-zinc-300"
+        style={{
+          background: "#18181b",
+          border: "1px solid rgba(255, 255, 255, 0.06)",
+          borderRadius: "0.5rem",
+          boxShadow: "0 4px 24px rgba(0, 0, 0, 0.5)",
+        }}
       >
         <DropdownMenuItem
           onClick={() => {

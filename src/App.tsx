@@ -58,10 +58,9 @@ function App() {
               position="top-right"
               expand={false}
               toastOptions={{
-                className: "!bg-surface-overlay/95 !backdrop-blur-xl !border !border-white/[0.06] !text-white !shadow-xl",
+                className: "!bg-[#18181b] !border !border-white/[0.06] !text-white !shadow-xl",
                 style: {
-                  background: "rgba(24, 24, 27, 0.95)",
-                  backdropFilter: "blur(16px)",
+                  background: "#18181b",
                   border: "1px solid rgba(255, 255, 255, 0.06)",
                 },
                 classNames: {

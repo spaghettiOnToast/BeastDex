@@ -288,7 +288,7 @@ function ListingCard({
                       buyDisabled
                         ? "bg-white/[0.06] text-zinc-400 cursor-not-allowed border-white/[0.10]"
                         : inCart
-                        ? "bg-accent/15 text-accent border-accent/30 font-semibold"
+                        ? "bg-green-500 text-black border-green-500 hover:bg-green-600 font-semibold"
                         : "border-gold text-gold hover:bg-gold/10 hover:border-gold font-semibold",
                     ].join(" ")}
                     variant="outline"

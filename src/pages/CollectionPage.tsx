@@ -1051,7 +1051,7 @@ function CollectionPage() {
       <div className="flex flex-col gap-2">
         <div className="relative pt-3 sm:pt-4">
           {summitRank?.rank != null && (
-            <div className="absolute top-3 right-0 text-right">
+            <div className="absolute top-3 left-0 text-left">
               <p className="text-[10px] uppercase tracking-wider text-zinc-500">Summit Rank</p>
               <p className="text-sm font-bold text-[#fbcb4a]">
                 #{summitRank.rank}

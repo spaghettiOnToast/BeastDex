@@ -154,7 +154,7 @@ export function SortDropdown({ value, onChange, excludeOptions }: SortDropdownPr
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="min-w-[180px] border border-white/[0.06] bg-surface-overlay/95 text-zinc-200 backdrop-blur-xl"
+        className="min-w-[180px] border border-white/[0.06] bg-[#18181b] text-zinc-200"
       >
         {filteredGroups.map((group, groupIndex) => (
           <DropdownMenuGroup key={group.groupLabel ?? "default"}>
