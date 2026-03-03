@@ -46,6 +46,7 @@ const PurchaseCartDialog = lazy(() => import("../components/marketplace/Purchase
 const MakeOfferDialog = lazy(() => import("../components/marketplace/MakeOfferDialog"));
 const OffersDialog = lazy(() => import("../components/marketplace/OffersDialog"));
 const BeastModal = lazy(() => import("../components/beast/BeastModal"));
+const SendBeastsDialog = lazy(() => import("../components/beast/SendBeastsDialog"));
 import {
   Dialog,
   DialogContent,
@@ -139,6 +140,7 @@ export default function MarketplacePage() {
   const [exploreSubTab, setExploreSubTab] = useState<ExploreSubTab>("browse");
   const [myActivitySubTab, setMyActivitySubTab] = useState<MyActivitySubTab>("listings");
   const [listDialogOpen, setListDialogOpen] = useState(false);
+  const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [singleBeastToList, setSingleBeastToList] = useState<Beast | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingListing, setEditingListing] = useState<Listing | null>(null);
@@ -287,14 +289,14 @@ export default function MarketplacePage() {
   // Track if user beasts have been loaded (to avoid redundant loads)
   const userBeastsLoadedRef = useRef(false);
 
-  // Deferred loading: load user beasts when tab changes to "my" or "my-beasts"
+  // Load user beasts when connected (needed for offers count in hero card)
+  // and when switching to my/my-beasts tabs
   useEffect(() => {
-    const needsUserBeasts = filtersHook.activeTab === "my" || filtersHook.activeTab === "my-beasts";
-    if (needsUserBeasts && !userBeastsLoadedRef.current && address) {
+    if (!userBeastsLoadedRef.current && address) {
       userBeastsLoadedRef.current = true;
       dataHook.reloadUserBeasts();
     }
-  }, [filtersHook.activeTab, address, dataHook.reloadUserBeasts]);
+  }, [address, dataHook.reloadUserBeasts]);
 
   // Reset the loaded flag when address changes (user switches account)
   useEffect(() => {
@@ -847,6 +849,16 @@ export default function MarketplacePage() {
         isFloorPrice: false,
       },
       {
+        label: "Offers",
+        value: visibleOffersReceived.length.toLocaleString(),
+        currency: "",
+        icon: "💬",
+        color: "rgb(251, 146, 60)",
+        bgGradient: "bg-gradient-to-br from-orange-500/15 to-orange-500/5",
+        borderColor: "border-orange-400/30",
+        isFloorPrice: false,
+      },
+      {
         label: "Unique Sellers",
         value: uniqueSellers.toLocaleString(),
         currency: "",
@@ -857,7 +869,7 @@ export default function MarketplacePage() {
         isFloorPrice: false,
       },
     ],
-    [floorPriceParts, filtersHook.myActiveListings.length, totalListingsCount, uniqueSellers]
+    [floorPriceParts, filtersHook.myActiveListings.length, totalListingsCount, visibleOffersReceived.length, uniqueSellers]
   );
 
   /**
@@ -1018,7 +1030,7 @@ export default function MarketplacePage() {
               setEditingListing(listing);
               setEditDialogOpen(true);
             }}
-            className="w-full sm:w-auto font-semibold tracking-wide cursor-pointer bg-lsGold/20 text-lsGold border border-lsGold hover:bg-lsGold/30"
+            className="w-full sm:w-auto font-semibold tracking-wide cursor-pointer bg-gold/20 text-gold border border-gold hover:bg-gold/30"
           >
             Edit Listing
           </Button>
@@ -1051,7 +1063,7 @@ export default function MarketplacePage() {
             setPurchaseConfirmOpen(true);
           }}
           disabled={!listing.active}
-          className="w-full sm:w-auto font-semibold tracking-wide bg-lsGold/20 text-lsGold border border-lsGold hover:bg-lsGold/30 cursor-pointer"
+          className="w-full sm:w-auto font-semibold tracking-wide bg-gold/20 text-gold border border-gold hover:bg-gold/30 cursor-pointer"
         >
           Buy Now - {formatPriceLabel(listing)}
         </Button>
@@ -1087,59 +1099,33 @@ export default function MarketplacePage() {
   return (
     <AppLayout topBar={<TopBar />}>
       <div className="space-y-4">
-          {/* Header Section with Stats */}
-        <section className="relative overflow-hidden rounded-xl border border-gray-800/50 bg-gradient-to-br from-[#0b0b0f] via-[#0f0f13] to-[#0b0b0f] p-3 sm:p-6 shadow-2xl">
-          <div className="absolute inset-0 bg-gradient-to-r from-lsGold/5 via-transparent to-[#8bff72]/5 opacity-50" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(208,201,141,0.1),transparent_50%)]" />
-
-          <div className="relative flex flex-col gap-3 sm:gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="max-w-2xl space-y-1 sm:space-y-2">
-              <h1 className="bg-gradient-to-r from-[#f9e08a] via-[#fbdc5e] to-[#39ff14] bg-clip-text text-xl sm:text-3xl font-bold uppercase tracking-wider text-transparent drop-shadow-[0_0_15px_rgba(251,234,160,0.3)]">
-                Beast Marketplace
-              </h1>
-              <p className="text-xs sm:text-sm text-gray-300 leading-relaxed hidden xs:block">
-                Discover, buy, sell, and make offers on unique NFTs from Loot Survivor.
-              </p>
-            </div>
-            <div className="grid w-full grid-cols-2 gap-2 sm:gap-3 lg:w-auto lg:grid-cols-2 xl:grid-cols-4">
-              {heroStats.map((stat) => (
-                <div
-                  key={stat.label}
-                  className={`${stat.bgGradient} ${stat.borderColor} backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-md min-h-[55px] sm:min-h-[75px] flex flex-col relative overflow-hidden rounded-lg border p-1.5 sm:p-2.5 min-w-0 sm:min-w-[110px]`}
-                >
-                  <div className="flex flex-col items-center text-center gap-0 sm:gap-0.5 mb-0.5 sm:mb-1 relative z-10">
-                    <span className="text-[10px] sm:text-xs flex-shrink-0">{stat.icon}</span>
-                    <p className="text-[8px] sm:text-[9px] uppercase tracking-wider text-muted-foreground font-medium truncate">
-                      {stat.label}
-                    </p>
-                  </div>
-                  <div className="flex-1 flex flex-col justify-center text-center relative z-10">
-                    {stat.isFloorPrice ? (
-                      <>
-                        <p
-                          className="text-sm sm:text-base font-bold leading-none whitespace-nowrap overflow-hidden text-ellipsis px-0.5 sm:px-1"
-                          style={{ color: stat.color }}
-                        >
-                          {stat.value}
-                        </p>
-                        {stat.currency && (
-                          <p className="text-[9px] sm:text-[10px] text-gray-400 mt-0.5">{stat.currency}</p>
-                        )}
-                      </>
-                    ) : (
-                      <p
-                        className="text-sm sm:text-base font-bold leading-none whitespace-nowrap overflow-hidden text-ellipsis px-0.5 sm:px-1"
-                        style={{ color: stat.color }}
-                      >
-                        {stat.value}
-                      </p>
-                    )}
-                  </div>
+          {/* Stats cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+          {heroStats.map((stat) => (
+            <div
+              key={stat.label}
+              className={`relative overflow-hidden rounded-xl border ${stat.borderColor} ${stat.bgGradient} p-3 sm:p-4`}
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-black/10 via-transparent to-black/40" />
+              <div className="relative z-10">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span className="text-xs">{stat.icon}</span>
+                  <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                    {stat.label}
+                  </p>
                 </div>
-              ))}
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xl sm:text-2xl font-bold leading-none" style={{ color: stat.color }}>
+                    {stat.value}
+                  </span>
+                  {stat.isFloorPrice && stat.currency && (
+                    <span className="text-[10px] text-zinc-400">{stat.currency}</span>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        </section>
+          ))}
+        </div>
 
         {/* Loading indicators */}
         {(dataHook.ordersLoading || dataHook.ordersFetching) && (
@@ -1206,7 +1192,7 @@ export default function MarketplacePage() {
             {/* Sub-tabs and Sweep Control on same row */}
             <div className="flex items-center justify-between gap-4">
               <div className="overflow-x-auto scrollbar-hide">
-                <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-1 min-w-max">
+                <div className="inline-flex rounded-lg border border-white/[0.06] bg-[#0f0f13]/70 p-1 min-w-max">
                 <button
                   type="button"
                   onClick={() => {
@@ -1218,8 +1204,8 @@ export default function MarketplacePage() {
                   className={cn(
                     "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
                     exploreSubTab === "browse"
-                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
-                      : "text-gray-400 hover:text-lsGold"
+                      ? "bg-gradient-to-r from-gold/25 via-gold/10 to-transparent text-white"
+                      : "text-zinc-400 hover:text-gold"
                   )}
                 >
                   Listings
@@ -1235,8 +1221,8 @@ export default function MarketplacePage() {
                   className={cn(
                     "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
                     exploreSubTab === "recent-listed"
-                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
-                      : "text-gray-400 hover:text-lsGold"
+                      ? "bg-gradient-to-r from-gold/25 via-gold/10 to-transparent text-white"
+                      : "text-zinc-400 hover:text-gold"
                   )}
                 >
                   Recent
@@ -1251,8 +1237,8 @@ export default function MarketplacePage() {
                   className={cn(
                     "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
                     exploreSubTab === "recent-sold"
-                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
-                      : "text-gray-400 hover:text-lsGold"
+                      ? "bg-gradient-to-r from-gold/25 via-gold/10 to-transparent text-white"
+                      : "text-zinc-400 hover:text-gold"
                   )}
                 >
                   Sold
@@ -1267,8 +1253,8 @@ export default function MarketplacePage() {
                   className={cn(
                     "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
                     exploreSubTab === "activity"
-                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
-                      : "text-gray-400 hover:text-lsGold"
+                      ? "bg-gradient-to-r from-gold/25 via-gold/10 to-transparent text-white"
+                      : "text-zinc-400 hover:text-gold"
                   )}
                 >
                   Activity
@@ -1306,32 +1292,32 @@ export default function MarketplacePage() {
                   <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                     {/* Skeleton cards while loading */}
                     {Array.from({ length: 24 }).map((_, i) => (
-                      <div key={i} className="animate-pulse rounded-lg border border-gray-800 bg-gray-900/50 overflow-hidden">
-                        <div className="aspect-square bg-gray-800/50" />
+                      <div key={i} className="animate-pulse rounded-lg border border-white/[0.06] bg-surface-raised/50 overflow-hidden">
+                        <div className="aspect-square bg-white/[0.06]/50" />
                         <div className="p-2 space-y-2">
-                          <div className="h-3 bg-gray-800 rounded w-2/3" />
-                          <div className="h-6 bg-gray-800 rounded" />
+                          <div className="h-3 bg-white/[0.06] rounded w-2/3" />
+                          <div className="h-6 bg-white/[0.06] rounded" />
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : filtersHook.sortedListings.length === 0 ? (
-                  <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
+                  <p className="rounded-lg border border-white/[0.06] bg-white/[0.04] px-4 py-8 text-center text-xs text-zinc-400">
                     No active listings match your filters yet.
                   </p>
                 ) : (
                   <div className="space-y-3">
                     {/* View Mode Toggle */}
                     <div className="flex justify-end">
-                      <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-0.5">
+                      <div className="inline-flex rounded-lg border border-white/[0.06] bg-[#0f0f13]/70 p-0.5">
                         <button
                           type="button"
                           onClick={() => setListingsViewMode("cards")}
                           className={cn(
                             "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition",
                             listingsViewMode === "cards"
-                              ? "bg-lsGold/20 text-lsGold"
-                              : "text-gray-400 hover:text-lsGold"
+                              ? "bg-gold/20 text-gold"
+                              : "text-zinc-400 hover:text-gold"
                           )}
                         >
                           <LayoutGrid className="h-3.5 w-3.5" />
@@ -1343,8 +1329,8 @@ export default function MarketplacePage() {
                           className={cn(
                             "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition",
                             listingsViewMode === "table"
-                              ? "bg-lsGold/20 text-lsGold"
-                              : "text-gray-400 hover:text-lsGold"
+                              ? "bg-gold/20 text-gold"
+                              : "text-zinc-400 hover:text-gold"
                           )}
                         >
                           <List className="h-3.5 w-3.5" />
@@ -1407,14 +1393,14 @@ export default function MarketplacePage() {
                     ) : (
                       /* Table View */
                       <>
-                        <div className="rounded-lg border border-gray-800 bg-black/30 overflow-hidden overflow-x-auto">
+                        <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] overflow-hidden overflow-x-auto">
                           <table className="w-full text-xs min-w-[600px]">
-                            <thead className="bg-gray-900/50 border-b border-gray-800">
+                            <thead className="bg-surface-raised/50 border-b border-white/[0.06]">
                               <tr>
-                                <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Beast</th>
-                                <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Price</th>
-                                <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Seller</th>
-                                <th className="px-3 py-2.5 text-right font-semibold text-gray-300">Actions</th>
+                                <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">Beast</th>
+                                <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">Price</th>
+                                <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">Seller</th>
+                                <th className="px-3 py-2.5 text-right font-semibold text-zinc-300">Actions</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1424,7 +1410,7 @@ export default function MarketplacePage() {
                                 return (
                                   <tr
                                     key={`listings-table-${listing.listingId}`}
-                                    className="border-b border-gray-800/50 hover:bg-gray-900/30 transition-colors"
+                                    className="border-b border-white/[0.06]/50 hover:bg-surface-raised/30 transition-colors"
                                   >
                                     <td className="px-3 py-2.5">
                                       <button
@@ -1432,7 +1418,7 @@ export default function MarketplacePage() {
                                         onClick={() => handleCardClick(listing)}
                                         className="flex items-center gap-2 hover:opacity-80 transition-opacity"
                                       >
-                                        <div className="w-8 h-8 rounded overflow-hidden bg-gray-800 flex-shrink-0">
+                                        <div className="w-8 h-8 rounded overflow-hidden bg-white/[0.06] flex-shrink-0">
                                           {listing.beast?.image ? (
                                             <img
                                               src={listing.beast.image}
@@ -1440,7 +1426,7 @@ export default function MarketplacePage() {
                                               className="w-full h-full object-contain"
                                             />
                                           ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-gray-600 text-[8px]">
+                                            <div className="w-full h-full flex items-center justify-center text-zinc-600 text-[8px]">
                                               ?
                                             </div>
                                           )}
@@ -1452,13 +1438,13 @@ export default function MarketplacePage() {
                                     </td>
                                     <td className="px-3 py-2.5">
                                       <div className="flex flex-col">
-                                        <span className="text-lsGold font-semibold">{formatPriceLabel(listing)}</span>
+                                        <span className="text-gold font-semibold">{formatPriceLabel(listing)}</span>
                                         {usdPrice && (
-                                          <span className="text-gray-500 text-[10px]">${usdPrice}</span>
+                                          <span className="text-zinc-500 text-[10px]">${usdPrice}</span>
                                         )}
                                       </div>
                                     </td>
-                                    <td className="px-3 py-2.5 text-gray-400">
+                                    <td className="px-3 py-2.5 text-zinc-400">
                                       {getUsername(listing.seller) ||
                                         `${listing.seller?.slice(0, 6)}...${listing.seller?.slice(-4)}`}
                                     </td>
@@ -1493,7 +1479,7 @@ export default function MarketplacePage() {
                                             <Button
                                               variant="outline"
                                               size="sm"
-                                              className="h-7 px-2.5 text-[10px] font-semibold bg-lsGold/10 text-lsGold border-lsGold/50 hover:bg-lsGold/20"
+                                              className="h-7 px-2.5 text-[10px] font-semibold bg-gold/10 text-gold border-gold/50 hover:bg-gold/20"
                                               onClick={() => requireToS(() => {
                                                 setPurchasingListing(listing);
                                                 setPurchaseConfirmOpen(true);
@@ -1547,22 +1533,22 @@ export default function MarketplacePage() {
             ) : exploreSubTab === "recent-listed" ? (
               <>
                 {filtersHook.namedRecentListings.length === 0 ? (
-                  <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
+                  <p className="rounded-lg border border-white/[0.06] bg-white/[0.04] px-4 py-8 text-center text-xs text-zinc-400">
                     No recent listings available.
                   </p>
                 ) : (
                   <div className="space-y-3">
                     {/* View Mode Toggle */}
                     <div className="flex justify-end">
-                      <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-0.5">
+                      <div className="inline-flex rounded-lg border border-white/[0.06] bg-[#0f0f13]/70 p-0.5">
                         <button
                           type="button"
                           onClick={() => setRecentViewMode("cards")}
                           className={cn(
                             "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition",
                             recentViewMode === "cards"
-                              ? "bg-lsGold/20 text-lsGold"
-                              : "text-gray-400 hover:text-lsGold"
+                              ? "bg-gold/20 text-gold"
+                              : "text-zinc-400 hover:text-gold"
                           )}
                         >
                           <LayoutGrid className="h-3.5 w-3.5" />
@@ -1574,8 +1560,8 @@ export default function MarketplacePage() {
                           className={cn(
                             "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition",
                             recentViewMode === "table"
-                              ? "bg-lsGold/20 text-lsGold"
-                              : "text-gray-400 hover:text-lsGold"
+                              ? "bg-gold/20 text-gold"
+                              : "text-zinc-400 hover:text-gold"
                           )}
                         >
                           <List className="h-3.5 w-3.5" />
@@ -1628,15 +1614,15 @@ export default function MarketplacePage() {
                       </div>
                     ) : (
                       /* Table View */
-                      <div className="rounded-lg border border-gray-800 bg-black/30 overflow-hidden overflow-x-auto">
+                      <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] overflow-hidden overflow-x-auto">
                         <table className="w-full text-xs min-w-[600px]">
-                          <thead className="bg-gray-900/50 border-b border-gray-800">
+                          <thead className="bg-surface-raised/50 border-b border-white/[0.06]">
                             <tr>
-                              <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Listed</th>
-                              <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Beast</th>
-                              <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Price</th>
-                              <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Seller</th>
-                              <th className="px-3 py-2.5 text-right font-semibold text-gray-300">Actions</th>
+                              <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">Listed</th>
+                              <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">Beast</th>
+                              <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">Price</th>
+                              <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">Seller</th>
+                              <th className="px-3 py-2.5 text-right font-semibold text-zinc-300">Actions</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1646,9 +1632,9 @@ export default function MarketplacePage() {
                               return (
                                 <tr
                                   key={`recent-table-${listing.listingId}`}
-                                  className="border-b border-gray-800/50 hover:bg-gray-900/30 transition-colors"
+                                  className="border-b border-white/[0.06]/50 hover:bg-surface-raised/30 transition-colors"
                                 >
-                                  <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap">
+                                  <td className="px-3 py-2.5 text-zinc-400 whitespace-nowrap">
                                     {listing.createdAt ? formatRelativeTime(listing.createdAt) : "—"}
                                   </td>
                                   <td className="px-3 py-2.5">
@@ -1657,7 +1643,7 @@ export default function MarketplacePage() {
                                       onClick={() => handleCardClick(listing)}
                                       className="flex items-center gap-2 hover:opacity-80 transition-opacity"
                                     >
-                                      <div className="w-8 h-8 rounded overflow-hidden bg-gray-800 flex-shrink-0">
+                                      <div className="w-8 h-8 rounded overflow-hidden bg-white/[0.06] flex-shrink-0">
                                         {listing.beast?.image ? (
                                           <img
                                             src={listing.beast.image}
@@ -1665,7 +1651,7 @@ export default function MarketplacePage() {
                                             className="w-full h-full object-contain"
                                           />
                                         ) : (
-                                          <div className="w-full h-full flex items-center justify-center text-gray-600 text-[8px]">
+                                          <div className="w-full h-full flex items-center justify-center text-zinc-600 text-[8px]">
                                             ?
                                           </div>
                                         )}
@@ -1677,17 +1663,17 @@ export default function MarketplacePage() {
                                   </td>
                                   <td className="px-3 py-2.5">
                                     <div className="flex flex-col">
-                                      <span className="text-lsGold font-semibold">
+                                      <span className="text-gold font-semibold">
                                         {formatPriceLabel(listing)}
                                       </span>
                                       {usdPrice && (
-                                        <span className="text-gray-500 text-[10px]">
+                                        <span className="text-zinc-500 text-[10px]">
                                           ${usdPrice}
                                         </span>
                                       )}
                                     </div>
                                   </td>
-                                  <td className="px-3 py-2.5 text-gray-400">
+                                  <td className="px-3 py-2.5 text-zinc-400">
                                     {getUsername(listing.seller) ||
                                       `${listing.seller?.slice(0, 6)}...${listing.seller?.slice(-4)}`}
                                   </td>
@@ -1722,7 +1708,7 @@ export default function MarketplacePage() {
                                           <Button
                                             variant="outline"
                                             size="sm"
-                                            className="h-7 px-2.5 text-[10px] font-semibold bg-lsGold/10 text-lsGold border-lsGold/50 hover:bg-lsGold/20"
+                                            className="h-7 px-2.5 text-[10px] font-semibold bg-gold/10 text-gold border-gold/50 hover:bg-gold/20"
                                             onClick={() => {
                                               setPurchasingListing(listing);
                                               setPurchaseConfirmOpen(true);
@@ -1760,7 +1746,7 @@ export default function MarketplacePage() {
             ) : exploreSubTab === "recent-sold" ? (
               <>
                 {namedRecentSales.length === 0 ? (
-                  <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
+                  <p className="rounded-lg border border-white/[0.06] bg-white/[0.04] px-4 py-8 text-center text-xs text-zinc-400">
                     No recent sales available.
                   </p>
                 ) : (
@@ -1788,10 +1774,10 @@ export default function MarketplacePage() {
                       return (
                         <div
                           key={`sale-${idx}`}
-                          className="rounded-lg border border-gray-800 bg-gradient-to-r from-black/40 to-gray-900/20 p-3 flex items-center gap-4 hover:border-gray-700 transition-colors"
+                          className="rounded-lg border border-white/[0.06] bg-gradient-to-r from-black/40 to-gray-900/20 p-3 flex items-center gap-4 hover:border-white/[0.08] transition-colors"
                         >
                           {/* Beast Image */}
-                          <div className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gradient-to-br from-gray-900/50 to-black/50 border border-gray-800">
+                          <div className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gradient-to-br from-gray-900/50 to-black/50 border border-white/[0.06]">
                             {beast?.image ? (
                               <img
                                 src={beast.image}
@@ -1799,7 +1785,7 @@ export default function MarketplacePage() {
                                 className="w-full h-full object-contain"
                               />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center text-gray-600 text-xs">
+                              <div className="w-full h-full flex items-center justify-center text-zinc-600 text-xs">
                                 No img
                               </div>
                             )}
@@ -1808,23 +1794,23 @@ export default function MarketplacePage() {
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-white truncate">{beast?.name || `Beast #${tokenId}`}</p>
                             <div className="flex flex-col">
-                              <span className="text-sm text-lsGold font-medium">
+                              <span className="text-sm text-gold font-medium">
                                 {formatPrice(price, symbol)}
                               </span>
                               {usdPrice && (
-                                <span className="text-xs text-gray-500">${usdPrice}</span>
+                                <span className="text-xs text-zinc-500">${usdPrice}</span>
                               )}
                             </div>
-                            <p className="text-xs text-gray-500 truncate">
+                            <p className="text-xs text-zinc-500 truncate">
                               {getUsername(from) || `${from.slice(0, 6)}...${from.slice(-4)}`} → {getUsername(to) || `${to.slice(0, 6)}...${to.slice(-4)}`}
                             </p>
                           </div>
                           {/* Time & Date */}
                           <div className="flex-shrink-0 text-right">
-                            <p className="text-xs text-gray-400">
+                            <p className="text-xs text-zinc-400">
                               {formatRelativeTime(time)}
                             </p>
-                            <p className="text-[10px] text-gray-600">
+                            <p className="text-[10px] text-zinc-600">
                               {new Date(time * 1000).toLocaleDateString()}
                             </p>
                           </div>
@@ -1855,15 +1841,15 @@ export default function MarketplacePage() {
               <div className="space-y-3">
                 {/* Activity Type Filters */}
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-gray-400 mr-1">Filter:</span>
+                  <span className="text-xs text-zinc-400 mr-1">Filter:</span>
                   <button
                     type="button"
                     onClick={() => setActivityTypeFilter(null)}
                     className={cn(
                       "px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer",
                       activityTypeFilter === null
-                        ? "bg-lsGold/20 text-lsGold border border-lsGold/50"
-                        : "bg-gray-800/50 text-gray-400 border border-gray-700 hover:border-gray-600 hover:text-gray-300"
+                        ? "bg-gold/20 text-gold border border-gold/50"
+                        : "bg-white/[0.06]/50 text-zinc-400 border border-white/[0.08] hover:border-white/[0.10] hover:text-zinc-300"
                     )}
                   >
                     All
@@ -1891,16 +1877,16 @@ export default function MarketplacePage() {
                     Sold
                   </button>
                 </div>
-                <div className="rounded-lg border border-gray-800 bg-black/30 overflow-hidden overflow-x-auto">
+                <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] overflow-hidden overflow-x-auto">
                 <table className="w-full text-xs min-w-[700px]">
-                  <thead className="bg-gray-900/50 border-b border-gray-800">
+                  <thead className="bg-surface-raised/50 border-b border-white/[0.06]">
                     <tr>
-                      <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Type</th>
-                      <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Time</th>
-                      <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Beast</th>
-                      <th className="px-3 py-2.5 text-left font-semibold text-gray-300">Price</th>
-                      <th className="px-3 py-2.5 text-left font-semibold text-gray-300">From / Seller</th>
-                      <th className="px-3 py-2.5 text-right font-semibold text-gray-300">Actions</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">Type</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">Time</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">Beast</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">Price</th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">From / Seller</th>
+                      <th className="px-3 py-2.5 text-right font-semibold text-zinc-300">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1989,7 +1975,7 @@ export default function MarketplacePage() {
                       if (topActivities.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                            <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">
                               {activityTypeFilter
                                 ? `No ${activityTypeFilter === "listing" ? "listings" : "sales"} found.`
                                 : "No recent activity available."}
@@ -2001,7 +1987,7 @@ export default function MarketplacePage() {
                       return topActivities.map((activity, idx) => (
                         <tr
                           key={`activity-${activity.type}-${activity.tokenId}-${idx}`}
-                          className="border-b border-gray-800/50 hover:bg-gray-900/30 transition-colors"
+                          className="border-b border-white/[0.06]/50 hover:bg-surface-raised/30 transition-colors"
                         >
                           <td className="px-3 py-2.5 whitespace-nowrap">
                             <span
@@ -2015,7 +2001,7 @@ export default function MarketplacePage() {
                               {activity.type === "listing" ? "Listed" : "Sold"}
                             </span>
                           </td>
-                          <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap">
+                          <td className="px-3 py-2.5 text-zinc-400 whitespace-nowrap">
                             {activity.timestamp ? formatRelativeTime(activity.timestamp) : "—"}
                           </td>
                           <td className="px-3 py-2.5">
@@ -2031,7 +2017,7 @@ export default function MarketplacePage() {
                               className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
                               disabled={!activity.listing && !activity.beast}
                             >
-                              <div className="w-8 h-8 rounded overflow-hidden bg-gray-800 flex-shrink-0">
+                              <div className="w-8 h-8 rounded overflow-hidden bg-white/[0.06] flex-shrink-0">
                                 {activity.beast?.image ? (
                                   <img
                                     src={activity.beast.image}
@@ -2039,7 +2025,7 @@ export default function MarketplacePage() {
                                     className="w-full h-full object-contain"
                                   />
                                 ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-gray-600 text-[8px]">
+                                  <div className="w-full h-full flex items-center justify-center text-zinc-600 text-[8px]">
                                     ?
                                   </div>
                                 )}
@@ -2051,20 +2037,20 @@ export default function MarketplacePage() {
                           </td>
                           <td className="px-3 py-2.5">
                             <div className="flex flex-col">
-                              <span className="text-lsGold font-semibold">{activity.price}</span>
+                              <span className="text-gold font-semibold">{activity.price}</span>
                               {activity.usdPrice && (
-                                <span className="text-gray-500 text-[10px]">${activity.usdPrice}</span>
+                                <span className="text-zinc-500 text-[10px]">${activity.usdPrice}</span>
                               )}
                             </div>
                           </td>
-                          <td className="px-3 py-2.5 text-gray-400">
+                          <td className="px-3 py-2.5 text-zinc-400">
                             <div className="flex flex-col">
                               <span>
                                 {getUsername(activity.from) ||
                                   `${activity.from?.slice(0, 6)}...${activity.from?.slice(-4)}`}
                               </span>
                               {activity.to && (
-                                <span className="text-[10px] text-gray-500">
+                                <span className="text-[10px] text-zinc-500">
                                   → {getUsername(activity.to) ||
                                     `${activity.to?.slice(0, 6)}...${activity.to?.slice(-4)}`}
                                 </span>
@@ -2103,7 +2089,7 @@ export default function MarketplacePage() {
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      className="h-7 px-2.5 text-[10px] font-semibold bg-lsGold/10 text-lsGold border-lsGold/50 hover:bg-lsGold/20"
+                                      className="h-7 px-2.5 text-[10px] font-semibold bg-gold/10 text-gold border-gold/50 hover:bg-gold/20"
                                       onClick={() => {
                                         setPurchasingListing(activity.listing!);
                                         setPurchaseConfirmOpen(true);
@@ -2127,7 +2113,7 @@ export default function MarketplacePage() {
                                   </>
                                 )
                               ) : (
-                                <span className="text-gray-500 text-[10px]">—</span>
+                                <span className="text-zinc-500 text-[10px]">—</span>
                               )}
                             </div>
                           </td>
@@ -2173,11 +2159,11 @@ export default function MarketplacePage() {
               // Show skeleton cards while initially loading
               <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                 {Array.from({ length: 24 }).map((_, i) => (
-                  <div key={i} className="animate-pulse rounded-lg border border-gray-800 bg-gray-900/50 overflow-hidden">
-                    <div className="aspect-square bg-gray-800/50" />
+                  <div key={i} className="animate-pulse rounded-lg border border-white/[0.06] bg-surface-raised/50 overflow-hidden">
+                    <div className="aspect-square bg-white/[0.06]/50" />
                     <div className="p-2 space-y-2">
-                      <div className="h-3 bg-gray-800 rounded w-2/3" />
-                      <div className="h-6 bg-gray-800 rounded" />
+                      <div className="h-3 bg-white/[0.06] rounded w-2/3" />
+                      <div className="h-6 bg-white/[0.06] rounded" />
                     </div>
                   </div>
                 ))}
@@ -2187,7 +2173,7 @@ export default function MarketplacePage() {
                 <p className="text-sm text-yellow-200">{dataHook.userBeastsError}</p>
               </div>
             ) : filtersHook.sortedUserBeasts.length === 0 ? (
-              <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
+              <p className="rounded-lg border border-white/[0.06] bg-white/[0.04] px-4 py-8 text-center text-xs text-zinc-400">
                 You don't own any beasts yet.
               </p>
             ) : (
@@ -2198,20 +2184,27 @@ export default function MarketplacePage() {
                       type="checkbox"
                       checked={filtersHook.showDuplicatesOnly}
                       onChange={(e) => filtersHook.setShowDuplicatesOnly(e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-lsGold focus:ring-lsGold focus:ring-offset-gray-900"
+                      className="w-4 h-4 rounded border-white/[0.08] bg-white/[0.06] text-gold focus:ring-gold focus:ring-offset-surface"
                     />
-                    <span className="text-xs font-medium text-gray-400 group-hover:text-lsGold transition-colors">
+                    <span className="text-xs font-medium text-zinc-400 group-hover:text-gold transition-colors">
                       Show Duplicates Only
                     </span>
                   </label>
                   {globalCart.listCart.length > 0 && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setListDialogOpen(true)}
-                      className="ml-auto"
-                    >
-                      List {globalCart.listCart.length} Beast{globalCart.listCart.length > 1 ? "s" : ""}
-                    </Button>
+                    <div className="flex items-center gap-2 ml-auto">
+                      <Button
+                        variant="outline"
+                        onClick={() => setSendDialogOpen(true)}
+                      >
+                        Send {globalCart.listCart.length} Beast{globalCart.listCart.length > 1 ? "s" : ""}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setListDialogOpen(true)}
+                      >
+                        List {globalCart.listCart.length} Beast{globalCart.listCart.length > 1 ? "s" : ""}
+                      </Button>
+                    </div>
                   )}
                 </div>
                 <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
@@ -2256,15 +2249,15 @@ export default function MarketplacePage() {
         {filtersHook.activeTab === "my" && (
           <section className="space-y-4">
             <div className="overflow-x-auto -mx-2 px-2 scrollbar-hide">
-              <div className="inline-flex rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-1 min-w-max">
+              <div className="inline-flex rounded-lg border border-white/[0.06] bg-[#0f0f13]/70 p-1 min-w-max">
                 <button
                   type="button"
                   onClick={() => setMyActivitySubTab("listings")}
                   className={cn(
                     "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
                     myActivitySubTab === "listings"
-                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
-                      : "text-gray-400 hover:text-lsGold"
+                      ? "bg-gradient-to-r from-gold/25 via-gold/10 to-transparent text-white"
+                      : "text-zinc-400 hover:text-gold"
                   )}
                 >
                   Listings
@@ -2275,8 +2268,8 @@ export default function MarketplacePage() {
                   className={cn(
                     "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
                     myActivitySubTab === "offers"
-                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
-                      : "text-gray-400 hover:text-lsGold"
+                      ? "bg-gradient-to-r from-gold/25 via-gold/10 to-transparent text-white"
+                      : "text-zinc-400 hover:text-gold"
                   )}
                 >
                   Offers
@@ -2292,8 +2285,8 @@ export default function MarketplacePage() {
                   className={cn(
                     "rounded-md px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition whitespace-nowrap",
                     myActivitySubTab === "transactions"
-                      ? "bg-gradient-to-r from-lsGold/25 via-lsGold/10 to-transparent text-white shadow-[0_0_20px_rgba(208,201,141,0.2)]"
-                      : "text-gray-400 hover:text-lsGold"
+                      ? "bg-gradient-to-r from-gold/25 via-gold/10 to-transparent text-white"
+                      : "text-zinc-400 hover:text-gold"
                   )}
                 >
                   History
@@ -2304,7 +2297,7 @@ export default function MarketplacePage() {
             {myActivitySubTab === "listings" && (
               <>
                 {filtersHook.myActiveListings.length === 0 ? (
-                  <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
+                  <p className="rounded-lg border border-white/[0.06] bg-white/[0.04] px-4 py-8 text-center text-xs text-zinc-400">
                     You don't have any active listings yet.
                   </p>
                 ) : (
@@ -2340,7 +2333,7 @@ export default function MarketplacePage() {
                           Select All to Cancel
                         </Button>
                       )}
-                      <span className="text-xs text-gray-400 ml-auto">
+                      <span className="text-xs text-zinc-400 ml-auto">
                         Click Cancel on cards to select
                       </span>
                     </div>
@@ -2387,9 +2380,9 @@ export default function MarketplacePage() {
                     BUT only if we don't have any enriched offers to display */}
                 {(offersReceivedLoading || userMadeOffersLoading || dataHook.userBeastsLoading) &&
                  enrichedOffersReceived.length === 0 && enrichedMadeOffers.length === 0 ? (
-                  <p className="text-xs text-gray-400">Loading offers...</p>
+                  <p className="text-xs text-zinc-400">Loading offers...</p>
                 ) : (enrichedOffersReceived.length === 0 && enrichedMadeOffers.length === 0) ? (
-                  <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
+                  <p className="rounded-lg border border-white/[0.06] bg-white/[0.04] px-4 py-8 text-center text-xs text-zinc-400">
                     No offers yet. Make an offer on a beast or wait for offers on your beasts.
                   </p>
                 ) : (
@@ -2410,16 +2403,16 @@ export default function MarketplacePage() {
                                 type="checkbox"
                                 checked={showHiddenOffers}
                                 onChange={(e) => setShowHiddenOffers(e.target.checked)}
-                                className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-lsGold focus:ring-lsGold focus:ring-offset-gray-900"
+                                className="w-4 h-4 rounded border-white/[0.08] bg-white/[0.06] text-gold focus:ring-gold focus:ring-offset-surface"
                               />
-                              <span className="text-xs font-medium text-gray-400 group-hover:text-lsGold transition-colors">
+                              <span className="text-xs font-medium text-zinc-400 group-hover:text-gold transition-colors">
                                 Show Hidden ({hiddenOffersCount})
                               </span>
                             </label>
                           )}
                         </div>
                         {visibleOffersReceived.length === 0 ? (
-                          <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-4 text-center text-xs text-gray-400">
+                          <p className="rounded-lg border border-white/[0.06] bg-white/[0.04] px-4 py-4 text-center text-xs text-zinc-400">
                             All offers are hidden. Check "Show Hidden" to view them.
                           </p>
                         ) : visibleOffersReceived.map((offer, idx) => {
@@ -2443,7 +2436,7 @@ export default function MarketplacePage() {
                               className={cn(
                                 "rounded-lg border p-4 transition-all",
                                 offer.isHidden
-                                  ? "border-gray-700/50 bg-gray-900/30 opacity-60"
+                                  ? "border-white/[0.08]/50 bg-surface-raised/30 opacity-60"
                                   : "border-green-500/30 bg-green-500/5"
                               )}
                             >
@@ -2457,7 +2450,7 @@ export default function MarketplacePage() {
                                       {beastName}
                                     </p>
                                     {idx === 0 && !offer.isHidden && (
-                                      <span className="flex-shrink-0 text-[10px] bg-lsGold/20 text-lsGold px-2 py-0.5 rounded">
+                                      <span className="flex-shrink-0 text-[10px] bg-gold/20 text-gold px-2 py-0.5 rounded">
                                         Highest
                                       </span>
                                     )}
@@ -2465,27 +2458,27 @@ export default function MarketplacePage() {
                                       "flex-shrink-0 text-[10px] px-2 py-0.5 rounded",
                                       offer.isListed
                                         ? "bg-blue-500/20 text-blue-400"
-                                        : "bg-gray-600/20 text-gray-400"
+                                        : "bg-gray-600/20 text-zinc-400"
                                     )}>
                                       {offer.isListed ? "Listed" : "Unlisted"}
                                     </span>
                                     {offer.isHidden && (
-                                      <span className="flex-shrink-0 text-[10px] bg-gray-700/50 text-gray-400 px-2 py-0.5 rounded">
+                                      <span className="flex-shrink-0 text-[10px] bg-gray-700/50 text-zinc-400 px-2 py-0.5 rounded">
                                         Hidden
                                       </span>
                                     )}
                                   </div>
                                   <div className="flex items-center gap-2 mb-2">
-                                    <p className="text-xl font-bold text-lsGold">
+                                    <p className="text-xl font-bold text-gold">
                                       {priceFormatted}
                                     </p>
                                     {usdValue !== null && (
-                                      <span className="text-sm text-gray-400">${usdValue.toFixed(2)}</span>
+                                      <span className="text-sm text-zinc-400">${usdValue.toFixed(2)}</span>
                                     )}
                                   </div>
-                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
+                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-400">
                                     <span>From: {offer.owner.slice(0, 6)}...{offer.owner.slice(-4)}</span>
-                                    <span className="text-gray-600">•</span>
+                                    <span className="text-zinc-600">•</span>
                                     <span>
                                       {daysRemaining > 1
                                         ? `Expires in ${daysRemaining} days`
@@ -2500,7 +2493,7 @@ export default function MarketplacePage() {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => handleToggleHideOffer(offer.id.toString())}
-                                    className="text-gray-400 hover:text-white text-xs px-3"
+                                    className="text-zinc-400 hover:text-white text-xs px-3"
                                   >
                                     {offer.isHidden ? "Unhide" : "Hide"}
                                   </Button>
@@ -2557,16 +2550,16 @@ export default function MarketplacePage() {
                                 type="checkbox"
                                 checked={showHiddenMadeOffers}
                                 onChange={(e) => setShowHiddenMadeOffers(e.target.checked)}
-                                className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-lsGold focus:ring-lsGold focus:ring-offset-gray-900"
+                                className="w-4 h-4 rounded border-white/[0.08] bg-white/[0.06] text-gold focus:ring-gold focus:ring-offset-surface"
                               />
-                              <span className="text-xs font-medium text-gray-400 group-hover:text-lsGold transition-colors">
+                              <span className="text-xs font-medium text-zinc-400 group-hover:text-gold transition-colors">
                                 Show Hidden ({hiddenMadeOffersCount})
                               </span>
                             </label>
                           )}
                         </div>
                         {visibleMadeOffers.length === 0 ? (
-                          <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-4 text-center text-xs text-gray-400">
+                          <p className="rounded-lg border border-white/[0.06] bg-white/[0.04] px-4 py-4 text-center text-xs text-zinc-400">
                             All offers are hidden or expired. Check "Show Hidden" to view them.
                           </p>
                         ) : visibleMadeOffers.map((offer, idx) => {
@@ -2589,7 +2582,7 @@ export default function MarketplacePage() {
                               className={cn(
                                 "rounded-lg border p-4 transition-all",
                                 offer.isHidden
-                                  ? "border-gray-700/50 bg-gray-900/30 opacity-60"
+                                  ? "border-white/[0.08]/50 bg-surface-raised/30 opacity-60"
                                   : "border-purple-500/30 bg-purple-500/5"
                               )}
                             >
@@ -2603,7 +2596,7 @@ export default function MarketplacePage() {
                                       {offer.beastName}
                                     </p>
                                     {offer.isExpired && (
-                                      <span className="flex-shrink-0 text-[10px] bg-gray-700/50 text-gray-400 px-2 py-0.5 rounded">
+                                      <span className="flex-shrink-0 text-[10px] bg-gray-700/50 text-zinc-400 px-2 py-0.5 rounded">
                                         Expired
                                       </span>
                                     )}
@@ -2613,22 +2606,22 @@ export default function MarketplacePage() {
                                       </span>
                                     )}
                                     {offer.isHidden && !offer.isExpired && (
-                                      <span className="flex-shrink-0 text-[10px] bg-gray-700/50 text-gray-400 px-2 py-0.5 rounded">
+                                      <span className="flex-shrink-0 text-[10px] bg-gray-700/50 text-zinc-400 px-2 py-0.5 rounded">
                                         Hidden
                                       </span>
                                     )}
                                   </div>
                                   <div className="flex items-center gap-2 mb-2">
-                                    <p className="text-xl font-bold text-lsGold">
+                                    <p className="text-xl font-bold text-gold">
                                       {priceFormatted}
                                     </p>
                                     {madeOfferUsdValue !== null && (
-                                      <span className="text-sm text-gray-400">${madeOfferUsdValue.toFixed(2)}</span>
+                                      <span className="text-sm text-zinc-400">${madeOfferUsdValue.toFixed(2)}</span>
                                     )}
                                   </div>
-                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
+                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-400">
                                     <span>Token #{offer.tokenId}</span>
-                                    <span className="text-gray-600">•</span>
+                                    <span className="text-zinc-600">•</span>
                                     <span>
                                       {offer.isExpired
                                         ? `Expired ${expirationDate.toLocaleDateString()}`
@@ -2645,7 +2638,7 @@ export default function MarketplacePage() {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => handleToggleHideMadeOffer(offer.id.toString())}
-                                    className="text-gray-400 hover:text-white text-xs px-3"
+                                    className="text-zinc-400 hover:text-white text-xs px-3"
                                   >
                                     {hiddenMadeOfferIds.has(offer.id.toString()) ? "Unhide" : "Hide"}
                                   </Button>
@@ -2666,7 +2659,7 @@ export default function MarketplacePage() {
                                   )}
                                   <span className={cn(
                                     "text-xs px-3 py-1.5 rounded-md font-medium",
-                                    offer.isExpired ? "bg-gray-700/50 text-gray-400"
+                                    offer.isExpired ? "bg-gray-700/50 text-zinc-400"
                                       : offer.isCancelled ? "bg-red-500/20 text-red-400"
                                       : "bg-purple-500/20 text-purple-300"
                                   )}>
@@ -2687,22 +2680,22 @@ export default function MarketplacePage() {
             {myActivitySubTab === "transactions" && (
               <>
                 {userTransactions.length === 0 ? (
-                  <p className="rounded-lg border border-gray-800 bg-black/50 px-4 py-8 text-center text-xs text-gray-400">
+                  <p className="rounded-lg border border-white/[0.06] bg-white/[0.04] px-4 py-8 text-center text-xs text-zinc-400">
                     No transaction history yet.
                   </p>
                 ) : (
                   <div className="space-y-3">
                     {/* Transaction Type Filters */}
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs text-gray-400 mr-1">Filter:</span>
+                      <span className="text-xs text-zinc-400 mr-1">Filter:</span>
                       <button
                         type="button"
                         onClick={() => setTransactionTypeFilter(null)}
                         className={cn(
                           "px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer",
                           transactionTypeFilter === null
-                            ? "bg-lsGold/20 text-lsGold border border-lsGold/50"
-                            : "bg-gray-800/50 text-gray-400 border border-gray-700 hover:border-gray-600 hover:text-gray-300"
+                            ? "bg-gold/20 text-gold border border-gold/50"
+                            : "bg-white/[0.06]/50 text-zinc-400 border border-white/[0.08] hover:border-white/[0.10] hover:text-zinc-300"
                         )}
                       >
                         All
@@ -2734,15 +2727,15 @@ export default function MarketplacePage() {
                       })}
                     </div>
                     {/* Transactions Table */}
-                    <div className="rounded-lg border border-gray-800 bg-black/30 overflow-hidden">
+                    <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] overflow-hidden">
                       <table className="w-full text-xs">
-                        <thead className="bg-gray-900/50 border-b border-gray-800">
+                        <thead className="bg-surface-raised/50 border-b border-white/[0.06]">
                           <tr>
-                            <th className="px-4 py-3 text-left font-semibold text-gray-300">Type</th>
-                            <th className="px-4 py-3 text-left font-semibold text-gray-300">Beast</th>
-                            <th className="px-4 py-3 text-left font-semibold text-gray-300">Price</th>
-                            <th className="px-4 py-3 text-left font-semibold text-gray-300">Status</th>
-                            <th className="px-4 py-3 text-left font-semibold text-gray-300">Expires</th>
+                            <th className="px-4 py-3 text-left font-semibold text-zinc-300">Type</th>
+                            <th className="px-4 py-3 text-left font-semibold text-zinc-300">Beast</th>
+                            <th className="px-4 py-3 text-left font-semibold text-zinc-300">Price</th>
+                            <th className="px-4 py-3 text-left font-semibold text-zinc-300">Status</th>
+                            <th className="px-4 py-3 text-left font-semibold text-zinc-300">Expires</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2776,14 +2769,14 @@ export default function MarketplacePage() {
                             cancel: { class: "bg-red-500/20 text-red-400", label: "Cancel" },
                             edit: { class: "bg-yellow-500/20 text-yellow-400", label: "Edit" },
                           };
-                          const typeBadgeClass = typeConfig[tx.type]?.class ?? "bg-lsGold/10 text-lsGold";
+                          const typeBadgeClass = typeConfig[tx.type]?.class ?? "bg-gold/10 text-gold";
                           const typeLabel = typeConfig[tx.type]?.label ?? tx.type;
 
                           // Determine status badge styling
                           const statusBadgeClass = tx.status === "active"
                             ? "bg-green-500/20 text-green-400"
                             : tx.status === "expired"
-                            ? "bg-gray-500/20 text-gray-400"
+                            ? "bg-gray-500/20 text-zinc-400"
                             : tx.status === "completed"
                             ? "bg-blue-500/20 text-blue-400"
                             : tx.status === "cancelled"
@@ -2793,22 +2786,22 @@ export default function MarketplacePage() {
                           return (
                             <tr
                               key={`${tx.timestamp}-${tx.type}-${tx.tokenId}-${idx}`}
-                              className="border-b border-gray-800 hover:bg-gray-900/30 transition-colors"
+                              className="border-b border-white/[0.06] hover:bg-surface-raised/30 transition-colors"
                             >
                               <td className="px-4 py-3">
                                 <span className={cn("inline-block px-2 py-1 rounded text-[10px] font-semibold", typeBadgeClass)}>
                                   {typeLabel}
                                 </span>
                               </td>
-                              <td className="px-4 py-3 text-gray-300">
+                              <td className="px-4 py-3 text-zinc-300">
                                 {tx.beastName || `Beast #${tx.tokenId}`}
                               </td>
                               <td className="px-4 py-3">
                                 {tx.price ? (
                                   <div>
-                                    <span className="text-gray-300">{formatPrice(tx.price, symbol)}</span>
+                                    <span className="text-zinc-300">{formatPrice(tx.price, symbol)}</span>
                                     {usdPriceStr && (
-                                      <span className="text-gray-500 text-[10px] ml-1">(${usdPriceStr})</span>
+                                      <span className="text-zinc-500 text-[10px] ml-1">(${usdPriceStr})</span>
                                     )}
                                   </div>
                                 ) : '-'}
@@ -2819,10 +2812,10 @@ export default function MarketplacePage() {
                                     {tx.status}
                                   </span>
                                 ) : (
-                                  <span className="text-gray-500">-</span>
+                                  <span className="text-zinc-500">-</span>
                                 )}
                               </td>
-                              <td className="px-4 py-3 text-gray-400">
+                              <td className="px-4 py-3 text-zinc-400">
                                 {tx.expiration
                                   ? new Date(tx.expiration * 1000).toLocaleDateString()
                                   : '-'}
@@ -2857,6 +2850,19 @@ export default function MarketplacePage() {
               }}
               onClearCart={singleBeastToList ? undefined : globalCart.clearListCart}
               existingListings={dataHook.listings}
+            />
+          )}
+
+          {sendDialogOpen && (
+            <SendBeastsDialog
+              open={sendDialogOpen}
+              onClose={() => setSendDialogOpen(false)}
+              beasts={globalCart.listCart}
+              onRemoveBeast={globalCart.removeFromListCart}
+              onSent={() => {
+                globalCart.clearListCart();
+                dataHook.reloadUserBeasts?.();
+              }}
             />
           )}
 
@@ -2957,7 +2963,7 @@ export default function MarketplacePage() {
 
         {/* Accept Offer Confirmation Dialog */}
         <Dialog open={acceptOfferConfirmOpen} onOpenChange={setAcceptOfferConfirmOpen}>
-          <DialogContent className="bg-[#0b0b0f] border-gray-800 max-w-md">
+          <DialogContent className="bg-surface-overlay border-white/[0.06] max-w-md">
             <DialogHeader>
               <DialogTitle>Accept Offer</DialogTitle>
               <DialogDescription>
@@ -2977,18 +2983,18 @@ export default function MarketplacePage() {
 
               return (
               <div className="space-y-4">
-                <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-4 space-y-3">
+                <div className="rounded-lg border border-white/[0.06] bg-surface-raised/50 p-4 space-y-3">
                   <div>
-                    <p className="text-xs text-gray-400 mb-1">Beast</p>
+                    <p className="text-xs text-zinc-400 mb-1">Beast</p>
                     <p className="text-white font-semibold">{offerToAccept.beastName}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-400 mb-1">Offer Amount</p>
+                    <p className="text-xs text-zinc-400 mb-1">Offer Amount</p>
                     <p className="text-xl font-bold text-green-400">{offerToAccept.priceFormatted}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-400 mb-1">Buyer</p>
-                    <p className="text-sm text-gray-300 font-mono">
+                    <p className="text-xs text-zinc-400 mb-1">Buyer</p>
+                    <p className="text-sm text-zinc-300 font-mono">
                       {offerToAccept.buyerAddress.slice(0, 10)}...{offerToAccept.buyerAddress.slice(-8)}
                     </p>
                   </div>
@@ -2997,26 +3003,26 @@ export default function MarketplacePage() {
                 {/* Fee breakdown */}
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Offer Amount:</span>
+                    <span className="text-zinc-400">Offer Amount:</span>
                     <span className="text-white">{fromWei(priceBigInt, tokenDecimals)} {tokenSymbol}</span>
                   </div>
                   {platformFeeBP > 0 && (
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">Platform Fee ({platformFeeBP / 100}%):</span>
-                      <span className="text-gray-400">-{fromWei(platformFee, tokenDecimals)} {tokenSymbol}</span>
+                      <span className="text-zinc-400">Platform Fee ({platformFeeBP / 100}%):</span>
+                      <span className="text-zinc-400">-{fromWei(platformFee, tokenDecimals)} {tokenSymbol}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Creator Royalty (Survivor DAO) {CREATOR_ROYALTY_BP / 100}%:</span>
-                    <span className="text-gray-400">-{fromWei(creatorRoyalty, tokenDecimals)} {tokenSymbol}</span>
+                    <span className="text-zinc-400">Creator Royalty (Survivor DAO) {CREATOR_ROYALTY_BP / 100}%:</span>
+                    <span className="text-zinc-400">-{fromWei(creatorRoyalty, tokenDecimals)} {tokenSymbol}</span>
                   </div>
-                  <div className="flex justify-between text-sm font-semibold border-t border-gray-700 pt-2">
+                  <div className="flex justify-between text-sm font-semibold border-t border-white/[0.08] pt-2">
                     <span className="text-white">You Receive:</span>
-                    <span className="text-lsGold">{fromWei(youReceive, tokenDecimals)} {tokenSymbol}</span>
+                    <span className="text-gold">{fromWei(youReceive, tokenDecimals)} {tokenSymbol}</span>
                   </div>
                 </div>
 
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-zinc-400">
                   By accepting this offer, your beast will be transferred to the buyer and you will receive the payment.
                 </p>
                 <div className="flex justify-end gap-3 pt-2">

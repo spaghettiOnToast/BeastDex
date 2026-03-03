@@ -219,18 +219,18 @@ export function FiltersDrawer({
       <button
         type="button"
         aria-label="Close filters"
-        className="absolute inset-0 bg-black/70"
+        className="absolute inset-0 bg-black/60"
         onClick={onClose}
       />
       <div
         role="dialog"
         aria-modal="true"
-        className="relative ml-auto flex h-full w-full max-w-[100vw] sm:max-w-md flex-col overflow-hidden border-l border-gray-800 bg-[#0b0b0f] shadow-[0_0_30px_rgba(57,255,20,0.15)]"
+        className="relative ml-auto flex h-full w-full max-w-[100vw] sm:max-w-md flex-col overflow-hidden border-l border-white/[0.06] bg-[#111113]"
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
           <div>
-            <h2 className="text-base font-semibold text-lsGold">Filters</h2>
-            <p className="text-xs text-gray-400">
+            <h2 className="text-base font-semibold text-white">Filters</h2>
+            <p className="text-xs text-zinc-400">
               {hasFiltersApplied
                 ? `${Object.keys(attributeFilters || {}).length + (unclaimedSkullsFilter ? 1 : 0)} active`
                 : "No filters applied"}
@@ -240,14 +240,14 @@ export function FiltersDrawer({
             <button
               onClick={onResetFilters}
               disabled={!hasFiltersApplied}
-              className="text-xs uppercase tracking-wide px-3 py-1 rounded-md bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-40"
+              className="text-xs uppercase tracking-wide px-3 py-1 rounded-lg bg-white/[0.06] text-zinc-300 hover:bg-white/[0.10] disabled:opacity-40"
             >
               Reset
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="p-2 rounded-md hover:bg-gray-900 text-gray-300"
+              className="p-2 rounded-lg hover:bg-white/[0.06] text-zinc-400"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -272,13 +272,13 @@ export function FiltersDrawer({
           ) : null}
 
           {filtersLoading ? (
-            <p className="text-xs text-gray-400">Loading filters...</p>
+            <p className="text-xs text-zinc-400">Loading filters...</p>
           ) : (
             <div className="space-y-3">
               {/* Tier Filter - Priority position */}
               {onMultiFilterChange && availableFilters["Tier"] && (
-                <div className="flex flex-col gap-2 text-xs text-gray-300">
-                  <span className="font-semibold text-gray-200">Tier</span>
+                <div className="flex flex-col gap-2 text-xs text-zinc-300">
+                  <span className="font-semibold text-zinc-200">Tier</span>
                   <div className="flex flex-wrap gap-1.5">
                     {(availableFilters["Tier"] || [])
                       .slice()
@@ -298,8 +298,8 @@ export function FiltersDrawer({
                             }}
                             className={`px-2 py-1 text-xs rounded-md border transition-all ${
                               isSelected
-                                ? "bg-lsGreen/20 border-lsGreen text-lsGreen"
-                                : "bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-500"
+                                ? "bg-accent/15 border-accent text-accent"
+                                : "bg-white/[0.04] border-white/[0.08] text-zinc-400 hover:border-white/[0.15]"
                             }`}
                           >
                             {value}
@@ -312,8 +312,8 @@ export function FiltersDrawer({
 
               {/* Type Filter - Priority position */}
               {onMultiFilterChange && availableFilters["Type"] && (
-                <div className="flex flex-col gap-2 text-xs text-gray-300">
-                  <span className="font-semibold text-gray-200">Type</span>
+                <div className="flex flex-col gap-2 text-xs text-zinc-300">
+                  <span className="font-semibold text-zinc-200">Type</span>
                   <div className="flex flex-wrap gap-1.5">
                     {(availableFilters["Type"] || [])
                       .slice()
@@ -333,8 +333,8 @@ export function FiltersDrawer({
                             }}
                             className={`px-2 py-1 text-xs rounded-md border transition-all ${
                               isSelected
-                                ? "bg-lsGreen/20 border-lsGreen text-lsGreen"
-                                : "bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-500"
+                                ? "bg-accent/15 border-accent text-accent"
+                                : "bg-white/[0.04] border-white/[0.08] text-zinc-400 hover:border-white/[0.15]"
                             }`}
                           >
                             {value}
@@ -347,8 +347,8 @@ export function FiltersDrawer({
 
               {/* Rank Range Filter */}
               {onRankRangeChange && (
-                <div className="flex flex-col gap-2 text-xs text-gray-300">
-                  <span className="font-semibold text-gray-200">Rank</span>
+                <div className="flex flex-col gap-2 text-xs text-zinc-300">
+                  <span className="font-semibold text-zinc-200">Rank</span>
                   <div className="flex flex-wrap gap-1.5">
                     {RANK_RANGES.map((range) => {
                       const isSelected = selectedRankRanges.has(range.label);
@@ -378,8 +378,8 @@ export function FiltersDrawer({
                           }}
                           className={`px-2 py-1 text-xs rounded-md border transition-all ${
                             isSelected
-                              ? "bg-lsGreen/20 border-lsGreen text-lsGreen"
-                              : "bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-500"
+                              ? "bg-accent/15 border-accent text-accent"
+                              : "bg-white/[0.04] border-white/[0.08] text-zinc-400 hover:border-white/[0.15]"
                           }`}
                         >
                           {range.label}
@@ -424,15 +424,15 @@ export function FiltersDrawer({
                   return (
                     <div
                       key={trait}
-                      className="flex flex-col gap-2 text-xs text-gray-300"
+                      className="flex flex-col gap-2 text-xs text-zinc-300"
                     >
-                      <span className="font-semibold capitalize text-gray-200">
+                      <span className="font-semibold capitalize text-zinc-200">
                         {trait}
                       </span>
 
                       {isBoolean ? (
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-gray-400">
+                          <span className="text-xs text-zinc-400">
                             {currentValue === "1" ? "Yes" : currentValue === "0" ? "No" : "Any"}
                           </span>
                           <button
@@ -452,15 +452,15 @@ export function FiltersDrawer({
                                 ? "No"
                                 : "Any"
                             }`}
-                            className="p-1 rounded-full border border-transparent hover:border-lsGreen focus:outline-none focus:ring-2 focus:ring-lsGreen"
+                            className="p-1 rounded-full border border-transparent hover:border-accent/50 focus:outline-none focus:ring-2 focus:ring-accent/30"
                           >
                             <span
                               className={`block h-4 w-4 rounded-full border transition flex items-center justify-center text-[8px] font-bold ${
                                 currentValue === "1"
-                                  ? "border-[#39ff14] bg-[#39ff14] shadow-[0_0_8px_#39ff14] text-black"
+                                  ? "border-accent bg-accent text-white"
                                   : currentValue === "0"
                                   ? "border-red-500 bg-red-500/20 text-red-500"
-                                  : "border-gray-700 bg-gray-800"
+                                  : "border-white/[0.10] bg-white/[0.04]"
                               }`}
                             >
                               {currentValue === "1" ? "✓" : currentValue === "0" ? "✗" : ""}
@@ -475,11 +475,11 @@ export function FiltersDrawer({
                             onFilterChange(trait, event.target.value)
                           }
                           placeholder={`Search ${trait.toLowerCase()}...`}
-                          className="bg-black border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-lsGreen focus:border-lsGreen"
+                          className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/30"
                         />
                       ) : isRangeSlider ? (
                         <div className="space-y-2">
-                          <div className="flex items-center justify-between text-xs text-gray-400">
+                          <div className="flex items-center justify-between text-xs text-zinc-400">
                             <span>Min: {Math.min(...safeValues.map(Number))}</span>
                             <span>Max: {Math.max(...safeValues.map(Number))}</span>
                           </div>
@@ -491,9 +491,9 @@ export function FiltersDrawer({
                             onChange={(event) =>
                               onFilterChange(trait, event.target.value)
                             }
-                            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer range-slider"
+                            className="w-full h-2 bg-white/[0.08] rounded-lg appearance-none cursor-pointer range-slider"
                           />
-                          <div className="text-center text-xs text-lsGold">
+                          <div className="text-center text-xs text-gold">
                             {currentValue ? `Selected: ${currentValue}` : 'All values'}
                           </div>
                         </div>
@@ -524,8 +524,8 @@ export function FiltersDrawer({
                                   }}
                                   className={`px-2 py-1 text-xs rounded-md border transition-all ${
                                     isSelected
-                                      ? "bg-lsGreen/20 border-lsGreen text-lsGreen"
-                                      : "bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-500"
+                                      ? "bg-accent/15 border-accent text-accent"
+                                      : "bg-white/[0.04] border-white/[0.08] text-zinc-400 hover:border-white/[0.15]"
                                   }`}
                                 >
                                   {value}
@@ -539,7 +539,7 @@ export function FiltersDrawer({
                           onChange={(event) =>
                             onFilterChange(trait, event.target.value)
                           }
-                          className="bg-black border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-lsGreen"
+                          className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-2 focus:ring-accent/30"
                         >
                           <option value="">All</option>
                           {safeValues
@@ -557,15 +557,15 @@ export function FiltersDrawer({
                 }).filter(Boolean)}
               {/* Unclaimed Skulls Toggle - below animated (same UI as shiny/animated) */}
               {onUnclaimedSkullsChange && (
-                <div className="flex flex-col gap-2 text-xs text-gray-300">
-                  <span className="font-semibold capitalize text-gray-200">
+                <div className="flex flex-col gap-2 text-xs text-zinc-300">
+                  <span className="font-semibold capitalize text-zinc-200">
                     Unclaimed Skulls
                   </span>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400 flex items-center gap-1.5">
+                    <span className="text-xs text-zinc-400 flex items-center gap-1.5">
                       {unclaimedSkullsFilter ? "Yes" : "Any"}
                       {skullsLoading && (
-                        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-gray-600 border-t-lsGreen" />
+                        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-zinc-700 border-t-accent" />
                       )}
                     </span>
                     <button
@@ -573,13 +573,13 @@ export function FiltersDrawer({
                       onClick={() => onUnclaimedSkullsChange(!unclaimedSkullsFilter)}
                       aria-pressed={unclaimedSkullsFilter}
                       aria-label={`Unclaimed Skulls filter: ${unclaimedSkullsFilter ? "Yes" : "Any"}`}
-                      className="p-1 rounded-full border border-transparent hover:border-lsGreen focus:outline-none focus:ring-2 focus:ring-lsGreen"
+                      className="p-1 rounded-full border border-transparent hover:border-accent/50 focus:outline-none focus:ring-2 focus:ring-accent/30"
                     >
                       <span
                         className={`block h-4 w-4 rounded-full border transition flex items-center justify-center text-[8px] font-bold ${
                           unclaimedSkullsFilter
-                            ? "border-[#39ff14] bg-[#39ff14] shadow-[0_0_8px_#39ff14] text-black"
-                            : "border-gray-700 bg-gray-800"
+                            ? "border-accent bg-accent text-white"
+                            : "border-white/[0.10] bg-white/[0.04]"
                         }`}
                       >
                         {unclaimedSkullsFilter ? "✓" : ""}
@@ -590,16 +590,16 @@ export function FiltersDrawer({
               )}
 
               {Object.keys(availableFilters || {}).length === 0 && (
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-zinc-400">
                   No metadata filters available.
                 </p>
               )}
 
               {/* Health Range Slider - at bottom above Level */}
               {onHealthRangeChange && (
-                <div className="flex flex-col gap-2 text-xs text-gray-300 pt-2 border-t border-gray-800/50">
+                <div className="flex flex-col gap-2 text-xs text-zinc-300 pt-2 border-t border-white/[0.04]">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-gray-200">Health</span>
+                    <span className="font-semibold text-zinc-200">Health</span>
                     {healthFilterActive && (
                       <button
                         type="button"
@@ -608,7 +608,7 @@ export function FiltersDrawer({
                           setHealthMax(HEALTH_MAX);
                           onHealthRangeChange(-1, -1); // Signal to clear filter
                         }}
-                        className="text-[10px] text-gray-500 hover:text-gray-300"
+                        className="text-[10px] text-zinc-500 hover:text-zinc-300"
                       >
                         Reset
                       </button>
@@ -617,7 +617,7 @@ export function FiltersDrawer({
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
                       <div className="flex-1">
-                        <label className="text-[10px] text-gray-500 mb-1 block">Min</label>
+                        <label className="text-[10px] text-zinc-500 mb-1 block">Min</label>
                         <input
                           type="number"
                           min={HEALTH_MIN}
@@ -628,11 +628,11 @@ export function FiltersDrawer({
                             setHealthMin(val);
                             onHealthRangeChange(val, healthMax);
                           }}
-                          className="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs"
+                          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-zinc-200"
                         />
                       </div>
                       <div className="flex-1">
-                        <label className="text-[10px] text-gray-500 mb-1 block">Max</label>
+                        <label className="text-[10px] text-zinc-500 mb-1 block">Max</label>
                         <input
                           type="number"
                           min={healthMin}
@@ -643,11 +643,11 @@ export function FiltersDrawer({
                             setHealthMax(val);
                             onHealthRangeChange(healthMin, val);
                           }}
-                          className="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs"
+                          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-zinc-200"
                         />
                       </div>
                     </div>
-                    <div className="text-center text-[10px] text-gray-500">
+                    <div className="text-center text-[10px] text-zinc-500">
                       {healthMin === HEALTH_MIN && healthMax === HEALTH_MAX
                         ? "All health values"
                         : `${healthMin} - ${healthMax}`}
@@ -658,9 +658,9 @@ export function FiltersDrawer({
 
               {/* Level Range Slider - below Health */}
               {onLevelRangeChange && (
-                <div className="flex flex-col gap-2 text-xs text-gray-300">
+                <div className="flex flex-col gap-2 text-xs text-zinc-300">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-gray-200">Level</span>
+                    <span className="font-semibold text-zinc-200">Level</span>
                     {levelFilterActive && (
                       <button
                         type="button"
@@ -669,7 +669,7 @@ export function FiltersDrawer({
                           setLevelMax(dynamicLevelMax);
                           onLevelRangeChange(-1, -1); // Signal to clear filter
                         }}
-                        className="text-[10px] text-gray-500 hover:text-gray-300"
+                        className="text-[10px] text-zinc-500 hover:text-zinc-300"
                       >
                         Reset
                       </button>
@@ -678,7 +678,7 @@ export function FiltersDrawer({
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
                       <div className="flex-1">
-                        <label className="text-[10px] text-gray-500 mb-1 block">Min</label>
+                        <label className="text-[10px] text-zinc-500 mb-1 block">Min</label>
                         <input
                           type="number"
                           min={LEVEL_MIN}
@@ -689,11 +689,11 @@ export function FiltersDrawer({
                             setLevelMin(val);
                             onLevelRangeChange(val, levelMax);
                           }}
-                          className="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs"
+                          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-zinc-200"
                         />
                       </div>
                       <div className="flex-1">
-                        <label className="text-[10px] text-gray-500 mb-1 block">Max</label>
+                        <label className="text-[10px] text-zinc-500 mb-1 block">Max</label>
                         <input
                           type="number"
                           min={levelMin}
@@ -704,11 +704,11 @@ export function FiltersDrawer({
                             setLevelMax(val);
                             onLevelRangeChange(levelMin, val);
                           }}
-                          className="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs"
+                          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-zinc-200"
                         />
                       </div>
                     </div>
-                    <div className="text-center text-[10px] text-gray-500">
+                    <div className="text-center text-[10px] text-zinc-500">
                       {levelMin === LEVEL_MIN && levelMax === dynamicLevelMax
                         ? "All levels"
                         : `${levelMin} - ${levelMax}`}
@@ -719,9 +719,9 @@ export function FiltersDrawer({
 
               {/* Adventurers Killed Range Slider */}
               {onAdventurersKilledRangeChange && (
-                <div className="flex flex-col gap-2 text-xs text-gray-300">
+                <div className="flex flex-col gap-2 text-xs text-zinc-300">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-gray-200">Adventurers Killed</span>
+                    <span className="font-semibold text-zinc-200">Adventurers Killed</span>
                     {adventurersKilledFilterActive && (
                       <button
                         type="button"
@@ -730,7 +730,7 @@ export function FiltersDrawer({
                           setAdventurersKilledMax(dynamicAdventurersKilledMax);
                           onAdventurersKilledRangeChange(-1, -1); // Signal to clear filter
                         }}
-                        className="text-[10px] text-gray-500 hover:text-gray-300"
+                        className="text-[10px] text-zinc-500 hover:text-zinc-300"
                       >
                         Reset
                       </button>
@@ -739,7 +739,7 @@ export function FiltersDrawer({
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
                       <div className="flex-1">
-                        <label className="text-[10px] text-gray-500 mb-1 block">Min</label>
+                        <label className="text-[10px] text-zinc-500 mb-1 block">Min</label>
                         <input
                           type="number"
                           min={ADVENTURERS_KILLED_MIN}
@@ -750,11 +750,11 @@ export function FiltersDrawer({
                             setAdventurersKilledMin(val);
                             onAdventurersKilledRangeChange(val, adventurersKilledMax);
                           }}
-                          className="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs"
+                          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-zinc-200"
                         />
                       </div>
                       <div className="flex-1">
-                        <label className="text-[10px] text-gray-500 mb-1 block">Max</label>
+                        <label className="text-[10px] text-zinc-500 mb-1 block">Max</label>
                         <input
                           type="number"
                           min={adventurersKilledMin}
@@ -765,11 +765,11 @@ export function FiltersDrawer({
                             setAdventurersKilledMax(val);
                             onAdventurersKilledRangeChange(adventurersKilledMin, val);
                           }}
-                          className="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs"
+                          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-zinc-200"
                         />
                       </div>
                     </div>
-                    <div className="text-center text-[10px] text-gray-500">
+                    <div className="text-center text-[10px] text-zinc-500">
                       {adventurersKilledMin === ADVENTURERS_KILLED_MIN && adventurersKilledMax === dynamicAdventurersKilledMax
                         ? "All values"
                         : `${adventurersKilledMin} - ${adventurersKilledMax}`}

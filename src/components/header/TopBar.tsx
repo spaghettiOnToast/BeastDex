@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { BarChart3, Store } from "lucide-react";
+import { BarChart3, Store, Package } from "lucide-react";
+import { useAccount } from "@starknet-react/core";
 import Logo from "../common/Logo";
 import SearchBar from "../common/SearchBar";
 import WalletButton from "../wallet/WalletButton";
@@ -15,21 +16,23 @@ type Props = {
 
 export default function TopBar({ filtersControl, onLogoClick }: Props) {
   const { searchValue, setSearchValue, handleSearch } = useGlobalSearch();
+  const { address } = useAccount();
+  const collectionPath = address ? `/collection/${address}` : "/collection";
 
   return (
     <div className="flex items-center gap-2 sm:gap-4">
-      {/* Logo - smaller on mobile */}
+      {/* Logo */}
       <div className="flex-shrink-0">
         <Logo scale="sm" onClick={onLogoClick} />
       </div>
 
-      {/* Search bar - takes more space on mobile */}
+      {/* Search bar */}
       <div className="flex flex-1 items-center gap-2 sm:gap-3 justify-center">
         <SearchBar value={searchValue} onChange={setSearchValue} onSubmit={handleSearch} />
         {filtersControl}
       </div>
 
-      {/* Desktop Navigation - hidden on mobile */}
+      {/* Desktop Navigation */}
       <div className="hidden md:flex items-center gap-2 lg:gap-4 flex-shrink-0">
         <Button
           asChild
@@ -38,6 +41,15 @@ export default function TopBar({ filtersControl, onLogoClick }: Props) {
           <Link to="/marketplace">
             <Store className="h-4 w-4" />
             <span className="hidden lg:inline">Marketplace</span>
+          </Link>
+        </Button>
+        <Button
+          asChild
+          className="bg-[#a855f7] text-white text-xs font-semibold uppercase tracking-wide hover:bg-[#9333ea] hover:text-white h-9 px-3 lg:px-4 lg:min-w-[130px]"
+        >
+          <Link to={collectionPath}>
+            <Package className="h-4 w-4" />
+            <span className="hidden lg:inline">Collection</span>
           </Link>
         </Button>
         <Button
@@ -52,7 +64,7 @@ export default function TopBar({ filtersControl, onLogoClick }: Props) {
         <WalletButton />
       </div>
 
-      {/* Mobile: Wallet + Hamburger - compact */}
+      {/* Mobile: Wallet + Hamburger */}
       <div className="flex md:hidden items-center gap-1 flex-shrink-0">
         <WalletButton />
         <MobileNav />

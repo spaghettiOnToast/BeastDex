@@ -48,12 +48,12 @@ export function AccountFiltersDropdown({
         <Button
           variant="outline"
           size="sm"
-          className="border-lsGold text-lsGold hover:bg-gray-900 hover:text-lsGold text-[10px] font-semibold uppercase tracking-wide"
+          className="border-gold text-gold hover:bg-gray-900 hover:text-gold text-[10px] font-semibold uppercase tracking-wide"
         >
           <Filter className="h-3 w-3" />
           <span>{buttonLabel}</span>
           {activeFiltersCount > 0 ? (
-            <span className="rounded bg-lsGold/20 px-1 text-[9px] text-lsGold">
+            <span className="rounded bg-gold/15 px-1 text-[9px] text-gold">
               {activeFiltersCount}
             </span>
           ) : null}
@@ -122,7 +122,7 @@ export function AccountFiltersDropdown({
                             variant="ghost"
                             size="sm"
                             onClick={() => onFilterChange(trait, "")}
-                            className="h-auto p-0 text-[10px] text-lsGold hover:underline hover:bg-transparent"
+                            className="h-auto p-0 text-[10px] text-gold hover:underline hover:bg-transparent"
                           >
                             Clear
                           </Button>
@@ -134,7 +134,7 @@ export function AccountFiltersDropdown({
                           onFilterChange(trait, event.target.value);
                           setOpen(false);
                         }}
-                        className="w-full rounded-md border border-gray-700 bg-black px-2 py-1.5 text-[11px] text-gray-200 focus:outline-none focus:ring-2 focus:ring-lsGreen"
+                        className="w-full rounded-md border border-gray-700 bg-black px-2 py-1.5 text-[11px] text-gray-200 focus:outline-none focus:ring-2 focus:ring-accent"
                       >
                         <option value="">All</option>
                         {sortedValues.map((value) => (

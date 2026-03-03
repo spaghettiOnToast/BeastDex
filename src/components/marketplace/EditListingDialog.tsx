@@ -193,7 +193,7 @@ export default function EditListingDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="bg-[#0b0b0f] border-gray-800">
+      <DialogContent className="bg-surface-overlay border border-white/[0.06]">
         <DialogHeader>
           <DialogTitle>Edit Listing</DialogTitle>
           <DialogDescription>
@@ -201,7 +201,7 @@ export default function EditListingDialog({
           </DialogDescription>
         </DialogHeader>
         {!listing ? (
-          <p className="text-sm text-gray-400">No listing selected.</p>
+          <p className="text-sm text-zinc-400">No listing selected.</p>
         ) : (
           <div className="space-y-4">
             {listing.beast?.image && (
@@ -214,11 +214,11 @@ export default function EditListingDialog({
               </div>
             )}
             <div>
-              <p className="text-sm text-gray-400">Beast</p>
+              <p className="text-sm text-zinc-400">Beast</p>
               <p className="text-sm font-medium">{listing.beast?.name || `#${listing.tokenId}`}</p>
             </div>
             <div>
-              <label className="text-sm text-gray-400">New Price</label>
+              <label className="text-sm text-zinc-400">New Price</label>
               <Input
                 type="number"
                 step="0.01"
@@ -229,13 +229,13 @@ export default function EditListingDialog({
                 className="mt-1"
               />
               {priceBigInt && priceBigInt > 0n && usdPrice && (
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-zinc-400 mt-1">
                   ≈ ${tokenAmountToUsd(priceBigInt, tokenDecimals, usdPrice).toFixed(2)} USD
                 </p>
               )}
             </div>
             <div>
-              <label className="text-sm text-gray-400">Currency</label>
+              <label className="text-sm text-zinc-400">Currency</label>
               <TokenSelect
                 value={currencyAddress}
                 onValueChange={setCurrencyAddress}
@@ -243,14 +243,14 @@ export default function EditListingDialog({
               />
             </div>
             <div>
-              <label className="text-sm text-gray-400">Listing duration</label>
+              <label className="text-sm text-zinc-400">Listing duration</label>
               <Select value={duration} onValueChange={setDuration}>
-                <SelectTrigger className="mt-1 bg-black/50">
+                <SelectTrigger className="mt-1 bg-surface/50">
                   <SelectValue placeholder="Select duration" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#0b0b0f] border-gray-800">
+                <SelectContent className="bg-surface-overlay border border-white/[0.06]">
                   {DURATION_SELECT_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value} className="focus:bg-gray-800/50">
+                    <SelectItem key={option.value} value={option.value} className="focus:bg-white/[0.06]">
                       {option.label}
                     </SelectItem>
                   ))}
@@ -268,7 +268,7 @@ export default function EditListingDialog({
                 </div>
               ) : null}
               {expirationDetails.preview ? (
-                <p className="mt-2 text-xs text-gray-400">
+                <p className="mt-2 text-xs text-zinc-400">
                   Expires {expirationDetails.preview}
                 </p>
               ) : null}
@@ -282,14 +282,14 @@ export default function EditListingDialog({
                 variant="outline"
                 onClick={() => handleOpenChange(false)}
                 disabled={submitting}
-                className="border-gray-600 hover:border-gray-500"
+                className="border-white/[0.10] hover:border-white/[0.15]"
               >
                 Cancel
               </Button>
               <Button
                 onClick={onSubmit}
                 disabled={!canSubmit || submitting}
-                className="bg-lsGold/20 text-lsGold border border-lsGold hover:bg-lsGold/30"
+                className="bg-gold/15 text-gold border border-gold hover:bg-gold/20"
               >
                 {submitting ? "Updating..." : "Update Listing"}
               </Button>

@@ -76,7 +76,7 @@ function ListingCard({
 
     const configs = {
       expired: { bg: 'bg-orange-500/20', border: 'border-orange-400/50', text: 'EXPIRED', textColor: 'text-orange-300' },
-      cancelled: { bg: 'bg-gray-500/20', border: 'border-gray-400/50', text: 'CANCELLED', textColor: 'text-gray-300' },
+      cancelled: { bg: 'bg-gray-500/20', border: 'border-gray-400/50', text: 'CANCELLED', textColor: 'text-zinc-300' },
       sold: { bg: 'bg-green-500/20', border: 'border-green-400/50', text: 'SOLD', textColor: 'text-green-300' },
     };
 
@@ -96,8 +96,8 @@ function ListingCard({
         "group w-full overflow-hidden border bg-gradient-to-br from-black/40 to-gray-900/20 backdrop-blur-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1",
         compact ? "max-w-[220px]" : "max-w-[280px]",
         inSweepSelection
-          ? "border-[#39ff14] shadow-[0_0_15px_rgba(57,255,20,0.4)] ring-1 ring-[#39ff14]/40"
-          : "border-gray-800/50 hover:border-lsGold/30 hover:shadow-lsGold/10",
+          ? "ring-1 ring-accent/30"
+          : "border-white/[0.06] hover:border-gold/30",
       ].join(" ")}
     >
       <CardContent className="p-0">
@@ -120,7 +120,7 @@ function ListingCard({
             />
           ) : !beast ? (
             // Loading skeleton when beast data hasn't loaded yet
-            <div className="flex h-full w-full items-center justify-center bg-gray-800/30 animate-pulse">
+            <div className="flex h-full w-full items-center justify-center bg-white/[0.06]/30 animate-pulse">
               <div className="w-16 h-16 rounded-full bg-gray-700/50" />
             </div>
           ) : (
@@ -129,8 +129,8 @@ function ListingCard({
             </div>
           )}
           {offersCount > 0 && (
-            <div className="absolute top-1 right-1 sm:top-3 sm:right-3 bg-gradient-to-r from-lsGold/30 to-yellow-600/30 backdrop-blur-md border border-lsGold/60 rounded-lg px-1.5 py-0.5 sm:px-3 sm:py-1.5 shadow-lg">
-              <p className="text-[9px] sm:text-xs font-bold text-lsGold">
+            <div className="absolute top-1 right-1 sm:top-3 sm:right-3 bg-gradient-to-r from-gold/30 to-yellow-600/30 backdrop-blur-md border border-gold/60 rounded-lg px-1.5 py-0.5 sm:px-3 sm:py-1.5 shadow-lg">
+              <p className="text-[9px] sm:text-xs font-bold text-gold">
                 {offersCount}
               </p>
             </div>
@@ -144,7 +144,7 @@ function ListingCard({
                 </svg>
               </div>
             ) : (
-              <div className="absolute top-1 right-1 sm:top-2 sm:right-2 w-5 h-5 sm:w-6 sm:h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity border-2 border-white shadow-[0_0_10px_rgba(255,255,255,0.6)]">
+              <div className="absolute top-1 right-1 sm:top-2 sm:right-2 w-5 h-5 sm:w-6 sm:h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity border-2 border-white ">
                 <svg className="w-3 h-3 sm:w-4 sm:h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                 </svg>
@@ -159,7 +159,7 @@ function ListingCard({
                 e.stopPropagation();
                 onRemoveFromSweep?.();
               }}
-              className="absolute top-1 right-1 sm:top-2 sm:right-2 w-5 h-5 sm:w-6 sm:h-6 bg-[#39ff14] rounded-full flex items-center justify-center shadow-lg shadow-[#39ff14]/30 hover:bg-[#39ff14]/80 transition-colors cursor-pointer"
+              className="absolute top-1 right-1 sm:top-2 sm:right-2 w-5 h-5 sm:w-6 sm:h-6 bg-accent rounded-full flex items-center justify-center shadow-sm hover:bg-accent/80 transition-colors cursor-pointer"
             >
               <svg className="w-3 h-3 sm:w-4 sm:h-4 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -177,7 +177,7 @@ function ListingCard({
           <div className="flex items-center justify-center gap-0.5 sm:gap-1.5 w-full flex-wrap">
             {priceLabel && (
               <div className="flex items-center gap-0.5 sm:gap-1">
-                <span className="text-[10px] sm:text-sm font-bold text-lsGold">
+                <span className="text-[10px] sm:text-sm font-bold text-gold">
                   {priceLabel.split(' ')[0]}
                 </span>
                 <TokenIcon
@@ -189,7 +189,7 @@ function ListingCard({
               </div>
             )}
             {subtitlePriceLabel && (
-              <span className="text-[9px] sm:text-xs text-gray-400">
+              <span className="text-[9px] sm:text-xs text-zinc-400">
                 ${subtitlePriceLabel.split(' ')[0]}
               </span>
             )}
@@ -208,8 +208,8 @@ function ListingCard({
                 <Button
                   className={
                     inCart
-                      ? "flex-1 text-[8px] sm:text-[10px] px-1 sm:px-2 py-0.5 sm:py-1 h-5 sm:h-7 bg-[#39ff14] text-black hover:bg-[#39ff14]/90 border-[#39ff14] font-semibold"
-                      : "flex-1 text-[8px] sm:text-[10px] px-1 sm:px-2 py-0.5 sm:py-1 h-5 sm:h-7 font-semibold hover:bg-gray-800/50 border-white text-white"
+                      ? "flex-1 text-[8px] sm:text-[10px] px-1 sm:px-2 py-0.5 sm:py-1 h-5 sm:h-7 bg-accent text-black hover:bg-accent/90 border-accent font-semibold"
+                      : "flex-1 text-[8px] sm:text-[10px] px-1 sm:px-2 py-0.5 sm:py-1 h-5 sm:h-7 font-semibold hover:bg-white/[0.06]/50 border-white text-white"
                   }
                   variant={inCart ? "default" : "outline"}
                   onClick={onEdit}
@@ -241,8 +241,8 @@ function ListingCard({
                   className={[
                     "flex-1 font-semibold text-[7px] sm:text-[9px] px-0.5 sm:px-1.5 py-0.5 sm:py-1 h-5 sm:h-6 transition-all",
                     buyDisabled
-                      ? "bg-gray-800 text-gray-400 cursor-not-allowed border-gray-600"
-                      : "bg-lsGold/20 text-lsGold border-lsGold hover:bg-lsGold/30 hover:border-lsGold/80",
+                      ? "bg-white/[0.06] text-zinc-400 cursor-not-allowed border-white/[0.10]"
+                      : "bg-gold/20 text-gold border-gold hover:bg-gold/30 hover:border-gold/80",
                   ].join(" ")}
                   variant="outline"
                   onClick={handleBuyNow}
@@ -263,8 +263,8 @@ function ListingCard({
                     className={[
                       "flex-1 text-[7px] sm:text-[9px] px-0.5 sm:px-1.5 py-0.5 sm:py-1 h-5 sm:h-6 font-semibold",
                       buyDisabled
-                        ? "bg-gray-800 text-gray-400 cursor-not-allowed border-gray-600"
-                        : "border-lsGold text-lsGold hover:bg-lsGold/10 hover:border-lsGold",
+                        ? "bg-white/[0.06] text-zinc-400 cursor-not-allowed border-white/[0.10]"
+                        : "border-gold text-gold hover:bg-gold/10 hover:border-gold",
                     ].join(" ")}
                     variant="outline"
                     onClick={onListSingle}
@@ -286,10 +286,10 @@ function ListingCard({
                     className={[
                       "flex-1 text-[7px] sm:text-[9px] px-0.5 sm:px-1.5 py-0.5 sm:py-1 h-5 sm:h-6",
                       buyDisabled
-                        ? "bg-gray-800 text-gray-400 cursor-not-allowed border-gray-600"
+                        ? "bg-white/[0.06] text-zinc-400 cursor-not-allowed border-white/[0.10]"
                         : inCart
-                        ? "bg-[#39ff14]/20 text-[#39ff14] border-[#39ff14] font-semibold"
-                        : "border-lsGold text-lsGold hover:bg-lsGold/10 hover:border-lsGold font-semibold",
+                        ? "bg-green-500 text-black border-green-500 hover:bg-green-600 font-semibold"
+                        : "border-gold text-gold hover:bg-gold/10 hover:border-gold font-semibold",
                     ].join(" ")}
                     variant="outline"
                     onClick={handleAddToCart}
@@ -306,8 +306,8 @@ function ListingCard({
                   className={[
                     "flex flex-1 font-semibold transition-all text-[7px] sm:text-[9px] px-0.5 sm:px-1.5 py-0.5 sm:py-1 h-5 sm:h-6",
                     buyDisabled
-                      ? "bg-gray-800 text-gray-400 cursor-not-allowed border-gray-600"
-                      : "border-white text-white hover:bg-gray-800/50 hover:border-white",
+                      ? "bg-white/[0.06] text-zinc-400 cursor-not-allowed border-white/[0.10]"
+                      : "border-white text-white hover:bg-white/[0.06]/50 hover:border-white",
                   ].join(" ")}
                   variant="outline"
                   onClick={onMakeOffer}
@@ -321,7 +321,7 @@ function ListingCard({
         </div>
         {ownedByUser && onViewOffers && offersCount > 0 && (
           <Button
-            className="w-full text-[8px] sm:text-[10px] px-1 sm:px-2 py-0.5 sm:py-1 h-5 sm:h-7 border-lsGold/50 text-lsGold hover:bg-lsGold/10 hover:border-lsGold font-semibold transition-all"
+            className="w-full text-[8px] sm:text-[10px] px-1 sm:px-2 py-0.5 sm:py-1 h-5 sm:h-7 border-gold/50 text-gold hover:bg-gold/10 hover:border-gold font-semibold transition-all"
             variant="outline"
             onClick={onViewOffers}
           >

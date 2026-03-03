@@ -22,7 +22,7 @@ export const BeastGrid = memo(function BeastGrid({
 }: BeastGridProps) {
   if (loading && beasts.length === 0) {
     return (
-      <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-5 gap-2 sm:gap-4 lg:gap-6 place-items-center">
+      <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-4 lg:gap-5 place-items-center">
         {[...Array(20)].map((_, i) => (
           <BeastCardSkeleton key={i} />
         ))}
@@ -32,8 +32,8 @@ export const BeastGrid = memo(function BeastGrid({
 
   if (!loading && beasts.length === 0) {
     return (
-      <Alert className="max-w-md mx-auto mt-8">
-        <AlertDescription className="text-center text-base">
+      <Alert className="max-w-md mx-auto mt-8 border-white/[0.06] bg-surface-raised">
+        <AlertDescription className="text-center text-base text-zinc-400">
           {emptyMessage}
         </AlertDescription>
       </Alert>
@@ -41,7 +41,7 @@ export const BeastGrid = memo(function BeastGrid({
   }
 
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-5 gap-2 sm:gap-4 lg:gap-6 animate-in fade-in duration-500">
+    <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-4 lg:gap-5 animate-in fade-in duration-500">
       {beasts.map((beast) => {
         const normalizedOwner = beast.owner ? normaliseStarknetAddress(beast.owner) : null;
         return (

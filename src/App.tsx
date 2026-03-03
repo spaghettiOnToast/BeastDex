@@ -58,18 +58,17 @@ function App() {
               position="top-right"
               expand={false}
               toastOptions={{
-                className: "!bg-black/90 !backdrop-blur-md !border !border-gray-700 !text-white !shadow-xl",
+                className: "!bg-[#18181b] !border !border-white/[0.06] !text-white !shadow-xl",
                 style: {
-                  background: "rgba(0, 0, 0, 0.9)",
-                  backdropFilter: "blur(12px)",
-                  border: "1px solid rgba(75, 85, 99, 0.5)",
+                  background: "#18181b",
+                  border: "1px solid rgba(255, 255, 255, 0.06)",
                 },
                 classNames: {
-                  success: "!border-green-500/50 !text-green-300",
-                  error: "!border-red-500/50 !text-red-300",
-                  warning: "!border-yellow-500/50 !text-yellow-300",
-                  info: "!border-lsGold/50 !text-lsGold",
-                  loading: "!border-gray-500/50 !text-gray-300",
+                  success: "!border-accent/30 !text-green-300",
+                  error: "!border-red-500/30 !text-red-300",
+                  warning: "!border-yellow-500/30 !text-yellow-300",
+                  info: "!border-gold/30 !text-gold",
+                  loading: "!border-white/10 !text-zinc-300",
                 },
               }}
             />
@@ -77,8 +76,8 @@ function App() {
               fallback={
                 <div className="flex items-center justify-center min-h-screen">
                   <div className="text-center">
-                    <div className="animate-spin h-8 w-8 border-4 border-lsGreen border-t-transparent rounded-full mx-auto mb-4"></div>
-                    <p className="text-gray-400">Loading...</p>
+                    <div className="animate-spin h-8 w-8 border-4 border-accent border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p className="text-zinc-400">Loading...</p>
                   </div>
                 </div>
               }

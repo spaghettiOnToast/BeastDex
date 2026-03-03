@@ -98,7 +98,7 @@ export const VirtualizedBeastGrid = memo(function VirtualizedBeastGrid({
 
   if (!loading && beasts.length === 0) {
     return (
-      <p className="col-span-full text-center text-lsGold font-roboto">
+      <p className="col-span-full text-center text-gold font-roboto">
         {emptyMessage}
       </p>
     );

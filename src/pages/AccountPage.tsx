@@ -545,7 +545,7 @@ function AccountPage() {
   return (
     <AppLayout topBar={topBar}>
       <div className="space-y-4">
-        <div className="bg-card/20 backdrop-blur-sm rounded-md border border-muted/40 p-4">
+        <div className="rounded-xl border border-white/[0.06] bg-surface-raised p-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="flex flex-col items-start space-y-2">
               {mostPowerfulTitle ? (
@@ -555,83 +555,51 @@ function AccountPage() {
               ) : null}
 
               <div className="flex items-center gap-3">
-                <h1 className="text-xl md:text-2xl font-bold text-primary tracking-wide">
+                <h1 className="text-xl md:text-2xl font-bold text-white tracking-wide font-display">
                   <span
-                    className={`${displayAddressClass}`}
+                    className={displayAddressClass}
                     title={normalisedAccountAddress || undefined}
                   >
                     {displayAddress}
                   </span>
                 </h1>
 
-                <div
-                  className={`flex items-center gap-1 sm:gap-2 ml-2 sm:ml-4 text-xs sm:text-sm transition-all duration-500 ${
-                    displayStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                      ? "animate-pulse scale-105 drop-shadow-[0_0_15px_rgba(57,255,20,0.6)]"
-                      : ""
-                  }`}
-                >
-                  <span
-                    className={`text-sm sm:text-lg transition-all duration-300 ${
-                      displayStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                        ? "animate-bounce sm:text-2xl"
-                        : ""
-                    }`}
-                  >
-                    {displayStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                      ? "🎉"
-                      : "🏆"}
+                <div className="flex items-center gap-1.5 sm:gap-2 ml-2 sm:ml-4 text-xs sm:text-sm">
+                  <span className="text-sm sm:text-lg">
+                    {displayStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES ? "🎉" : "🏆"}
                   </span>
-                  <span className="uppercase tracking-wider text-muted-foreground font-medium text-[10px] sm:text-sm">
+                  <span className="uppercase tracking-wider text-zinc-500 font-medium text-[10px] sm:text-sm">
                     Total
                   </span>
-                  <span
-                    className={`font-bold transition-all duration-300 ${
-                      displayStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                        ? "text-[#39ff14] text-base sm:text-xl drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] animate-pulse"
-                        : "text-primary"
-                    }`}
-                  >
+                  <span className={`font-bold ${
+                    displayStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES ? "text-accent" : "text-white"
+                  }`}>
                     {displayStats.uniqueBeastTypes}
                   </span>
-                  <span
-                    className={`transition-all duration-300 text-xs sm:text-base ${
-                      displayStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                        ? "text-[#39ff14] font-bold drop-shadow-[0_0_8px_rgba(57,255,20,0.8)] animate-pulse"
-                        : "text-muted-foreground"
-                    }`}
-                  >
+                  <span className="text-zinc-500 text-xs sm:text-base">
                     / {TOTAL_BEAST_VARIETIES}
                   </span>
-                  {displayStats.uniqueBeastTypes ===
-                    TOTAL_BEAST_VARIETIES && (
-                    <span className="text-[#39ff14] font-bold animate-pulse ml-1 sm:ml-2 text-[10px] sm:text-base">
-                      COMPLETE! ✨
+                  {displayStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES && (
+                    <span className="text-accent font-bold text-[10px] sm:text-sm">
+                      COMPLETE!
                     </span>
                   )}
                 </div>
               </div>
 
-              {/* Username loading/error states */}
               {usernamesError ? (
-                <p className="text-xs text-destructive">{usernamesError}</p>
-              ) : usernamesLoading &&
-                Object.keys(ownerUsernames).length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Loading usernames...
-                </p>
+                <p className="text-xs text-red-400">{usernamesError}</p>
+              ) : usernamesLoading && Object.keys(ownerUsernames).length === 0 ? (
+                <p className="text-xs text-zinc-500">Loading usernames...</p>
               ) : null}
             </div>
 
-            {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
               <div className="flex items-center gap-3">
                 {collectionRouteIdentifier ? (
                   <Link
-                    to={`/collection/${encodeURIComponent(
-                      collectionRouteIdentifier
-                    )}`}
-                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium bg-primary/10 text-primary border border-primary/20 rounded-md hover:bg-primary/20 transition-colors"
+                    to={`/collection/${encodeURIComponent(collectionRouteIdentifier)}`}
+                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium bg-accent/10 text-accent border border-accent/20 rounded-lg hover:bg-accent/20 transition-colors"
                   >
                     View Beast Collection
                   </Link>
@@ -641,7 +609,7 @@ function AccountPage() {
                   type="button"
                   onClick={handleRefresh}
                   disabled={anyLoading || !resolvedAddress}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 disabled:opacity-50 transition-colors"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-white/[0.06] text-zinc-300 rounded-lg hover:bg-white/[0.10] disabled:opacity-50 transition-colors"
                 >
                   {anyLoading ? (
                     <div className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
@@ -652,7 +620,7 @@ function AccountPage() {
               <Link
                 to="/"
                 onClick={handleBackToHome}
-                className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
               >
                 ← Back to Home
               </Link>
@@ -684,17 +652,16 @@ function AccountPage() {
         ) : null}
 
         {/* Beasts Section Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-card/10 backdrop-blur-sm rounded-md border border-muted/30">
-          <h2 className="text-lg font-bold text-primary">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <h2 className="text-lg font-bold text-white">
             {loading && total === 0
-              ? "Loading…"
+              ? "Loading..."
               : `${total.toLocaleString()} Beasts Collected`}
           </h2>
           <div className="flex items-center gap-2">
             <SortDropdown value={sortOption} onChange={setSortOption} />
             {filtersControl}
-            {/* View Mode Toggle */}
-            <div className="flex items-center border border-border/50 rounded-md bg-card/90 backdrop-blur-sm">
+            <div className="flex items-center border border-white/[0.06] rounded-lg bg-white/[0.04]">
               <Button
                 variant={viewMode === "grid" ? "default" : "ghost"}
                 size="sm"

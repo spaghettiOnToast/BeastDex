@@ -498,7 +498,7 @@ export function SummitStats({
               </span>
             </div>
             <AttackStreakSlots streak={liveStats.attackStreak} />
-            <p className="text-[10px] font-semibold text-lsGold">
+            <p className="text-[10px] font-semibold text-gold">
               +{Math.min(liveStats.attackStreak * 10, 100)}% BONUS XP NEXT
               ATTACK
             </p>

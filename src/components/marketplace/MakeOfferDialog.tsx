@@ -249,7 +249,7 @@ export default function MakeOfferDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#0b0b0f] border-gray-800">
+      <DialogContent className="bg-surface-overlay border border-white/[0.06]">
         <DialogHeader>
           <DialogTitle>Make an Offer</DialogTitle>
           <DialogDescription>
@@ -258,11 +258,11 @@ export default function MakeOfferDialog({
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <p className="text-sm text-gray-400">Beast</p>
+            <p className="text-sm text-zinc-400">Beast</p>
             <p className="text-sm font-medium">{displayName}</p>
           </div>
           <div>
-            <label className="text-sm text-gray-400">Offer Amount</label>
+            <label className="text-sm text-zinc-400">Offer Amount</label>
             <Input
               type="number"
               step="0.01"
@@ -273,13 +273,13 @@ export default function MakeOfferDialog({
               className="mt-1"
             />
             {priceBigInt && priceBigInt > 0n && usdPrice && (
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-zinc-400 mt-1">
                 ≈ ${tokenAmountToUsd(priceBigInt, tokenDecimals, usdPrice).toFixed(2)} USD
               </p>
             )}
           </div>
           <div>
-            <label className="text-sm text-gray-400">Currency</label>
+            <label className="text-sm text-zinc-400">Currency</label>
             <TokenSelect
               value={currencyAddress}
               onValueChange={setCurrencyAddress}
@@ -287,17 +287,17 @@ export default function MakeOfferDialog({
             />
           </div>
           <div>
-            <label className="text-sm text-gray-400">Offer Duration</label>
+            <label className="text-sm text-zinc-400">Offer Duration</label>
             <Select value={duration} onValueChange={setDuration}>
-              <SelectTrigger className="mt-1 bg-black/50">
+              <SelectTrigger className="mt-1 bg-surface/50">
                 <SelectValue placeholder="Select duration" />
               </SelectTrigger>
-              <SelectContent className="bg-[#0b0b0f] border-gray-800">
+              <SelectContent className="bg-surface-overlay border border-white/[0.06]">
                 {DURATION_SELECT_OPTIONS.map((option) => (
                   <SelectItem
                     key={option.value}
                     value={option.value}
-                    className="focus:bg-gray-800/50"
+                    className="focus:bg-white/[0.06]"
                   >
                     {option.label}
                   </SelectItem>
@@ -316,7 +316,7 @@ export default function MakeOfferDialog({
               </div>
             ) : null}
             {expirationDetails.preview ? (
-              <p className="mt-2 text-xs text-gray-400">
+              <p className="mt-2 text-xs text-zinc-400">
                 Expires {expirationDetails.preview}
               </p>
             ) : null}
@@ -328,20 +328,20 @@ export default function MakeOfferDialog({
           </div>
           {feeDetails && priceBigInt && (
             <div className="space-y-2">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">You pay if accepted</p>
+              <p className="text-xs text-zinc-500 uppercase tracking-wide">You pay if accepted</p>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-400">Offer Amount:</span>
+                <span className="text-sm text-zinc-400">Offer Amount:</span>
                 <span className="text-sm font-medium">{price} {tokenSymbol}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-400">Client Fee ({CLIENT_FEE_BP / 100}%):</span>
-                <span className="text-sm font-medium text-gray-400">+{feeDetails.feeFormatted} {tokenSymbol}</span>
+                <span className="text-sm text-zinc-400">Client Fee ({CLIENT_FEE_BP / 100}%):</span>
+                <span className="text-sm font-medium text-zinc-400">+{feeDetails.feeFormatted} {tokenSymbol}</span>
               </div>
-              <div className="flex justify-between border-t border-gray-700 pt-2">
+              <div className="flex justify-between border-t border-white/[0.08] pt-2">
                 <span className="text-sm font-semibold text-white">Total to Pay:</span>
-                <span className="text-sm font-semibold text-lsGold">{feeDetails.totalFormatted} {tokenSymbol}</span>
+                <span className="text-sm font-semibold text-gold">{feeDetails.totalFormatted} {tokenSymbol}</span>
               </div>
-              <p className="text-xs text-gray-500 text-center mt-2">
+              <p className="text-xs text-zinc-500 text-center mt-2">
                 Fees are only charged if your offer is accepted.
               </p>
             </div>
@@ -352,14 +352,14 @@ export default function MakeOfferDialog({
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={submitting}
-              className="border-gray-600 hover:border-gray-500"
+              className="border-white/[0.10] hover:border-white/[0.15]"
             >
               Cancel
             </Button>
             <Button
               onClick={onSubmit}
               disabled={!canSubmit || submitting}
-              className="bg-lsGold/20 text-lsGold border border-lsGold hover:bg-lsGold/30"
+              className="bg-gold/15 text-gold border border-gold hover:bg-gold/20"
             >
               {submitting ? "Submitting..." : "Make Offer"}
             </Button>

@@ -24,8 +24,8 @@ export function ActionButton({
 
   const actionButtonClasses = cn(
     "font-semibold uppercase tracking-wide",
-    variant === "default" && "bg-lsGold text-black hover:bg-lsGold/80",
-    variant === "outline" && "border-lsGold text-lsGold hover:bg-gray-900 hover:text-lsGold",
+    variant === "default" && "bg-gold text-black hover:bg-gold/80",
+    variant === "outline" && "border-gold text-gold hover:bg-gray-900 hover:text-gold",
     size === "sm" && "text-[10px]",
     size === "md" && "text-xs",
     size === "lg" && "text-sm",

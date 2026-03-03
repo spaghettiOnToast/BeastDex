@@ -111,7 +111,7 @@ function BeastDetailPage() {
   if (loading) {
     return (
       <AppLayout topBar={topBar}>
-        <div className="flex min-h-[40vh] items-center justify-center text-lsGold font-roboto">
+        <div className="flex min-h-[40vh] items-center justify-center text-gold font-roboto">
           Loading beast details...
         </div>
       </AppLayout>
@@ -125,7 +125,7 @@ function BeastDetailPage() {
           <p className="text-sm text-red-400">{error ?? "Beast not found"}</p>
           <Link
             to="/"
-            className="inline-flex items-center justify-center rounded-md border border-lsGold px-4 py-2 text-xs font-semibold uppercase tracking-wide text-lsGold transition hover:bg-gray-900"
+            className="inline-flex items-center justify-center rounded-md border border-gold px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gold transition hover:bg-white/[0.06]"
           >
             Back to Home
           </Link>
@@ -145,12 +145,12 @@ function BeastDetailPage() {
         <div className="flex items-center justify-between">
           <Link
             to="/"
-            className="inline-flex items-center gap-2 text-xs uppercase tracking-wide text-lsGold hover:underline"
+            className="inline-flex items-center gap-2 text-xs uppercase tracking-wide text-gold hover:underline"
           >
             ← Back to BeastDex
           </Link>
           {ownerLookupLoading ? (
-            <span className="text-[11px] text-gray-400">
+            <span className="text-[11px] text-zinc-400">
               Fetching owner username...
             </span>
           ) : ownerLookupError ? (
@@ -161,7 +161,7 @@ function BeastDetailPage() {
         {/* Beast Name Header */}
         <div className="text-center">
           {beastPrefix && (
-            <p className="text-lg text-lsGold font-medium">"{beastPrefix}"</p>
+            <p className="text-lg text-gold font-medium">"{beastPrefix}"</p>
           )}
           <h1 className="text-3xl font-bold text-white uppercase tracking-wide">
             {beastType}

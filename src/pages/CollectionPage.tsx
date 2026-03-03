@@ -29,13 +29,19 @@ import { Grid, Table } from "lucide-react";
 import {
   fetchBeastAttributeFilters,
   fetchBeasts,
+  fetchBeastCombinedRanks,
+  fetchOwnerBeastStats,
+  fetchOwnerBeastHighlights,
   type Beast,
+  type BeastPowerRank,
+  type BeastHealthRank,
+  type OwnerBeastStats,
+  type OwnerBeastHighlights,
 } from "../services/beast";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import {
   computeBeastCollectionStats,
   EMPTY_BEAST_COLLECTION_STATS,
-  TOTAL_BEAST_VARIETIES,
   calculateCategoryDuplicateCounts,
 } from "../utils/beastCollection";
 import { normaliseStarknetAddress } from "../utils/address";
@@ -48,6 +54,8 @@ import { runBeastSql } from "../services/beast/sqlClient";
 import { mapBeastRow } from "../services/beast/helpers";
 import { apiCache } from "../services/apiCache";
 import { fetchOwnerSummitRankFromApi, type OwnerSummitRank } from "../services/summitApi";
+import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
+import type { OverviewCard } from "../components/account/OverviewCards";
 
 const TABS = [
   { key: "all", label: "All" },
@@ -76,7 +84,7 @@ type CategoryMaps = {
 const TAB_STYLES: Record<TabKey, { active: string; inactive: string }> = {
   standard: {
     active: "border-lsGold bg-white text-black",
-    inactive: "border-green/400/40",
+    inactive: "border-green-400/40",
   },
   animated: {
     active: "border-lsGold bg-sky-400 text-black",
@@ -87,8 +95,7 @@ const TAB_STYLES: Record<TabKey, { active: string; inactive: string }> = {
     inactive: "border-yellow-300/40",
   },
   animatedShiny: {
-    active:
-      "border-lsGold bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 text-black",
+    active: "border-lsGold bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 text-black",
     inactive: "border-pink-400/40",
   },
   all: {
@@ -186,6 +193,10 @@ function CollectionPage() {
     EMPTY_BEAST_COLLECTION_STATS
   );
   const [summitRank, setSummitRank] = useState<OwnerSummitRank | null>(null);
+  const [ownerStats, setOwnerStats] = useState<OwnerBeastStats | null>(null);
+  const [beastHighlights, setBeastHighlights] = useState<OwnerBeastHighlights | null>(null);
+  const [accountRanking, setAccountRanking] = useState<BeastPowerRank | null>(null);
+  const [healthRanking, setHealthRanking] = useState<BeastHealthRank | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
 
@@ -306,6 +317,10 @@ function CollectionPage() {
       setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
       setOwnedBeasts([]);
       setSummitRank(null);
+      setOwnerStats(null);
+      setBeastHighlights(null);
+      setAccountRanking(null);
+      setHealthRanking(null);
       setSummaryError(identifierError);
       setSummaryLoading(false);
       return;
@@ -317,18 +332,21 @@ function CollectionPage() {
     setSummaryError(null);
 
     try {
-      // Fetch summit rank in parallel with beast loading
-      fetchOwnerSummitRankFromApi(resolvedAddress)
-        .then((result) => {
-          if (summaryRequestRef.current === requestId) {
-            setSummitRank(result);
-          }
-        })
-        .catch(() => {
-          if (summaryRequestRef.current === requestId) {
-            setSummitRank(null);
-          }
-        });
+      // Fetch extra stats in parallel with beast loading
+      Promise.all([
+        fetchOwnerSummitRankFromApi(resolvedAddress).catch(() => null),
+        fetchBeastCombinedRanks(resolvedAddress).catch(() => ({ powerRank: null, healthRank: null })),
+        fetchOwnerBeastStats(resolvedAddress).catch(() => null),
+        fetchOwnerBeastHighlights(resolvedAddress).catch(() => null),
+      ]).then(([summit, ranks, stats, highlights]) => {
+        if (summaryRequestRef.current === requestId) {
+          setSummitRank(summit);
+          setAccountRanking(ranks.powerRank);
+          setHealthRanking(ranks.healthRank);
+          setOwnerStats(stats);
+          setBeastHighlights(highlights);
+        }
+      });
 
       // Load ALL user's beasts efficiently (we only need their collection, not random samples)
       const limit = 300; // Larger batch for faster loading
@@ -373,6 +391,10 @@ function CollectionPage() {
       setOwnedBeasts([]);
       setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
       setSummitRank(null);
+      setOwnerStats(null);
+      setBeastHighlights(null);
+      setAccountRanking(null);
+      setHealthRanking(null);
       setSummaryError(getUserFriendlyErrorMessage(err, "Failed to load collection"));
     } finally {
       if (summaryRequestRef.current === requestId) {
@@ -879,6 +901,93 @@ function CollectionPage() {
   const displayNameClass =
     accountUsername || identifierIsUsername ? "" : "font-mono";
 
+  // Most powerful beast is the first beast (sorted by default power)
+  const mostPowerfulBeast = useMemo(
+    () => (ownedBeasts.length > 0 ? ownedBeasts[0] : null),
+    [ownedBeasts]
+  );
+
+  const mostPowerfulTitle = useMemo(() => {
+    const name = mostPowerfulBeast?.name;
+    if (!name) return null;
+    const trimmed = name.trim();
+    const quotedMatch = trimmed.match(/"([^"]+)"/);
+    if (quotedMatch?.[1]) return quotedMatch[1];
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return `${parts[0]} ${parts[1]}`;
+    if (parts.length === 1) return parts[0];
+    return null;
+  }, [mostPowerfulBeast]);
+
+  const rankDisplay =
+    accountRanking?.rank != null
+      ? `#${accountRanking.rank.toLocaleString()}`
+      : "—";
+  const rankSubheading = accountRanking?.totalOwners
+    ? `of ${accountRanking.totalOwners.toLocaleString()}`
+    : "";
+
+  // Display stats for ThreeColumnStatsLayout
+  const displayStats = useMemo(() => ({
+    animatedShinyCount: collectionStats.animatedShinyCount,
+    animatedCount: collectionStats.animatedCount,
+    shinyCount: collectionStats.shinyCount,
+    standardCount: collectionStats.standardCount,
+    uniqueBeastTypes: collectionStats.uniqueBeastTypes,
+    uniqueAnimatedShinyTypes: collectionStats.uniqueAnimatedShinyTypes,
+    uniqueAnimatedTypes: collectionStats.uniqueAnimatedTypes,
+    uniqueShinyTypes: collectionStats.uniqueShinyTypes,
+    uniqueStandardTypes: collectionStats.uniqueStandardTypes,
+    mostPowerful: mostPowerfulBeast,
+    mostPowerfulTitle,
+    rarest: beastHighlights?.rarest ?? null,
+    highestRanked: beastHighlights?.highestRanked ?? null,
+    lastBeastKilled: beastHighlights?.lastCollected ?? null,
+    lastBeastKilledName: beastHighlights?.lastCollectedName ?? null,
+  }), [collectionStats, mostPowerfulBeast, mostPowerfulTitle, beastHighlights]);
+
+  const overviewCards: OverviewCard[] = useMemo(
+    () => [
+      {
+        key: "beasts",
+        icon: "🐾",
+        label: "Beasts Collected",
+        value: (ownerStats?.totalBeasts ?? ownedBeasts.length).toLocaleString(),
+      },
+      {
+        key: "power",
+        icon: "🔮",
+        label: "Combined Power",
+        value: (ownerStats?.totalPower ?? 0).toLocaleString(),
+      },
+      {
+        key: "rank",
+        icon: "🏆",
+        label: "Power Rank",
+        value: rankDisplay,
+        sub: rankSubheading || "Global leaderboard",
+      },
+      {
+        key: "health",
+        icon: "❤️",
+        label: "Combined Health",
+        value: (healthRanking?.totalHealth ?? 0).toLocaleString(),
+      },
+      ...(summitRank?.rank != null
+        ? [
+            {
+              key: "summit",
+              icon: "⛰️",
+              label: "Summit Rank",
+              value: `#${summitRank.rank}`,
+              sub: `of ${summitRank.total_owners}`,
+            },
+          ]
+        : []),
+    ],
+    [ownerStats, ownedBeasts.length, rankDisplay, rankSubheading, healthRanking, summitRank]
+  );
+
   const [selectedBeast, setSelectedBeast] = useState<Beast | null>(null);
   const [currentDuplicateIndex, setCurrentDuplicateIndex] = useState(0);
 
@@ -939,23 +1048,34 @@ function CollectionPage() {
   return (
     <AppLayout topBar={topBar}>
       <div className="flex flex-col gap-2">
-        <div className="flex flex-col items-center text-center text-xs text-gray-400 pt-3 sm:pt-4">
-          {collectionStats.mostPowerfulTitle ? (
-            <span className="bg-gradient-to-r from-[#ff7cf7] via-[#7dfbff] to-[#8bff72] bg-clip-text text-3xl font-semibold uppercase tracking-[0.35em] text-transparent">
-              "{collectionStats.mostPowerfulTitle}"
+        <div className="relative pt-3 sm:pt-4">
+          {summitRank?.rank != null && (
+            <div className="absolute top-3 left-0 text-left">
+              <p className="text-[10px] uppercase tracking-wider text-zinc-500">Summit Rank</p>
+              <p className="text-sm font-bold text-[#fbcb4a]">
+                #{summitRank.rank}
+                <span className="text-zinc-500 font-normal text-xs ml-1">of {summitRank.total_owners}</span>
+              </p>
+            </div>
+          )}
+          <div className="flex flex-col items-center text-center">
+            {collectionStats.mostPowerfulTitle ? (
+              <span className="bg-gradient-to-r from-[#ff7cf7] via-[#7dfbff] to-[#8bff72] bg-clip-text text-3xl font-semibold uppercase tracking-[0.35em] text-transparent">
+                "{collectionStats.mostPowerfulTitle}"
+              </span>
+            ) : null}
+            <span
+              className="bg-gradient-to-r from-[#f9e08a] via-[#fbdc5e] to-[#39ff14] bg-clip-text text-4xl font-semibold uppercase tracking-[0.35em]"
+              style={{ WebkitTextFillColor: "#fbeaa0" }}
+            >
+              <span className={`${displayNameClass} uppercase`}>
+                {displayName}
+              </span>
             </span>
-          ) : null}
-          <span
-            className="bg-gradient-to-r from-[#f9e08a] via-[#fbdc5e] to-[#39ff14] bg-clip-text text-4xl font-semibold uppercase tracking-[0.35em]"
-            style={{ WebkitTextFillColor: "#fbeaa0" }}
-          >
-            <span className={`${displayNameClass} uppercase`}>
-              {displayName}
-            </span>
-          </span>
-          <p className="text-[11px] uppercase tracking-[0.2em] text-gray-500">
-            Collection Overview
-          </p>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-zinc-500 mt-1">
+              Collection Overview
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center justify-between">
@@ -974,147 +1094,11 @@ function CollectionPage() {
           </Link>
         </div>
 
-        <div className="flex flex-wrap gap-4 justify-center">
-          {[
-            {
-              key: "total",
-              label: "Total Collected",
-              count: ownedBeasts.length,
-              mainValue: `${ownedBeasts.length}`,
-              subValue: `All Beasts`,
-              color: "rgb(59, 130, 246)",
-              bgGradient: "bg-gradient-to-br from-blue-500/15 to-blue-500/5",
-              borderColor: "border-blue-400/30",
-              icon: "📦",
-              glisten: "",
-            },
-            {
-              key: "collected",
-              label: "Unique Beasts",
-              count: collectionStats.uniqueBeastTypes,
-              total: TOTAL_BEAST_VARIETIES,
-              mainValue: `${collectionStats.uniqueBeastTypes}`,
-              subValue: `${TOTAL_BEAST_VARIETIES} Unique Beasts`,
-              color:
-                collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                  ? "rgb(57, 255, 20)"
-                  : "hsl(var(--primary))",
-              bgGradient:
-                collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                  ? "bg-gradient-to-br from-[#39ff14]/25 via-[#8bff72]/15 to-[#39ff14]/10 animate-pulse shadow-[0_0_30px_rgba(57,255,20,0.3)]"
-                  : "bg-gradient-to-br from-primary/15 to-primary/5",
-              borderColor:
-                collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                  ? "border-[#39ff14]/50 shadow-[0_0_20px_rgba(57,255,20,0.2)]"
-                  : "border-primary/30",
-              icon:
-                collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                  ? "🎉"
-                  : "🏆",
-              glisten:
-                collectionStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
-                  ? "animate-[shimmer_2s_ease-in-out_infinite]"
-                  : "",
-            },
-            {
-              key: "animatedShiny",
-              label: "Animated Shiny",
-              count: collectionStats.animatedShinyCount,
-              unique: collectionStats.uniqueAnimatedShinyTypes,
-              mainValue: `${collectionStats.animatedShinyCount}`,
-              subValue: `${collectionStats.uniqueAnimatedShinyTypes} Unique Beasts`,
-              color: "rgb(236, 72, 153)",
-              bgGradient:
-                "bg-gradient-to-br from-pink-500/15 via-purple-500/10 to-blue-500/5 animate-pulse",
-              borderColor: "border-pink-400/30",
-              icon: "✨",
-              glisten:
-                "before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-white/10 before:to-transparent before:translate-x-[-200%] before:animate-[shimmer_3s_ease-in-out_infinite] before:skew-x-12",
-            },
-            {
-              key: "animated",
-              label: "Animated",
-              count: collectionStats.animatedCount,
-              unique: collectionStats.uniqueAnimatedTypes,
-              mainValue: `${collectionStats.animatedCount}`,
-              subValue: `${collectionStats.uniqueAnimatedTypes} Unique Beasts`,
-              color: "rgb(125, 211, 252)",
-              bgGradient: "bg-gradient-to-br from-sky-500/15 to-sky-500/5",
-              borderColor: "border-sky-400/30",
-              icon: "⚡",
-              glisten:
-                "before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-cyan-400/20 before:to-transparent before:translate-x-[-200%] before:animate-[shimmer_2.5s_ease-in-out_infinite_1s] before:skew-x-12",
-            },
-            {
-              key: "shiny",
-              label: "Shiny",
-              count: collectionStats.shinyCount,
-              unique: collectionStats.uniqueShinyTypes,
-              mainValue: `${collectionStats.shinyCount}`,
-              subValue: `${collectionStats.uniqueShinyTypes} Unique Beasts`,
-              color: "rgb(253, 224, 71)",
-              bgGradient:
-                "bg-gradient-to-br from-yellow-500/15 to-yellow-500/5",
-              borderColor: "border-yellow-400/30",
-              icon: "⭐",
-              glisten:
-                "before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-yellow-300/30 before:to-transparent before:translate-x-[-200%] before:animate-[shimmer_2s_ease-in-out_infinite_0.5s] before:skew-x-12",
-            },
-            {
-              key: "standard",
-              label: "Standard",
-              count: collectionStats.standardCount,
-              unique: collectionStats.uniqueStandardTypes,
-              mainValue: `${collectionStats.standardCount}`,
-              subValue: `${collectionStats.uniqueStandardTypes} Unique Beasts`,
-              color: "rgb(34, 197, 94)",
-              bgGradient: "bg-gradient-to-br from-green-500/15 to-green-500/5",
-              borderColor: "border-green-400/30",
-              icon: "🐾",
-              glisten: "",
-            },
-            ...(summitRank?.rank != null
-              ? [
-                  {
-                    key: "summit",
-                    label: "Summit Rank",
-                    count: summitRank.rank,
-                    mainValue: `#${summitRank.rank}`,
-                    subValue: "Rewards Leaderboard",
-                    color: "rgb(234, 179, 8)",
-                    bgGradient:
-                      "bg-gradient-to-br from-yellow-500/15 to-orange-500/5",
-                    borderColor: "border-yellow-400/30",
-                    icon: "⛰️",
-                    glisten: "",
-                  },
-                ]
-              : []),
-          ].map((card) => (
-            <div
-              key={card.key}
-              className={`${card.bgGradient} ${card.borderColor} ${card.glisten} backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-md min-h-[120px] flex flex-col relative overflow-hidden rounded-lg border p-4 min-w-[160px]`}
-            >
-              <div className="flex flex-col items-center text-center gap-1.5 mb-2 min-h-[20px] relative z-10">
-                <span className="text-sm flex-shrink-0">{card.icon}</span>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium truncate">
-                  {card.label}
-                </p>
-              </div>
-              <div className="flex-1 flex flex-col justify-center text-center space-y-1 relative z-10">
-                <p
-                  className="text-lg font-bold leading-none"
-                  style={{ color: card.color }}
-                >
-                  {card.mainValue}
-                </p>
-                <p className="text-xs text-muted-foreground leading-none">
-                  {card.subValue}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
+        {/* Profile Stats - Three Column Layout */}
+        <ThreeColumnStatsLayout
+          collectionStats={displayStats}
+          overviewCards={overviewCards}
+        />
 
         {/* Consolidate SQL errors into a single banner */}
         {(() => {
@@ -1159,7 +1143,8 @@ function CollectionPage() {
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 my-6">
+        {/* Tabs - colored pills */}
+        <div className="mb-4">
           <div className="flex flex-wrap items-center gap-2">
             {TABS.map((tab) => {
               const styles = TAB_STYLES[tab.key];
@@ -1180,24 +1165,25 @@ function CollectionPage() {
               );
             })}
           </div>
+        </div>
 
-          <div className="flex items-center gap-3">
+        {/* Controls row */}
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
             <SortDropdown value={sortOption} onChange={setSortOption} />
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowDuplicatesOnly(!showDuplicatesOnly)}
-              className={`font-medium bg-card/90 backdrop-blur-sm hover:bg-card ${
+              className={`font-medium text-xs h-8 ${
                 showDuplicatesOnly
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border/50"
+                  ? "border-accent/30 bg-accent/10 text-accent"
+                  : "border-white/[0.06] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08]"
               }`}
             >
-              <span className="text-muted-foreground mr-1.5">Show:</span>
-              {showDuplicatesOnly ? "All Beasts" : "Duplicates Only"}
+              {showDuplicatesOnly ? "Dupes Only" : "Duplicates"}
             </Button>
-            {/* View Mode Toggle */}
-            <div className="flex items-center border border-border/50 rounded-md bg-card/90 backdrop-blur-sm">
+            <div className="flex items-center border border-white/[0.06] rounded-lg bg-white/[0.04]">
               <Button
                 variant={viewMode === "grid" ? "default" : "ghost"}
                 size="sm"
@@ -1215,28 +1201,27 @@ function CollectionPage() {
                 <Table className="h-4 w-4" />
               </Button>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                // Clear the beast query cache to force fresh data
-                apiCache.clearEndpoint("beast-query");
-                apiCache.clearEndpoint("beast-by-id");
-                void loadSummary();
-              }}
-              disabled={anyLoading || !resolvedAddress}
-              className="inline-flex items-center gap-2 rounded-md border border-lsGold px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-lsGold hover:bg-gray-900 disabled:opacity-50"
-              title="Force refresh collection data. Note: New purchases may take 1-2 minutes to sync from the blockchain."
-            >
-              {anyLoading ? (
-                <span className="h-3 w-3 animate-spin rounded-full border-2 border-lsGold border-t-transparent" />
-              ) : null}
-              <span>Refresh</span>
-            </button>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              apiCache.clearEndpoint("beast-query");
+              apiCache.clearEndpoint("beast-by-id");
+              void loadSummary();
+            }}
+            disabled={anyLoading || !resolvedAddress}
+            className="inline-flex items-center gap-2 rounded-lg border border-white/[0.06] px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
+            title="Force refresh collection data"
+          >
+            {anyLoading ? (
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
+            ) : null}
+            <span>Refresh</span>
+          </button>
         </div>
 
         {catalogLoading ? (
-          <p className="text-xs text-gray-400">Loading collection…</p>
+          <p className="text-xs text-zinc-400">Loading collection...</p>
         ) : viewMode === "table" ? (
           <BeastTableView
             beasts={ownedBeasts}
@@ -1244,7 +1229,7 @@ function CollectionPage() {
             ownerUsernames={ownerUsernames}
           />
         ) : (
-          <div className="grid gap-2 grid-cols-3 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 sm:gap-3">
+          <div className="grid gap-2 grid-cols-2 xs:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 sm:gap-3">
             {tabEntries[activeTab].map((entry) => (
               <BeastCard
                 key={entry.id}

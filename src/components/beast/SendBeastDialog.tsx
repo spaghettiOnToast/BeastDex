@@ -159,15 +159,15 @@ export function SendBeastDialog({
   if (!connectedAddress) {
     return (
       <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-        <DialogContent className="sm:max-w-md bg-black border-gray-800">
+        <DialogContent className="sm:max-w-md bg-surface-overlay border-white/[0.06]">
           <DialogHeader>
-            <DialogTitle className="text-lsGold">Send Beast</DialogTitle>
-            <DialogDescription className="text-gray-400">
+            <DialogTitle className="text-gold">Send Beast</DialogTitle>
+            <DialogDescription className="text-zinc-400">
               Connect your wallet to send this beast
             </DialogDescription>
           </DialogHeader>
-          <Alert className="bg-gray-900 border-gray-700">
-            <AlertDescription className="text-gray-300">
+          <Alert className="bg-surface-raised border-white/[0.08]">
+            <AlertDescription className="text-zinc-300">
               Please connect your wallet to send beasts
             </AlertDescription>
           </Alert>
@@ -183,10 +183,10 @@ export function SendBeastDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent className="sm:max-w-md bg-black border-gray-800">
+      <DialogContent className="sm:max-w-md bg-surface-overlay border-white/[0.06]">
         <DialogHeader>
-          <DialogTitle className="text-lsGold">Send Beast</DialogTitle>
-          <DialogDescription className="text-gray-400">
+          <DialogTitle className="text-gold">Send Beast</DialogTitle>
+          <DialogDescription className="text-zinc-400">
             Transfer {beastName} to another address or Cartridge username
           </DialogDescription>
         </DialogHeader>
@@ -219,7 +219,7 @@ export function SendBeastDialog({
         ) : (
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="recipient" className="text-gray-300">
+              <Label htmlFor="recipient" className="text-zinc-300">
                 Recipient Address or Username
               </Label>
               <Input
@@ -231,7 +231,7 @@ export function SendBeastDialog({
                   setError(null);
                 }}
                 disabled={isLoading}
-                className="font-mono bg-gray-900 border-gray-700 text-gray-100"
+                className="font-mono bg-surface-raised border-white/[0.08] text-zinc-100"
               />
               <p className="text-xs text-muted-foreground">
                 Enter a Starknet address (0x...) or Cartridge username
@@ -239,7 +239,7 @@ export function SendBeastDialog({
 
               {/* Show resolved address */}
               {isResolving && (
-                <div className="flex items-center gap-2 text-xs text-gray-400">
+                <div className="flex items-center gap-2 text-xs text-zinc-400">
                   <Loader2 className="h-3 w-3 animate-spin" />
                   <span>Resolving address...</span>
                 </div>

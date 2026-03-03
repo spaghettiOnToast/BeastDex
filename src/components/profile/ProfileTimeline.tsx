@@ -24,13 +24,13 @@ export function ProfileTimeline({ events }: { events: TimelineEvent[] }) {
 
   return (
     <div className="rounded-2xl border border-gray-800 bg-[#0b0b0f]/60 px-6 py-5">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-lsGold">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-gold">
         Collection Timeline
       </h3>
       <ol className="mt-4 space-y-4 border-l border-gray-800 pl-6">
         {events.map((event) => (
           <li key={event.id} className="relative">
-            <span className="absolute -left-3 top-1 h-2.5 w-2.5 rounded-full border border-lsGold bg-lsGold" />
+            <span className="absolute -left-3 top-1 h-2.5 w-2.5 rounded-full border border-gold bg-gold" />
             <div className="text-xs uppercase tracking-wide text-gray-500">
               {formatTimestamp(event.timestamp)}
             </div>
