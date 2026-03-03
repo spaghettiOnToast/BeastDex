@@ -42,7 +42,6 @@ import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import {
   computeBeastCollectionStats,
   EMPTY_BEAST_COLLECTION_STATS,
-  TOTAL_BEAST_VARIETIES,
   calculateCategoryDuplicateCounts,
 } from "../utils/beastCollection";
 import { normaliseStarknetAddress } from "../utils/address";
