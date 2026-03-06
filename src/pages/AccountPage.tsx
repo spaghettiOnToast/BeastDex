@@ -49,7 +49,7 @@ function isValidHexAddress(value: string): boolean {
   return /^[0-9a-fA-F]+$/.test(hexPart);
 }
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 54;
 
 function AccountPage() {
   const { identifier = "" } = useParams<{ identifier: string }>();
@@ -565,14 +565,16 @@ function AccountPage() {
                 </h1>
 
                 <div className="flex items-center gap-1.5 sm:gap-2 ml-2 sm:ml-4 text-xs sm:text-sm">
-                  <span className="text-sm sm:text-lg">
+                  <span className={`text-sm sm:text-lg${displayStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES ? " animate-bounce" : ""}`}>
                     {displayStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES ? "🎉" : "🏆"}
                   </span>
                   <span className="uppercase tracking-wider text-zinc-500 font-medium text-[10px] sm:text-sm">
                     Total
                   </span>
                   <span className={`font-bold ${
-                    displayStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES ? "text-accent" : "text-white"
+                    displayStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                      ? "text-[#39ff14] drop-shadow-[0_0_8px_rgba(57,255,20,0.6)]"
+                      : "text-white"
                   }`}>
                     {displayStats.uniqueBeastTypes}
                   </span>
@@ -580,7 +582,7 @@ function AccountPage() {
                     / {TOTAL_BEAST_VARIETIES}
                   </span>
                   {displayStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES && (
-                    <span className="text-accent font-bold text-[10px] sm:text-sm">
+                    <span className="text-[#39ff14] font-bold text-[10px] sm:text-sm drop-shadow-[0_0_8px_rgba(57,255,20,0.6)]">
                       COMPLETE!
                     </span>
                   )}
@@ -599,9 +601,9 @@ function AccountPage() {
                 {collectionRouteIdentifier ? (
                   <Link
                     to={`/collection/${encodeURIComponent(collectionRouteIdentifier)}`}
-                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium bg-accent/10 text-accent border border-accent/20 rounded-lg hover:bg-accent/20 transition-colors"
+                    className="inline-flex items-center px-3 py-1.5 text-sm font-semibold uppercase tracking-wide bg-[#a855f7] text-white rounded-lg hover:bg-[#9333ea] transition-colors"
                   >
-                    View Beast Collection
+                    Collection
                   </Link>
                 ) : null}
 

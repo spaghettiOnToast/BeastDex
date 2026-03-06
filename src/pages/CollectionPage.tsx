@@ -1292,6 +1292,8 @@ function CollectionPage() {
           onNextDuplicate={navigateToNextDuplicate}
           onPreviousDuplicate={navigateToPreviousDuplicate}
         />
+
+
       </div>
     </AppLayout>
   );

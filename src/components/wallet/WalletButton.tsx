@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useAccount, useConnect, useDisconnect } from "@starknet-react/core";
 
 
-import { ChevronDown, LogOut, Wallet } from "lucide-react";
+import { ChevronDown, LogOut, User, Wallet } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { controllerConnector } from "../../wallet/controller";
 import controllerIcon from "../../assets/cartridge-icon.svg";
 import { Button } from "../ui/button";
@@ -29,6 +30,7 @@ export function WalletButton() {
   const { disconnectAsync } = useDisconnect();
   const [username, setUsername] = useState<string | null>(null);
   const { promptToSAcceptance, hasAcceptedToS } = useTermsOfService();
+  const navigate = useNavigate();
 
   const activeConnector = useMemo(() => {
     return (
@@ -142,6 +144,16 @@ export function WalletButton() {
           boxShadow: "0 4px 24px rgba(0, 0, 0, 0.5)",
         }}
       >
+        <DropdownMenuItem
+          onClick={() => {
+            const id = username || (address ? address : "");
+            if (id) navigate(`/account/${encodeURIComponent(id)}`);
+          }}
+          className="cursor-pointer focus:bg-white/[0.06] focus:text-white"
+        >
+          <User className="h-4 w-4" />
+          Account
+        </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => {
             try {
