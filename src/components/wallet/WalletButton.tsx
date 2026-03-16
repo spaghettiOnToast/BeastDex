@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAccount, useConnect, useDisconnect } from "@starknet-react/core";
 
-
 import { ChevronDown, LogOut, User, Wallet } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { controllerConnector } from "../../wallet/controller";
@@ -92,7 +91,14 @@ export function WalletButton() {
         setUsername(null);
       });
     }
-  }, [address, username, hasAcceptedToS, promptToSAcceptance, disconnectAsync, activeConnector]);
+  }, [
+    address,
+    username,
+    hasAcceptedToS,
+    promptToSAcceptance,
+    disconnectAsync,
+    activeConnector,
+  ]);
 
   if (!username) {
     return (
@@ -130,7 +136,9 @@ export function WalletButton() {
           <span className="inline-flex h-4 w-4 items-center justify-center">
             <img src={controllerIcon} alt="Controller" className="h-4 w-4" />
           </span>
-          <span className="truncate max-w-[60px] sm:max-w-[80px]">{username}</span>
+          <span className="truncate max-w-[60px] sm:max-w-[80px]">
+            {username}
+          </span>
           <ChevronDown className="h-3 w-3 text-gray-700 hidden sm:block" />
         </Button>
       </DropdownMenuTrigger>
@@ -152,7 +160,7 @@ export function WalletButton() {
           className="cursor-pointer focus:bg-white/[0.06] focus:text-white"
         >
           <User className="h-4 w-4" />
-          Account
+          Profile
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => {
