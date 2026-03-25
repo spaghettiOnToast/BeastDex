@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { type Beast, fetchBeastsByIds } from "../services/beast";
 
 interface ListingWithBeast {
@@ -94,6 +94,7 @@ export function useBeastLookup(
     gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
+    placeholderData: keepPreviousData,
     queryFn: () => fetchBeastsByIds(firstPageIds),
   });
 
@@ -109,6 +110,7 @@ export function useBeastLookup(
     gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
+    placeholderData: keepPreviousData,
     queryFn: () => fetchBeastsByIds(remainingIds),
   });
 

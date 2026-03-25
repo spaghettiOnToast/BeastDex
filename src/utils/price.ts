@@ -34,11 +34,14 @@ export function fromWei(weiAmount: BigNumberish, decimals: number = 18): string 
     const wholePart = amount / divisor;
     const fractionalPart = amount % divisor;
 
-    // If whole part is 0, show up to 2 decimal places
+    // If whole part is 0, show enough decimal places for the first significant digit(s)
     if (wholePart === 0n && fractionalPart > 0n) {
       const fractionalStr = fractionalPart.toString().padStart(decimals, '0');
       const trimmed = fractionalStr.replace(/0+$/, '');
-      const displayFractional = trimmed.slice(0, 2);
+      // Find first non-zero digit and show at least up to it (minimum 2 places)
+      const firstNonZero = trimmed.search(/[1-9]/);
+      const displayLen = Math.max(2, firstNonZero + 2);
+      const displayFractional = trimmed.slice(0, displayLen);
       return `0.${displayFractional}`;
     }
 
