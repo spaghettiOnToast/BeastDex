@@ -1082,16 +1082,16 @@ function CollectionPage() {
         <div className="flex items-center justify-between">
           <Link
             to="/"
-            className="text-xs uppercase tracking-wide text-lsGold hover:underline"
+            className="inline-flex items-center gap-1.5 rounded border border-lsGold px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-lsGold transition-colors hover:bg-[rgba(208,201,141,0.2)]"
           >
             ← Back to Home
           </Link>
 
           <Link
             to={`/account/${encodeURIComponent(trimmedIdentifier)}`}
-            className="text-xs uppercase tracking-wide text-lsGold hover:underline"
+            className="inline-flex items-center gap-1.5 rounded border border-lsGold px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-lsGold transition-colors hover:bg-[rgba(208,201,141,0.2)]"
           >
-            ← Back to Account
+            Go to Profile
           </Link>
         </div>
 

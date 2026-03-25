@@ -313,9 +313,11 @@ export default function MarketplacePage() {
   });
 
   // Recent sales hook (from indexer)
-  const { namedRecentSales, invalidateAndRefetch: invalidateRecentSales } = useRecentSales({
+  const { namedRecentSales, invalidateAndRefetch: invalidateRecentSales, totalPages: soldTotalPages, totalItems: soldTotalItems } = useRecentSales({
     listings: dataHook.listings,
-    limit: 250,
+    limit: 500,
+    page: soldPage,
+    pageSize: 100,
   });
 
   // Combined invalidation function for all sales data
@@ -1752,9 +1754,8 @@ export default function MarketplacePage() {
                 ) : (
                   <div className="space-y-3">
                     {(() => {
-                      const SOLD_PAGE_SIZE = 50;
-                      const startIdx = (soldPage - 1) * SOLD_PAGE_SIZE;
-                      return namedRecentSales.slice(startIdx, startIdx + SOLD_PAGE_SIZE);
+                      const startIdx = (soldPage - 1) * 100;
+                      return namedRecentSales.slice(startIdx, startIdx + 100);
                     })().map(({ sale, beast, tokenId, price, from, to, time }, idx) => {
                       const tokenAddress = sale.order?.currency;
                       const token = tokenAddress ? getPaymentTokenByAddress(tokenAddress) : null;
@@ -1819,22 +1820,15 @@ export default function MarketplacePage() {
                     })}
                   </div>
                 )}
-                {(() => {
-                  const SOLD_PAGE_SIZE = 50;
-                  const totalSoldPages = Math.ceil(namedRecentSales.length / SOLD_PAGE_SIZE);
-                  if (totalSoldPages > 1) {
-                    return (
-                      <Pagination
-                        currentPage={soldPage}
-                        totalPages={totalSoldPages}
-                        totalItems={namedRecentSales.length}
-                        itemsPerPage={SOLD_PAGE_SIZE}
-                        onPageChange={setSoldPage}
-                      />
-                    );
-                  }
-                  return null;
-                })()}
+                {soldTotalPages > 1 && (
+                  <Pagination
+                    currentPage={soldPage}
+                    totalPages={soldTotalPages}
+                    totalItems={soldTotalItems}
+                    itemsPerPage={100}
+                    onPageChange={setSoldPage}
+                  />
+                )}
               </>
             ) : (
               /* Activity Tab - Combined listings and sales table */

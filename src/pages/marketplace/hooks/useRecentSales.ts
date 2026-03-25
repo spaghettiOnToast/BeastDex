@@ -18,28 +18,36 @@ export interface RecentSaleWithBeast {
 interface UseRecentSalesProps {
   listings: Array<{ tokenId: string; beast?: Beast | null }>;
   limit?: number;
+  page?: number;
+  pageSize?: number;
 }
 
 /**
- * Hook for fetching recent sales from the marketplace indexer via GraphQL
+ * Hook for fetching recent sales from the marketplace indexer via GraphQL.
+ * Only hydrates beast metadata for the current page to avoid unnecessary fetches.
  */
-export function useRecentSales({ listings, limit = 20 }: UseRecentSalesProps) {
+export function useRecentSales({ listings, limit = 20, page = 1, pageSize = 100 }: UseRecentSalesProps) {
   // Fetch sales via GraphQL
   const { data: sales = [], isLoading, refetch: refetchSales, invalidateAndRefetch } = useArcadeSalesForCollection(
     BEASTS_COLLECTION_ADDRESS,
     limit
   );
 
-  // Collect token IDs from sales for beast lookup
-  const saleTokenIds = useMemo(
-    () => sales.map(sale => sale.order.tokenId.toString()),
-    [sales]
-  );
+  // Only collect token IDs for the current page to limit beast metadata fetches
+  const { pageTokenIds, totalPages, totalItems } = useMemo(() => {
+    const startIdx = (page - 1) * pageSize;
+    const pageSales = sales.slice(startIdx, startIdx + pageSize);
+    return {
+      pageTokenIds: pageSales.map(sale => sale.order.tokenId.toString()),
+      totalPages: Math.ceil(sales.length / pageSize),
+      totalItems: sales.length,
+    };
+  }, [sales, page, pageSize]);
 
-  // Use shared beast lookup hook
-  const { getBeast } = useBeastLookup(listings, saleTokenIds);
+  // Use shared beast lookup hook — only fetches beasts for the current page
+  const { getBeast } = useBeastLookup(listings, pageTokenIds);
 
-  // Transform sales into RecentSaleWithBeast with beast data
+  // Transform ALL sales but only attach beast data for hydrated tokens
   const recentSales = useMemo((): RecentSaleWithBeast[] => {
     return sales.map(sale => {
       const tokenId = sale.order.tokenId.toString();
@@ -62,5 +70,7 @@ export function useRecentSales({ listings, limit = 20 }: UseRecentSalesProps) {
     isLoading,
     refetchSales,
     invalidateAndRefetch,
+    totalPages,
+    totalItems,
   };
 }
