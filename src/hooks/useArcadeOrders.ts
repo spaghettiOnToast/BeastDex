@@ -271,9 +271,11 @@ async function fetchArcadeSalesGraphQL(
   const data = await graphqlFetch<Response>(query, { collection: normalizedCollection, limit }, signal);
 
   const edges = data?.arcadeSaleModels?.edges ?? [];
-  return edges
+  const sales = edges
     .map((edge: any) => parseGraphQLSale(edge.node))
     .filter(Boolean) as ArcadeSaleCompat[];
+  // Sort client-side to guarantee newest-first regardless of indexer ordering
+  return sales.sort((a, b) => b.time - a.time);
 }
 
 export function useArcadeSalesForCollection(collectionAddress: string, limit: number = 100) {
