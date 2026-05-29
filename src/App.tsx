@@ -26,6 +26,8 @@ const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const CollectionPage = lazy(() => import("./pages/CollectionPage"));
 const LeaderboardPage = lazy(() => import("./pages/LeaderboardPage"));
 const MarketplacePage = lazy(() => import("./pages/MarketplacePage"));
+const DungeonsPage = lazy(() => import("./pages/DungeonsPage"));
+const TiddyMunDetailPage = lazy(() => import("./pages/TiddyMunDetailPage"));
 
 const provider = jsonRpcProvider({
   rpc: (chain: Chain) => {
@@ -90,6 +92,8 @@ function App() {
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/statistics" element={<LeaderboardPage />} />
                 <Route path="/marketplace" element={<MarketplacePage />} />
+                <Route path="/dungeons" element={<DungeonsPage />} />
+                <Route path="/dungeons/:tokenId" element={<TiddyMunDetailPage />} />
               </Routes>
               {/* Global floating carts and dialogs */}
               <FloatingCarts />
