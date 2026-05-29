@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { BarChart3, Store, Package } from "lucide-react";
+import { BarChart3, Store, Package, Sword } from "lucide-react";
 import { useAccount } from "@starknet-react/core";
 import Logo from "../common/Logo";
 import SearchBar from "../common/SearchBar";
@@ -59,6 +59,15 @@ export default function TopBar({ filtersControl, onLogoClick }: Props) {
           <Link to="/statistics">
             <BarChart3 className="h-4 w-4" />
             <span className="hidden lg:inline">Statistics</span>
+          </Link>
+        </Button>
+        <Button
+          asChild
+          className="bg-amber-700 text-white text-xs font-semibold uppercase tracking-wide hover:bg-amber-600 hover:text-white h-9 px-3 lg:px-4 lg:min-w-[130px]"
+        >
+          <Link to="/dungeons">
+            <Sword className="h-4 w-4" />
+            <span className="hidden lg:inline">Dungeons</span>
           </Link>
         </Button>
         <WalletButton />
