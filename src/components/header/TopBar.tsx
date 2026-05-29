@@ -62,13 +62,11 @@ export default function TopBar({ filtersControl, onLogoClick }: Props) {
           </Link>
         </Button>
         <Button
-          asChild
-          className="bg-amber-700 text-white text-xs font-semibold uppercase tracking-wide hover:bg-amber-600 hover:text-white h-9 px-3 lg:px-4 lg:min-w-[130px]"
+          disabled
+          className="bg-amber-700/40 text-white/40 text-xs font-semibold uppercase tracking-wide h-9 px-3 lg:px-4 lg:min-w-[130px] cursor-not-allowed"
         >
-          <Link to="/dungeons">
-            <Sword className="h-4 w-4" />
-            <span className="hidden lg:inline">Dungeons</span>
-          </Link>
+          <Sword className="h-4 w-4" />
+          <span className="hidden lg:inline">Dungeons</span>
         </Button>
         <WalletButton />
       </div>

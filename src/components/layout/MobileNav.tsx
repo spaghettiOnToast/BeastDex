@@ -32,7 +32,7 @@ export function MobileNav({ onNavigate }: Props) {
     { to: collectionPath, label: "Collection", icon: Package },
     { to: "/marketplace", label: "Marketplace", icon: Store },
     { to: "/statistics", label: "Stats", icon: BarChart3 },
-    { to: "/dungeons", label: "Dungeons", icon: Sword },
+    // { to: "/dungeons", label: "Dungeons", icon: Sword },
   ];
 
   const mobileMenu = isOpen ? (
