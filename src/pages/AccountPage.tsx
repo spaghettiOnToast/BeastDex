@@ -66,11 +66,11 @@ function AccountPage() {
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
-  const [ownerStats, setOwnerStats] = useState<OwnerBeastStats | null>(null);
+  const [_ownerStats, setOwnerStats] = useState<OwnerBeastStats | null>(null);
   const [ownedBeasts, setOwnedBeasts] = useState<Beast[]>([]);
   const [collectionStats, setCollectionStats] = useState<BeastCollectionStats>(EMPTY_BEAST_COLLECTION_STATS);
   const [beastHighlights, setBeastHighlights] = useState<OwnerBeastHighlights | null>(null);
-  const [summitRank, setSummitRank] = useState<OwnerSummitRank | null>(null);
+  const [_summitRank, setSummitRank] = useState<OwnerSummitRank | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const summaryRequestRef = useRef(0);
@@ -511,6 +511,8 @@ function AccountPage() {
     highestRanked: beastHighlights?.highestRanked ?? null,
     lastBeastKilled: beastHighlights?.lastCollected ?? null,
     lastBeastKilledName: beastHighlights?.lastCollectedName ?? null,
+    totalPower: collectionStats.totalPower,
+    totalHealth: collectionStats.totalHealth,
   }), [collectionStats, mostPowerfulBeast, mostPowerfulTitle, beastHighlights]);
 
   const overviewCards: OverviewCard[] = [];

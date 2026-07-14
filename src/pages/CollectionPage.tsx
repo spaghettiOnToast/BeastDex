@@ -925,6 +925,8 @@ function CollectionPage() {
     highestRanked: beastHighlights?.highestRanked ?? null,
     lastBeastKilled: beastHighlights?.lastCollected ?? null,
     lastBeastKilledName: beastHighlights?.lastCollectedName ?? null,
+    totalPower: collectionStats.totalPower,
+    totalHealth: collectionStats.totalHealth,
   }), [collectionStats, mostPowerfulBeast, mostPowerfulTitle, beastHighlights]);
 
   const overviewCards: OverviewCard[] = useMemo(

@@ -169,7 +169,7 @@ const BeastCard = memo(function BeastCard({
       onClick={() => { if (!disabled && !missing) onSelect?.(beast); }}
       className={`transition-transform duration-150 hover:scale-[1.03] w-full${className ? ` ${className}` : ""}`}
     >
-      {duplicateCount > 1 && !missing && (
+      {(duplicateCount ?? 0) > 1 && !missing && (
         <div style={{
           position: "absolute", top: -6, right: -6, zIndex: 30,
           background: "#c4a44a", color: "#000", borderRadius: "50%",
