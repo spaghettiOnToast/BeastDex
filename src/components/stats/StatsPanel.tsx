@@ -110,11 +110,9 @@ export const StatsPanel = memo(function StatsPanel({
           />
         </div>
 
-        {/* Remaining + Owners */}
+        {/* Remaining */}
         <div className="hidden sm:flex items-center gap-3 shrink-0 text-xs text-zinc-500">
           <span>{mintedLoading ? "..." : `${remaining.toLocaleString()} left`}</span>
-          <span className="text-zinc-700">|</span>
-          <span>{uniqueOwners.toLocaleString()} owners</span>
         </div>
       </div>
 
