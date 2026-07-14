@@ -20,7 +20,6 @@ class ApiCache {
     this.cacheConfigs.set("beast-query", { ttl: 2 * 60 * 1000 }); // 2 minutes
     this.cacheConfigs.set("top-beasts", { ttl: 30 * 60 * 1000 }); // 30 minutes (top beasts rarely change)
     this.cacheConfigs.set("adventurer-deaths", { ttl: 5 * 60 * 1000 }); // 5 minutes
-    this.cacheConfigs.set("beast-power-rank", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("beast-stats", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("beast-highlights", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("beast-collection-leaderboard", { ttl: 5 * 60 * 1000 }); // 5 minutes
@@ -31,10 +30,7 @@ class ApiCache {
     this.cacheConfigs.set("power-rank-leaderboard", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("most-collected-beast-leaderboard", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("beast-of-the-day-leaderboard", { ttl: 3 * 60 * 1000 }); // 3 minutes
-    this.cacheConfigs.set("beast-combined-ranks", { ttl: 5 * 60 * 1000 }); // 5 minutes
-    this.cacheConfigs.set("beast-health-rank", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("owner-beast-stats", { ttl: 5 * 60 * 1000 }); // 5 minutes
-    this.cacheConfigs.set("owner-collection-stats", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("owner-beast-highlights", { ttl: 5 * 60 * 1000 }); // 5 minutes
   }
 

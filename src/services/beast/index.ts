@@ -4,6 +4,8 @@ import { runBeastSql } from "./sqlClient";
 import { collectablesClient } from "./collectablesClient";
 import {
   BEAST_NAMES,
+  ITEM_NAME_PREFIXES,
+  ITEM_NAME_SUFFIXES,
   beastType,
   beastTier,
   normalizeAddress,
@@ -57,12 +59,31 @@ function _mapAttributeFilters(filters: AttributeFiltersInput): Partial<BeastQuer
       q.tierIn = values.map(Number);
     } else if (key === "beast" || key === "name") {
       q.nameIn = values.map(String);
+    } else if (key === "prefix") {
+      q.prefixNameIn = values.map(String);
+    } else if (key === "suffix") {
+      q.suffixNameIn = values.map(String);
     } else if (key === "shiny") {
       if (values.some((v) => v === "true" || v === "1" || v === 1)) q.shiny = true;
       else q.shiny = false;
     } else if (key === "animated") {
       if (values.some((v) => v === "true" || v === "1" || v === 1)) q.animated = true;
       else q.animated = false;
+    } else if (key === "health" && values.length >= 2) {
+      q.healthGte = Number(values[0]);
+      q.healthLte = Number(values[1]);
+    } else if (key === "level" && values.length >= 2) {
+      q.levelGte = Number(values[0]);
+      q.levelLte = Number(values[1]);
+    } else if (key === "rank") {
+      const nums = values.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+      if (nums.length > 0) {
+        q.rankGte = Math.min(...nums);
+        q.rankLte = Math.max(...nums);
+      }
+    } else if (key === "adventurers killed" && values.length >= 2) {
+      q.adventurersKilledGte = Number(values[0]);
+      q.adventurersKilledLte = Number(values[1]);
     }
   }
   return q;
@@ -81,8 +102,6 @@ function _parseTokenId(id: string | number): number | null {
 import type {
   Beast,
   BeastAttributeFilters,
-  BeastPowerRank,
-  BeastHealthRank,
   FetchBeastsOptions,
   FetchLeaderboardOptions,
   PowerRankLeaderboard,
@@ -105,8 +124,6 @@ export type {
   BeastHighlights,
   BeastHighlightsLeader,
   BeastMetadata,
-  BeastPowerRank,
-  BeastHealthRank,
   BeastSortField,
   BeastStats,
   PowerRankLeaderboard,
@@ -290,413 +307,18 @@ export async function fetchBeastAttributeFilters(): Promise<BeastAttributeFilter
     .sort((a, b) => a - b)
     .map(String);
 
+  const uniquePrefixes = Array.from(new Set(Object.values(ITEM_NAME_PREFIXES))).sort();
+  const uniqueSuffixes = Array.from(new Set(Object.values(ITEM_NAME_SUFFIXES))).sort();
+
   return {
     Beast: uniqueNames,
     Type: uniqueTypes,
     Tier: uniqueTiers,
+    Prefix: uniquePrefixes,
+    Suffix: uniqueSuffixes,
     Shiny: ["true", "false"],
     Animated: ["true", "false"],
   };
-}
-
-export async function fetchBeastPowerRank(
-  ownerAddress: string
-): Promise<BeastPowerRank | null> {
-  const normalised = normaliseStarknetAddress(ownerAddress);
-  if (!normalised) return null;
-
-  return apiCache.get("beast-power-rank", { address: normalised }, async () => {
-    const variants = new Set<string>();
-    variants.add(normalised.toLowerCase());
-    if (normalised.startsWith("0x")) {
-      const padded = `0x${normalised.slice(2).padStart(64, "0")}`;
-      variants.add(padded.toLowerCase());
-    }
-
-    if (variants.size === 0) return null;
-
-    const addressList = Array.from(variants)
-      .map((address) => `'${address.replace(/'/g, "''")}'`)
-      .join(", ");
-
-    const query = `
-      WITH owner_powers AS (
-        SELECT
-          LOWER(b.account_address) AS owner,
-          COALESCE(
-            (
-              SELECT MAX(
-                CAST(
-                  CASE
-                    WHEN json_valid(t.metadata) = 1
-                     AND json_type(attr.value, '$.value') IN ('text', 'integer', 'real')
-                      THEN json_extract(attr.value, '$.value')
-                    ELSE 0
-                  END AS REAL
-                )
-              )
-              FROM json_each(
-                CASE
-                  WHEN json_valid(t.metadata) = 1 THEN t.metadata
-                  ELSE '{"attributes":[]}'
-                END, '$.attributes'
-              ) attr
-              WHERE LOWER(json_extract(attr.value, '$.trait_type')) LIKE '%power%'
-                AND json_extract(attr.value, '$.trait_type') IS NOT NULL
-                AND json_extract(attr.value, '$.value') IS NOT NULL
-            ),
-            0
-          ) AS power
-        FROM tokens t
-        JOIN token_balances b
-          ON t.id = b.token_id
-         AND t.contract_address = b.contract_address
-        WHERE t.contract_address = '${CONTRACT_ADDRESS}'
-          AND b.balance > '${ZERO_BALANCE}'
-          AND b.account_address IS NOT NULL
-      ),
-      owner_totals AS (
-        SELECT
-          owner,
-          SUM(power) AS total_power
-        FROM owner_powers
-        GROUP BY owner
-      ),
-      ranked AS (
-        SELECT
-          owner,
-          total_power,
-          RANK() OVER (ORDER BY total_power DESC) AS rank
-        FROM owner_totals
-      )
-      SELECT
-        rank,
-        total_power,
-        (SELECT COUNT(*) FROM owner_totals) AS total_owners
-      FROM ranked
-      WHERE owner IN (${addressList})
-      ORDER BY rank ASC
-      LIMIT 1;
-    `;
-
-    type RankRow = {
-      rank?: number | string | null;
-      total_power?: number | string | null;
-      total_owners?: number | string | null;
-    };
-
-    const rows = await runBeastSql<RankRow[]>(query, "fetchBeastPowerRank");
-    if (!rows || rows.length === 0) {
-      return { rank: null, totalPower: 0, totalOwners: 0 };
-    }
-
-    const [row] = rows;
-
-    const parsedRank = row?.rank != null ? Number(row.rank) : null;
-    const rank = Number.isFinite(parsedRank ?? NaN) ? parsedRank : null;
-
-    const rawTotalPower = row?.total_power;
-    const totalPower =
-      typeof rawTotalPower === "number"
-        ? rawTotalPower
-        : Number(rawTotalPower ?? 0);
-
-    const rawOwners = row?.total_owners;
-    const totalOwners =
-      typeof rawOwners === "number" ? rawOwners : Number(rawOwners ?? 0);
-
-    return {
-      rank,
-      totalPower: Number.isFinite(totalPower) ? totalPower : 0,
-      totalOwners: Number.isFinite(totalOwners) ? totalOwners : 0,
-    };
-  });
-}
-
-// Combined power and health rank query - much more efficient than separate queries
-export async function fetchBeastCombinedRanks(
-  ownerAddress: string
-): Promise<{ powerRank: BeastPowerRank | null; healthRank: BeastHealthRank | null }> {
-  const normalised = normaliseStarknetAddress(ownerAddress);
-  if (!normalised) {
-    return { powerRank: null, healthRank: null };
-  }
-
-  return apiCache.get("beast-combined-ranks", { address: normalised }, async () => {
-    const variants = new Set<string>();
-    variants.add(normalised.toLowerCase());
-    if (normalised.startsWith("0x")) {
-      const padded = `0x${normalised.slice(2).padStart(64, "0")}`;
-      variants.add(padded.toLowerCase());
-    }
-
-    if (variants.size === 0) {
-      return { powerRank: null, healthRank: null };
-    }
-
-    const addressList = Array.from(variants)
-      .map((address) => `'${address.replace(/'/g, "''")}'`)
-      .join(", ");
-
-    // Single query that calculates both power and health rankings
-    const query = `
-      WITH owner_stats AS (
-        SELECT
-          LOWER(b.account_address) AS owner,
-          SUM(
-            COALESCE(
-              (
-                SELECT MAX(
-                  CAST(
-                    CASE
-                      WHEN json_valid(t.metadata) = 1
-                       AND json_type(attr.value, '$.value') IN ('text', 'integer', 'real')
-                        THEN json_extract(attr.value, '$.value')
-                      ELSE 0
-                    END AS REAL
-                  )
-                )
-                FROM json_each(
-                  CASE
-                    WHEN json_valid(t.metadata) = 1 THEN t.metadata
-                    ELSE '{"attributes":[]}'
-                  END, '$.attributes'
-                ) attr
-                WHERE LOWER(json_extract(attr.value, '$.trait_type')) LIKE '%power%'
-                  AND json_extract(attr.value, '$.trait_type') IS NOT NULL
-                  AND json_extract(attr.value, '$.value') IS NOT NULL
-              ), 0
-            )
-          ) AS total_power,
-          SUM(
-            COALESCE(
-              (
-                SELECT MAX(
-                  CAST(
-                    CASE
-                      WHEN json_valid(t.metadata) = 1
-                       AND json_type(attr.value, '$.value') IN ('text', 'integer', 'real')
-                        THEN json_extract(attr.value, '$.value')
-                      ELSE 0
-                    END AS REAL
-                  )
-                )
-                FROM json_each(
-                  CASE
-                    WHEN json_valid(t.metadata) = 1 THEN t.metadata
-                    ELSE '{"attributes":[]}'
-                  END, '$.attributes'
-                ) attr
-                WHERE LOWER(json_extract(attr.value, '$.trait_type')) = 'health'
-                  AND json_extract(attr.value, '$.trait_type') IS NOT NULL
-                  AND json_extract(attr.value, '$.value') IS NOT NULL
-              ), 0
-            )
-          ) AS total_health
-        FROM tokens t
-        JOIN token_balances b
-          ON t.id = b.token_id
-         AND t.contract_address = b.contract_address
-        WHERE t.contract_address = '${CONTRACT_ADDRESS}'
-          AND b.balance > '${ZERO_BALANCE}'
-          AND b.account_address IS NOT NULL
-          AND json_valid(t.metadata) = 1
-        GROUP BY LOWER(b.account_address)
-      ),
-      power_ranked AS (
-        SELECT
-          owner,
-          total_power,
-          RANK() OVER (ORDER BY total_power DESC) AS power_rank
-        FROM owner_stats
-      ),
-      health_ranked AS (
-        SELECT
-          owner,
-          total_health,
-          RANK() OVER (ORDER BY total_health DESC) AS health_rank
-        FROM owner_stats
-      )
-      SELECT
-        pr.power_rank,
-        pr.total_power,
-        hr.health_rank,
-        hr.total_health,
-        (SELECT COUNT(DISTINCT owner) FROM owner_stats) AS total_owners
-      FROM power_ranked pr
-      JOIN health_ranked hr ON pr.owner = hr.owner
-      WHERE pr.owner IN (${addressList})
-      LIMIT 1;
-    `;
-
-    type CombinedRankRow = {
-      power_rank?: number | string | null;
-      total_power?: number | string | null;
-      health_rank?: number | string | null;
-      total_health?: number | string | null;
-      total_owners?: number | string | null;
-    };
-
-    const rows = await runBeastSql<CombinedRankRow[]>(query, "fetchBeastCombinedRanks");
-
-    if (!rows || rows.length === 0) {
-      return {
-        powerRank: { rank: null, totalPower: 0, totalOwners: 0 },
-        healthRank: { rank: null, totalHealth: 0, totalOwners: 0 },
-      };
-    }
-
-    const [row] = rows;
-
-    const parsedPowerRank = row?.power_rank != null ? Number(row.power_rank) : null;
-    const powerRank = Number.isFinite(parsedPowerRank ?? NaN) ? parsedPowerRank : null;
-
-    const parsedHealthRank = row?.health_rank != null ? Number(row.health_rank) : null;
-    const healthRank = Number.isFinite(parsedHealthRank ?? NaN) ? parsedHealthRank : null;
-
-    const rawTotalPower = row?.total_power;
-    const totalPower =
-      typeof rawTotalPower === "number"
-        ? rawTotalPower
-        : Number(rawTotalPower ?? 0);
-
-    const rawTotalHealth = row?.total_health;
-    const totalHealth =
-      typeof rawTotalHealth === "number"
-        ? rawTotalHealth
-        : Number(rawTotalHealth ?? 0);
-
-    const rawOwners = row?.total_owners;
-    const totalOwners =
-      typeof rawOwners === "number" ? rawOwners : Number(rawOwners ?? 0);
-
-    return {
-      powerRank: {
-        rank: powerRank,
-        totalPower: Number.isFinite(totalPower) ? totalPower : 0,
-        totalOwners: Number.isFinite(totalOwners) ? totalOwners : 0,
-      },
-      healthRank: {
-        rank: healthRank,
-        totalHealth: Number.isFinite(totalHealth) ? totalHealth : 0,
-        totalOwners: Number.isFinite(totalOwners) ? totalOwners : 0,
-      },
-    };
-  });
-}
-
-export async function fetchBeastHealthRank(
-  ownerAddress: string
-): Promise<BeastHealthRank | null> {
-  const normalised = normaliseStarknetAddress(ownerAddress);
-  if (!normalised) return null;
-
-  return apiCache.get("beast-health-rank", { address: normalised }, async () => {
-    const variants = new Set<string>();
-    variants.add(normalised.toLowerCase());
-    if (normalised.startsWith("0x")) {
-      const padded = `0x${normalised.slice(2).padStart(64, "0")}`;
-      variants.add(padded.toLowerCase());
-    }
-
-    if (variants.size === 0) return null;
-
-    const addressList = Array.from(variants)
-      .map((address) => `'${address.replace(/'/g, "''")}'`)
-      .join(", ");
-
-    const query = `
-      WITH owner_healths AS (
-        SELECT
-          LOWER(b.account_address) AS owner,
-          COALESCE(
-            (
-              SELECT MAX(
-                CAST(
-                  CASE
-                    WHEN json_valid(t.metadata) = 1
-                     AND json_type(attr.value, '$.value') IN ('text', 'integer', 'real')
-                      THEN json_extract(attr.value, '$.value')
-                    ELSE 0
-                  END AS REAL
-                )
-              )
-              FROM json_each(
-                CASE
-                  WHEN json_valid(t.metadata) = 1 THEN t.metadata
-                  ELSE '{"attributes":[]}'
-                END, '$.attributes'
-              ) attr
-              WHERE LOWER(json_extract(attr.value, '$.trait_type')) = 'health'
-                AND json_extract(attr.value, '$.trait_type') IS NOT NULL
-                AND json_extract(attr.value, '$.value') IS NOT NULL
-            ),
-            0
-          ) AS health
-        FROM tokens t
-        JOIN token_balances b
-          ON t.id = b.token_id
-         AND t.contract_address = b.contract_address
-        WHERE t.contract_address = '${CONTRACT_ADDRESS}'
-          AND b.balance > '${ZERO_BALANCE}'
-          AND b.account_address IS NOT NULL
-      ),
-      owner_totals AS (
-        SELECT
-          owner,
-          SUM(health) AS total_health
-        FROM owner_healths
-        GROUP BY owner
-      ),
-      ranked AS (
-        SELECT
-          owner,
-          total_health,
-          RANK() OVER (ORDER BY total_health DESC) AS rank
-        FROM owner_totals
-      )
-      SELECT
-        rank,
-        total_health,
-        (SELECT COUNT(*) FROM owner_totals) AS total_owners
-      FROM ranked
-      WHERE owner IN (${addressList})
-      ORDER BY rank ASC
-      LIMIT 1;
-    `;
-
-    type RankRow = {
-      rank?: number | string | null;
-      total_health?: number | string | null;
-      total_owners?: number | string | null;
-    };
-
-    const rows = await runBeastSql<RankRow[]>(query, "fetchBeastHealthRank");
-    if (!rows || rows.length === 0) {
-      return { rank: null, totalHealth: 0, totalOwners: 0 };
-    }
-
-    const [row] = rows;
-
-    const parsedRank = row?.rank != null ? Number(row.rank) : null;
-    const rank = Number.isFinite(parsedRank ?? NaN) ? parsedRank : null;
-
-    const rawTotalHealth = row?.total_health;
-    const totalHealth =
-      typeof rawTotalHealth === "number"
-        ? rawTotalHealth
-        : Number(rawTotalHealth ?? 0);
-
-    const rawOwners = row?.total_owners;
-    const totalOwners =
-      typeof rawOwners === "number" ? rawOwners : Number(rawOwners ?? 0);
-
-    return {
-      rank,
-      totalHealth: Number.isFinite(totalHealth) ? totalHealth : 0,
-      totalOwners: Number.isFinite(totalOwners) ? totalOwners : 0,
-    };
-  });
 }
 
 export async function fetchPowerRankLeaderboard({
@@ -1260,155 +882,6 @@ export async function fetchTierCollectionStats(): Promise<TierCollectionStats[]>
       })
     );
     return results.sort((a, b) => b.tier - a.tier);
-  });
-}
-
-/**
- * Collection stats for a specific owner - computed server-side via SQL
- * This replaces the need to load all beasts client-side just to count them
- */
-export type OwnerCollectionStats = {
-  animatedShinyCount: number;
-  animatedCount: number;
-  shinyCount: number;
-  standardCount: number;
-  uniqueBeastTypes: number;
-  uniqueAnimatedShinyTypes: number;
-  uniqueAnimatedTypes: number;
-  uniqueShinyTypes: number;
-  uniqueStandardTypes: number;
-};
-
-export async function fetchOwnerCollectionStats(
-  ownerAddress: string
-): Promise<OwnerCollectionStats> {
-  const normalised = normaliseStarknetAddress(ownerAddress);
-  if (!normalised) {
-    return {
-      animatedShinyCount: 0,
-      animatedCount: 0,
-      shinyCount: 0,
-      standardCount: 0,
-      uniqueBeastTypes: 0,
-      uniqueAnimatedShinyTypes: 0,
-      uniqueAnimatedTypes: 0,
-      uniqueShinyTypes: 0,
-      uniqueStandardTypes: 0,
-    };
-  }
-
-  return apiCache.get("owner-collection-stats", { address: normalised }, async () => {
-    const variants = new Set<string>();
-    variants.add(normalised.toLowerCase());
-    if (normalised.startsWith("0x")) {
-      const padded = `0x${normalised.slice(2).padStart(64, "0")}`;
-      variants.add(padded.toLowerCase());
-    }
-
-    const addressList = Array.from(variants)
-      .map((address) => `'${address.replace(/'/g, "''")}'`)
-      .join(", ");
-
-    // Single query that calculates all collection stats
-    const query = `
-      WITH beast_attrs AS (
-        SELECT
-          t.id,
-          MAX(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) = 'beast'
-              THEN json_extract(attr.value, '$.value') END) AS beast_type,
-          MAX(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) = 'shiny'
-                   AND json_extract(attr.value, '$.value') IN ('1', 1, 'true', 'True', 'TRUE')
-              THEN 1 ELSE 0 END) AS is_shiny,
-          MAX(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) = 'animated'
-                   AND json_extract(attr.value, '$.value') IN ('1', 1, 'true', 'True', 'TRUE')
-              THEN 1 ELSE 0 END) AS is_animated
-        FROM tokens t
-        JOIN token_balances b
-          ON t.id = b.token_id
-          AND t.contract_address = b.contract_address
-        JOIN json_each(
-          CASE
-            WHEN json_valid(t.metadata) = 1 THEN t.metadata
-            ELSE '{"attributes":[]}'
-          END,
-          '$.attributes'
-        ) attr
-        WHERE t.contract_address = '${CONTRACT_ADDRESS}'
-          AND b.balance > '${ZERO_BALANCE}'
-          AND json_valid(t.metadata) = 1
-          AND LOWER(b.account_address) IN (${addressList})
-        GROUP BY t.id
-      ),
-      categorized AS (
-        SELECT
-          id,
-          LOWER(beast_type) AS beast_type_lower,
-          CASE
-            WHEN is_shiny = 1 AND is_animated = 1 THEN 'animated_shiny'
-            WHEN is_animated = 1 THEN 'animated'
-            WHEN is_shiny = 1 THEN 'shiny'
-            ELSE 'standard'
-          END AS category
-        FROM beast_attrs
-        WHERE beast_type IS NOT NULL
-      )
-      SELECT
-        -- Total counts per category
-        SUM(CASE WHEN category = 'animated_shiny' THEN 1 ELSE 0 END) AS animated_shiny_count,
-        SUM(CASE WHEN category = 'animated' THEN 1 ELSE 0 END) AS animated_count,
-        SUM(CASE WHEN category = 'shiny' THEN 1 ELSE 0 END) AS shiny_count,
-        SUM(CASE WHEN category = 'standard' THEN 1 ELSE 0 END) AS standard_count,
-        -- Unique beast types overall
-        COUNT(DISTINCT beast_type_lower) AS unique_beast_types,
-        -- Unique beast types per category
-        COUNT(DISTINCT CASE WHEN category = 'animated_shiny' THEN beast_type_lower END) AS unique_animated_shiny_types,
-        COUNT(DISTINCT CASE WHEN category = 'animated' THEN beast_type_lower END) AS unique_animated_types,
-        COUNT(DISTINCT CASE WHEN category = 'shiny' THEN beast_type_lower END) AS unique_shiny_types,
-        COUNT(DISTINCT CASE WHEN category = 'standard' THEN beast_type_lower END) AS unique_standard_types
-      FROM categorized;
-    `;
-
-    type StatsRow = {
-      animated_shiny_count: number | null;
-      animated_count: number | null;
-      shiny_count: number | null;
-      standard_count: number | null;
-      unique_beast_types: number | null;
-      unique_animated_shiny_types: number | null;
-      unique_animated_types: number | null;
-      unique_shiny_types: number | null;
-      unique_standard_types: number | null;
-    };
-
-    const rows = await runBeastSql<StatsRow[]>(query, "fetchOwnerCollectionStats");
-
-    if (!rows || rows.length === 0) {
-      return {
-        animatedShinyCount: 0,
-        animatedCount: 0,
-        shinyCount: 0,
-        standardCount: 0,
-        uniqueBeastTypes: 0,
-        uniqueAnimatedShinyTypes: 0,
-        uniqueAnimatedTypes: 0,
-        uniqueShinyTypes: 0,
-        uniqueStandardTypes: 0,
-      };
-    }
-
-    const row = rows[0];
-
-    return {
-      animatedShinyCount: Number(row.animated_shiny_count) || 0,
-      animatedCount: Number(row.animated_count) || 0,
-      shinyCount: Number(row.shiny_count) || 0,
-      standardCount: Number(row.standard_count) || 0,
-      uniqueBeastTypes: Number(row.unique_beast_types) || 0,
-      uniqueAnimatedShinyTypes: Number(row.unique_animated_shiny_types) || 0,
-      uniqueAnimatedTypes: Number(row.unique_animated_types) || 0,
-      uniqueShinyTypes: Number(row.unique_shiny_types) || 0,
-      uniqueStandardTypes: Number(row.unique_standard_types) || 0,
-    };
   });
 }
 

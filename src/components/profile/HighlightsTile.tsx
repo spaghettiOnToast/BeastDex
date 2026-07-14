@@ -55,10 +55,8 @@ export function HighlightsTile({
   ];
 
   return (
-    <div className="space-y-3">
-      <div className="h-px bg-white/[0.06]" />
-
-      <div className="grid gap-2 sm:gap-3 grid-cols-2">
+    <div className="h-full">
+      <div className="grid gap-2 sm:gap-3 grid-cols-2 h-full auto-rows-fr">
         {cards.map((card) => (
           <div
             key={card.key}
