@@ -7,6 +7,7 @@ import { useGlobalCart } from "../contexts/GlobalCartContext";
 import { useTermsOfService } from "../contexts/TermsOfServiceContext";
 import { Button } from "../components/ui/button";
 import ListingCard from "../components/marketplace/ListingCard";
+import BeastCard from "../components/beast/BeastCard";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { useOffersForToken, useOffersReceivedForListings, useUserOffers } from "../hooks/useArcadeOrders";
 import type { Listing } from "../services/marketplace/types";
@@ -2203,26 +2204,40 @@ export default function MarketplacePage() {
                 </div>
                 <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                   {filtersHook.userBeastsToRender.map((beast) => {
-                    // Use pre-computed token ID from filters hook
                     const tokenId = filtersHook.normalizedBeastTokenIds.get(beast.id) || beast.id;
                     const isListed = filtersHook.alreadyListedTokenIds.has(tokenId);
                     const inCart = globalCart.isInListCart(beast.id);
 
                     return (
-                      <ListingCard
-                        key={beast.id}
-                        beast={beast}
-                        tokenId={tokenId}
-                        inCart={inCart}
-                        isAlreadyListed={isListed}
-                        showSelectionOverlay={!isListed}
-                        buyDisabled={marketplaceDisabled}
-                        onCardClick={() => !isListed && requireToS(() => globalCart.toggleListCart(beast))}
-                        onListSingle={() => requireToS(() => {
-                          setSingleBeastToList(beast);
-                          setListDialogOpen(true);
-                        })}
-                      />
+                      <div key={beast.id} className="relative group">
+                        <BeastCard
+                          beast={beast}
+                          owned
+                          onSelect={() => !isListed && requireToS(() => globalCart.toggleListCart(beast))}
+                        />
+                        {/* Already listed badge */}
+                        {isListed && (
+                          <div className="absolute top-1 left-1 rounded px-1.5 py-0.5 bg-gold/80 text-black text-[9px] font-bold uppercase tracking-wide pointer-events-none">
+                            Listed
+                          </div>
+                        )}
+                        {/* Selection overlay: ✓ when in cart, + on hover when not listed */}
+                        {!isListed && (
+                          inCart ? (
+                            <div className="absolute top-1 right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center shadow-lg pointer-events-none">
+                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            </div>
+                          ) : (
+                            <div className="absolute top-1 right-1 w-5 h-5 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity border-2 border-white pointer-events-none">
+                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                              </svg>
+                            </div>
+                          )
+                        )}
+                      </div>
                     );
                   })}
                 </div>
