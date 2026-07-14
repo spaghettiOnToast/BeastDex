@@ -10,10 +10,8 @@ export async function fetchBeastStats(forceRefresh = false): Promise<BeastStats>
     return statsCache.data;
   }
 
-  const raw = await collectablesClient.beasts.stats();
-
-  const mintedCount =
-    typeof raw["total"] === "number" ? raw["total"] : 0;
+  const page = await collectablesClient.beasts.list({ limit: 1 });
+  const mintedCount = page.total;
 
   const data: BeastStats = {
     mintedCount,

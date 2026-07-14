@@ -149,7 +149,7 @@ export async function fetchBeasts({
       : {}),
     sort: sdkSort,
     order,
-    limit,
+    limit: Math.min(limit, 100), // SDK caps at 100
     includeOwner: true,
   };
 
@@ -1253,45 +1253,13 @@ export type TierCollectionStats = {
 
 export async function fetchTierCollectionStats(): Promise<TierCollectionStats[]> {
   return apiCache.get("tier-collection-stats", {}, async () => {
-    const query = `
-      WITH beast_tiers AS (
-        SELECT
-          t.id,
-          MAX(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) = 'tier'
-              THEN CAST(json_extract(attr.value, '$.value') AS INTEGER) END) as tier
-        FROM tokens t
-        JOIN token_balances b
-          ON t.id = b.token_id
-          AND t.contract_address = b.contract_address
-        JOIN json_each(
-          CASE
-            WHEN json_valid(t.metadata) = 1 THEN t.metadata
-            ELSE '{"attributes":[]}'
-          END,
-          '$.attributes'
-        ) attr
-        WHERE t.contract_address = '${CONTRACT_ADDRESS}'
-          AND b.balance > '${ZERO_BALANCE}'
-          AND json_valid(t.metadata) = 1
-        GROUP BY t.id
-      )
-      SELECT tier, COUNT(*) as collected
-      FROM beast_tiers
-      WHERE tier IS NOT NULL
-      GROUP BY tier
-      ORDER BY tier DESC
-    `;
-
-    type TierRow = {
-      tier: number;
-      collected: number;
-    };
-
-    const rows = await runBeastSql<TierRow[]>(query, "fetchTierCollectionStats");
-    return rows.map(row => ({
-      tier: row.tier,
-      collected: row.collected,
-    }));
+    const results = await Promise.all(
+      [1, 2, 3, 4, 5].map(async (tier) => {
+        const page = await collectablesClient.beasts.list({ tier, limit: 1 });
+        return { tier, collected: page.total };
+      })
+    );
+    return results.sort((a, b) => b.tier - a.tier);
   });
 }
 
