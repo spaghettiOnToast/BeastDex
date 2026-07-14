@@ -17,18 +17,18 @@ import { useBeasts } from "../hooks/useBeasts";
 import {
   fetchBeastAttributeFilters,
   fetchBeasts,
-  fetchBeastCombinedRanks,
   fetchOwnerBeastStats,
-  fetchOwnerCollectionStats,
   fetchOwnerBeastHighlights,
   type BeastAttributeFilters,
   type Beast,
-  type BeastPowerRank,
-  type BeastHealthRank,
   type OwnerBeastStats,
-  type OwnerCollectionStats,
   type OwnerBeastHighlights,
 } from "../services/beast";
+import {
+  computeBeastCollectionStats,
+  EMPTY_BEAST_COLLECTION_STATS,
+  type BeastCollectionStats,
+} from "../utils/beastCollection";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { lookupControllerAddresses } from "../services/controller";
 import { getUserFriendlyErrorMessage } from "../utils/error";
@@ -67,11 +67,9 @@ function AccountPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [ownerStats, setOwnerStats] = useState<OwnerBeastStats | null>(null);
-  const [collectionStats, setCollectionStats] = useState<OwnerCollectionStats | null>(null);
+  const [ownedBeasts, setOwnedBeasts] = useState<Beast[]>([]);
+  const [collectionStats, setCollectionStats] = useState<BeastCollectionStats>(EMPTY_BEAST_COLLECTION_STATS);
   const [beastHighlights, setBeastHighlights] = useState<OwnerBeastHighlights | null>(null);
-  const [mostPowerfulBeast, setMostPowerfulBeast] = useState<Beast | null>(null);
-  const [accountRanking, setAccountRanking] = useState<BeastPowerRank | null>(null);
-  const [healthRanking, setHealthRanking] = useState<BeastHealthRank | null>(null);
   const [summitRank, setSummitRank] = useState<OwnerSummitRank | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
@@ -236,10 +234,57 @@ function AccountPage() {
         delete next[trait];
         return next;
       }
-      return {
-        ...prev,
-        [trait]: [value],
-      } as BeastAttributeFilters;
+      return { ...prev, [trait]: [value] } as BeastAttributeFilters;
+    });
+  }, []);
+
+  const handleMultiFilterChange = useCallback((trait: string, values: string[]) => {
+    setPage(1);
+    setAttributeFilters((prev) => {
+      const next = { ...prev } as BeastAttributeFilters;
+      if (values.length > 0) next[trait] = values;
+      else delete next[trait];
+      return next;
+    });
+  }, []);
+
+  const handleRankRangeChange = useCallback((rankValues: string[]) => {
+    setPage(1);
+    setAttributeFilters((prev) => {
+      const next = { ...prev } as BeastAttributeFilters;
+      if (rankValues.length > 0) next["Rank"] = rankValues;
+      else delete next["Rank"];
+      return next;
+    });
+  }, []);
+
+  const handleHealthRangeChange = useCallback((min: number, max: number) => {
+    setPage(1);
+    setAttributeFilters((prev) => {
+      const next = { ...prev } as BeastAttributeFilters;
+      if (min === -1 && max === -1) delete next["Health"];
+      else next["Health"] = [String(min), String(max)];
+      return next;
+    });
+  }, []);
+
+  const handleLevelRangeChange = useCallback((min: number, max: number) => {
+    setPage(1);
+    setAttributeFilters((prev) => {
+      const next = { ...prev } as BeastAttributeFilters;
+      if (min === -1 && max === -1) delete next["Level"];
+      else next["Level"] = [String(min), String(max)];
+      return next;
+    });
+  }, []);
+
+  const handleAdventurersKilledRangeChange = useCallback((min: number, max: number) => {
+    setPage(1);
+    setAttributeFilters((prev) => {
+      const next = { ...prev } as BeastAttributeFilters;
+      if (min === -1 && max === -1) delete next["Adventurers Killed"];
+      else next["Adventurers Killed"] = [String(min), String(max)];
+      return next;
     });
   }, []);
 
@@ -274,11 +319,9 @@ function AccountPage() {
 
     if (!resolvedAddress) {
       setOwnerStats(null);
-      setCollectionStats(null);
+      setOwnedBeasts([]);
+      setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
       setBeastHighlights(null);
-      setMostPowerfulBeast(null);
-      setAccountRanking(null);
-      setHealthRanking(null);
       setSummitRank(null);
       setSummaryError(identifierError);
       setSummaryLoading(false);
@@ -291,58 +334,56 @@ function AccountPage() {
     setSummaryError(null);
 
     try {
-      // Fetch all stats in parallel via SQL queries (replaces loading all beasts)
-      const [combinedRanks, stats, collStats, highlights, powerfulBeast, summitRankResult] = await Promise.all([
-        fetchBeastCombinedRanks(resolvedAddress).catch((err) => {
-          console.error("Failed to fetch combined ranks", err);
-          return { powerRank: null, healthRank: null };
-        }),
+      // Kick off non-beast stats in parallel while we paginate beasts
+      Promise.all([
         fetchOwnerBeastStats(resolvedAddress).catch((err) => {
           console.error("Failed to fetch owner beast stats", err);
-          return null;
-        }),
-        fetchOwnerCollectionStats(resolvedAddress).catch((err) => {
-          console.error("Failed to fetch owner collection stats", err);
           return null;
         }),
         fetchOwnerBeastHighlights(resolvedAddress).catch((err) => {
           console.error("Failed to fetch owner beast highlights", err);
           return null;
         }),
-        fetchBeasts({
-          limit: 1,
-          page: 1,
+        fetchOwnerSummitRankFromApi(resolvedAddress).catch(() => null),
+      ]).then(([stats, highlights, summitRankResult]) => {
+        if (summaryRequestRef.current !== requestId) return;
+        setOwnerStats(stats);
+        setBeastHighlights(highlights);
+        setSummitRank(summitRankResult);
+      });
+
+      // Load all owned beasts via SDK (100 per page), compute stats client-side
+      const limit = 100;
+      let allBeasts: Beast[] = [];
+      let currentPage = 1;
+      let hasMoreData = true;
+
+      while (hasMoreData && allBeasts.length < 15000) {
+        const { beasts: batch, total } = await fetchBeasts({
+          limit,
+          page: currentPage,
           ownerAddresses: [resolvedAddress],
           sort: "default",
-        }).then(res => res.beasts[0] || null).catch((err) => {
-          console.error("Failed to fetch most powerful beast", err);
-          return null;
-        }),
-        fetchOwnerSummitRankFromApi(resolvedAddress).catch(() => null),
-      ]);
+        });
 
-      if (summaryRequestRef.current !== requestId) {
-        return;
+        if (summaryRequestRef.current !== requestId) return;
+
+        allBeasts = [...allBeasts, ...batch];
+        setOwnedBeasts(allBeasts);
+        setCollectionStats(computeBeastCollectionStats(allBeasts));
+
+        currentPage++;
+        if (allBeasts.length >= total || batch.length < limit) {
+          hasMoreData = false;
+        }
       }
-
-      setOwnerStats(stats);
-      setCollectionStats(collStats);
-      setBeastHighlights(highlights);
-      setMostPowerfulBeast(powerfulBeast);
-      setAccountRanking(combinedRanks.powerRank);
-      setHealthRanking(combinedRanks.healthRank);
-      setSummitRank(summitRankResult);
     } catch (err: unknown) {
-      if (summaryRequestRef.current !== requestId) {
-        return;
-      }
+      if (summaryRequestRef.current !== requestId) return;
       console.error("Failed to load account summary", err);
       setOwnerStats(null);
-      setCollectionStats(null);
+      setOwnedBeasts([]);
+      setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
       setBeastHighlights(null);
-      setMostPowerfulBeast(null);
-      setAccountRanking(null);
-      setHealthRanking(null);
       setSummitRank(null);
       setSummaryError(getUserFriendlyErrorMessage(err, "Failed to load account summary"));
     } finally {
@@ -375,23 +416,15 @@ function AccountPage() {
     }
     // Clear existing data to show loading state immediately
     setOwnerStats(null);
-    setCollectionStats(null);
+    setOwnedBeasts([]);
+    setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
     setBeastHighlights(null);
-    setMostPowerfulBeast(null);
-    setHealthRanking(null);
     setSummitRank(null);
 
     void reload();
     void loadSummary();
   }, [loadSummary, reload, resolvedAddress]);
 
-  const rankDisplay =
-    accountRanking?.rank != null
-      ? `#${accountRanking.rank.toLocaleString()}`
-      : "—";
-  const rankSubheading = accountRanking?.totalOwners
-    ? `of ${accountRanking.totalOwners.toLocaleString()}`
-    : "";
   const anyLoading = loading || summaryLoading || resolvingIdentifier;
 
   const normalisedAccountAddress = useMemo(
@@ -443,39 +476,35 @@ function AccountPage() {
     [identifierIsUsername, trimmedIdentifier]
   );
 
+  // Most powerful beast = first beast when sorted by power desc (SDK default)
+  const mostPowerfulBeast = useMemo(
+    () => (ownedBeasts.length > 0 ? ownedBeasts[0] : null),
+    [ownedBeasts]
+  );
+
   const mostPowerfulTitle = useMemo(() => {
     const name = mostPowerfulBeast?.name;
     if (!name) return null;
-
     const trimmed = name.trim();
     const quotedMatch = trimmed.match(/"([^"]+)"/);
-    if (quotedMatch?.[1]) {
-      return quotedMatch[1];
-    }
-
+    if (quotedMatch?.[1]) return quotedMatch[1];
     const parts = trimmed.split(/\s+/).filter(Boolean);
-    if (parts.length >= 2) {
-      return `${parts[0]} ${parts[1]}`;
-    }
-    if (parts.length === 1) {
-      return parts[0];
-    }
+    if (parts.length >= 2) return `${parts[0]} ${parts[1]}`;
+    if (parts.length === 1) return parts[0];
     return null;
   }, [mostPowerfulBeast]);
 
-  // Combined stats for ThreeColumnStatsLayout - all computed server-side
+  // Combined stats computed client-side from loaded beasts (SDK-only)
   const displayStats = useMemo(() => ({
-    // Counts from server-side SQL query
-    animatedShinyCount: collectionStats?.animatedShinyCount ?? 0,
-    animatedCount: collectionStats?.animatedCount ?? 0,
-    shinyCount: collectionStats?.shinyCount ?? 0,
-    standardCount: collectionStats?.standardCount ?? 0,
-    uniqueBeastTypes: collectionStats?.uniqueBeastTypes ?? 0,
-    uniqueAnimatedShinyTypes: collectionStats?.uniqueAnimatedShinyTypes ?? 0,
-    uniqueAnimatedTypes: collectionStats?.uniqueAnimatedTypes ?? 0,
-    uniqueShinyTypes: collectionStats?.uniqueShinyTypes ?? 0,
-    uniqueStandardTypes: collectionStats?.uniqueStandardTypes ?? 0,
-    // Highlights from server-side SQL queries
+    animatedShinyCount: collectionStats.animatedShinyCount,
+    animatedCount: collectionStats.animatedCount,
+    shinyCount: collectionStats.shinyCount,
+    standardCount: collectionStats.standardCount,
+    uniqueBeastTypes: collectionStats.uniqueBeastTypes,
+    uniqueAnimatedShinyTypes: collectionStats.uniqueAnimatedShinyTypes,
+    uniqueAnimatedTypes: collectionStats.uniqueAnimatedTypes,
+    uniqueShinyTypes: collectionStats.uniqueShinyTypes,
+    uniqueStandardTypes: collectionStats.uniqueStandardTypes,
     mostPowerful: mostPowerfulBeast,
     mostPowerfulTitle,
     rarest: beastHighlights?.rarest ?? null,
@@ -484,53 +513,7 @@ function AccountPage() {
     lastBeastKilledName: beastHighlights?.lastCollectedName ?? null,
   }), [collectionStats, mostPowerfulBeast, mostPowerfulTitle, beastHighlights]);
 
-  const overviewCards: OverviewCard[] = useMemo(
-    () => [
-      {
-        key: "beasts",
-        icon: "🐾",
-        label: "Beasts Collected",
-        value: (ownerStats?.totalBeasts ?? 0).toLocaleString(),
-      },
-      {
-        key: "power",
-        icon: "🔮",
-        label: "Combined Power",
-        value: (ownerStats?.totalPower ?? 0).toLocaleString(),
-      },
-      {
-        key: "rank",
-        icon: "🏆",
-        label: "Power Rank",
-        value: rankDisplay,
-        sub: rankSubheading || "Global leaderboard",
-      },
-      {
-        key: "health",
-        icon: "❤️",
-        label: "Combined Health",
-        value: (healthRanking?.totalHealth ?? 0).toLocaleString(),
-      },
-      ...(summitRank?.rank != null
-        ? [
-            {
-              key: "summit",
-              icon: "⛰️",
-              label: "Summit Rank",
-              value: `#${summitRank.rank}`,
-              sub: `of ${summitRank.total_owners}`,
-            },
-          ]
-        : []),
-    ],
-    [
-      ownerStats,
-      rankDisplay,
-      rankSubheading,
-      healthRanking,
-      summitRank,
-    ]
-  );
+  const overviewCards: OverviewCard[] = [];
 
   if (!trimmedIdentifier) {
     return (
@@ -743,6 +726,11 @@ function AccountPage() {
           filtersLoading={filtersLoading}
           filtersError={filtersError}
           onFilterChange={handleFilterChange}
+          onMultiFilterChange={handleMultiFilterChange}
+          onRankRangeChange={handleRankRangeChange}
+          onHealthRangeChange={handleHealthRangeChange}
+          onLevelRangeChange={handleLevelRangeChange}
+          onAdventurersKilledRangeChange={handleAdventurersKilledRangeChange}
           onResetFilters={handleResetFilters}
         />
       </div>

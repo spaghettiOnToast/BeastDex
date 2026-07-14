@@ -55,10 +55,8 @@ export function RankLeaderboard() {
   const getDisplayName = (owner: string) => {
     const normalised = normaliseStarknetAddress(owner);
     if (!normalised) return owner;
-
     const username = usernames[normalised.toLowerCase()];
     if (username) return username;
-
     if (normalised.length <= 12) return normalised;
     return `${normalised.slice(0, 6)}…${normalised.slice(-4)}`;
   };
@@ -66,7 +64,6 @@ export function RankLeaderboard() {
   const getDisplayClass = (owner: string) => {
     const normalised = normaliseStarknetAddress(owner);
     if (!normalised) return "font-mono";
-
     const username = usernames[normalised.toLowerCase()];
     return username ? "" : "font-mono";
   };
@@ -98,7 +95,6 @@ export function RankLeaderboard() {
 
   return (
     <div className="space-y-4">
-      {/* Leaderboard Table */}
       <div className="bg-surface-raised border border-white/[0.06] rounded-xl overflow-hidden">
         <div className="grid grid-cols-4 gap-4 px-6 py-3 bg-white/[0.04] border-b border-white/[0.06] text-xs font-bold uppercase tracking-wider text-zinc-300">
           <div className="flex items-center">
@@ -118,7 +114,6 @@ export function RankLeaderboard() {
         <div className="divide-y divide-white/[0.06]">
           {leaderboard.map((entry) => {
             const normalised = normaliseStarknetAddress(entry.owner);
-
             return (
               <div
                 key={`${entry.rank}-${entry.owner}`}
@@ -127,7 +122,6 @@ export function RankLeaderboard() {
                   ${entry.rank <= 3 ? "bg-gradient-to-r from-yellow-500/5 to-orange-500/5" : ""}
                 `}
               >
-                {/* Rank */}
                 <div className="flex items-center">
                   <div className={`
                     text-xl font-black flex items-center gap-2
@@ -145,7 +139,6 @@ export function RankLeaderboard() {
                   </div>
                 </div>
 
-                {/* Player */}
                 <div className="col-span-2 flex items-center">
                   {normalised ? (
                     <Link
@@ -165,13 +158,9 @@ export function RankLeaderboard() {
                   )}
                 </div>
 
-                {/* Total Power */}
                 <div className="text-right flex items-center justify-end">
                   <div className="text-right">
-                    <div className={`
-                      font-bold
-                      ${entry.rank <= 3 ? "text-accent" : "text-accent"}
-                    `}>
+                    <div className="font-bold text-accent">
                       {entry.value.toLocaleString()}
                     </div>
                     <div className="text-xs text-zinc-500 uppercase tracking-wide">power</div>
@@ -183,7 +172,6 @@ export function RankLeaderboard() {
         </div>
       </div>
 
-      {/* Load More Button */}
       {hasMore && (
         <div className="text-center">
           <button

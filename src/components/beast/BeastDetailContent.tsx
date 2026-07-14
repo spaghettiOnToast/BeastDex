@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { Beast, BeastAttribute } from "../../services/beast";
 import type { SummitBeastData } from "../../services/summit";
 import CometCard from "../ui/CometCard";
+import BeastCard from "./BeastCard";
 import SummitStats from "./SummitStats";
 import { cn } from "../../lib/utils";
 
@@ -137,35 +138,19 @@ export function BeastDetailContent({
     return String(value);
   };
 
-  // Responsive dimensions - smaller on mobile, larger on desktop
-  const cardHeight = "h-[380px] sm:h-[420px] lg:h-[520px]";
-  const cardWidth = "w-[280px] sm:w-[320px] lg:w-[380px]";
-
-  const imageClasses = "block h-full w-full object-contain";
-  const fallbackBoxClasses =
-    "flex h-full w-full items-center justify-center bg-surface/70 px-6 text-zinc-600";
-
   return (
     <div className="flex flex-col gap-4">
-      {/* Main Content: Image + Right Panel */}
-      <div className="flex flex-col lg:flex-row gap-4 lg:gap-28 justify-center items-start">
-        {/* Left: Beast Card */}
-        <div className={`${cardWidth} ${cardHeight} flex-shrink-0`}>
-          <CometCard>
-            {beast.image ? (
-              <img
-                src={beast.image}
-                alt={beast.name}
-                className={imageClasses}
-              />
-            ) : (
-              <div className={fallbackBoxClasses}>No image available</div>
-            )}
+      {/* Main Content: Beast Card + Right Panel */}
+      <div className="flex flex-col lg:flex-row gap-6 lg:gap-40 justify-center items-stretch">
+        {/* Left: CometCard (green glow + tilt) with BeastCard content overlaid */}
+        <div className="w-[360px] flex-shrink-0 flex items-center justify-start">
+          <CometCard className="w-full">
+            <BeastCard beast={beast} owned={false} noBg large />
           </CometCard>
         </div>
 
-        {/* Right: Tabs + Content - Same dimensions as card */}
-        <div className={`${cardWidth} flex flex-col gap-2 flex-shrink-0`}>
+        {/* Right: Tabs + Content */}
+        <div className="w-[340px] sm:w-[360px] flex flex-col gap-2 flex-shrink-0 overflow-hidden">
           {/* Tab Buttons - Compact */}
           <div className="flex rounded-lg border border-white/[0.06] bg-surface/60 p-0.5">
             <button
@@ -194,8 +179,8 @@ export function BeastDetailContent({
             </button>
           </div>
 
-          {/* Panel Content - Height to match card minus tabs */}
-          <div className="h-[370px] sm:h-[410px] lg:h-[510px] rounded-xl border border-white/[0.06] bg-surface/60 overflow-y-auto">
+          {/* Panel Content - Stretch to match card height */}
+          <div className="flex-1 min-h-0 rounded-xl border border-white/[0.06] bg-surface/60 overflow-y-auto">
             {rightPanelTab === "summit" ? (
               /* Summit Stats Panel */
               <div className="min-h-full">

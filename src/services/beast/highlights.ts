@@ -1,3 +1,4 @@
+import { BEAST_NAMES } from "@provable-games/collectables";
 import { collectablesClient } from "./collectablesClient";
 import { BEAST_STATS_CACHE_TTL_MS } from "./constants";
 import type { BeastHighlights } from "./types";
@@ -35,4 +36,36 @@ export async function fetchBeastHighlights(forceRefresh = false): Promise<BeastH
   highlightsCache = { data, expiresAt: now + BEAST_STATS_CACHE_TTL_MS };
 
   return data;
+}
+
+export type BeastNameCount = { name: string; collected: number };
+
+let beastNameCountCache: { data: BeastNameCount[]; expiresAt: number } | null = null;
+
+export async function fetchBeastCollectedByName(): Promise<BeastNameCount[]> {
+  const now = Date.now();
+  if (beastNameCountCache && beastNameCountCache.expiresAt > now) {
+    return beastNameCountCache.data;
+  }
+
+  const allNames = Array.from(new Set(Object.values(BEAST_NAMES))).sort();
+  const counts: BeastNameCount[] = [];
+  const BATCH = 5;
+
+  for (let i = 0; i < allNames.length; i += BATCH) {
+    const batch = allNames.slice(i, i + BATCH);
+    const results = await Promise.all(
+      batch.map((name) => collectablesClient.beasts.list({ nameIn: [name], limit: 1 }))
+    );
+    results.forEach((result, idx) => {
+      counts.push({ name: batch[idx], collected: result.total });
+    });
+    if (i + BATCH < allNames.length) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 150));
+    }
+  }
+
+  const sorted = counts.sort((a, b) => b.collected - a.collected || a.name.localeCompare(b.name));
+  beastNameCountCache = { data: sorted, expiresAt: now + 30 * 60 * 1000 };
+  return sorted;
 }

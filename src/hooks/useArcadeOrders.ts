@@ -4,8 +4,11 @@ import { getChecksumAddress } from "starknet";
 import { CategoryType, StatusType } from "@cartridge/arcade";
 import { compareStarknetAddresses, padStarknetAddress } from "../utils/address";
 
-// GraphQL endpoint for arcade-main
-const ARCADE_GRAPHQL_ENDPOINT = "https://api.cartridge.gg/x/arcade-main/torii/graphql";
+const ARCADE_GRAPHQL_ENDPOINT = import.meta.env.VITE_ARCADE_TORII_BASE
+  ? `${import.meta.env.VITE_ARCADE_TORII_BASE}/graphql`
+  : import.meta.env.DEV
+    ? "/arcade/graphql"
+    : "https://api.cartridge.gg/x/arcade-main/torii/graphql";
 
 // Minimal order shape compatible with existing hydrateOrders flow
 export type ArcadeOrderModelCompat = {

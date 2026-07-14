@@ -17,28 +17,37 @@ export function ThreeColumnStatsLayout({
   totalInHeader = false,
   renderHeaderTotal,
 }: ThreeColumnStatsLayoutProps) {
+  const hasOverviewCards = overviewCards.length > 0;
+
   return (
     <>
       {/* Header Total - if needed */}
       {totalInHeader && renderHeaderTotal && renderHeaderTotal(collectionStats)}
-      
-      {/* Three Column Layout: Beast Collection | Overview Cards | Highlights */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 items-center">
-        {/* Left Column - Beast Collection (1/3 width) */}
-        <div className="lg:col-span-1 h-fit">
-          <BeastCollectionTile {...collectionStats} />
-        </div>
 
-        {/* Middle Column - Overview Cards (1/3 width) */}
-        <div className="lg:col-span-1 h-fit">
-          <OverviewCards cards={overviewCards} />
+      {hasOverviewCards ? (
+        /* Three Column Layout: Beast Collection | Overview Cards | Highlights */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 items-center">
+          <div className="lg:col-span-1 h-fit">
+            <BeastCollectionTile {...collectionStats} />
+          </div>
+          <div className="lg:col-span-1 h-fit">
+            <OverviewCards cards={overviewCards} />
+          </div>
+          <div className="lg:col-span-1 h-fit">
+            <HighlightsTile {...collectionStats} />
+          </div>
         </div>
-
-        {/* Right Column - Highlights (1/3 width) */}
-        <div className="lg:col-span-1 h-fit">
-          <HighlightsTile {...collectionStats} />
+      ) : (
+        /* Two Column Layout: Beast Collection | Highlights */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-stretch">
+          <div>
+            <BeastCollectionTile {...collectionStats} />
+          </div>
+          <div>
+            <HighlightsTile {...collectionStats} />
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

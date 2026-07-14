@@ -62,25 +62,13 @@ export type BeastHighlights = {
   };
 };
 
-export type BeastRarityLeaderboardCategory =
-  | "all"
-  | "animatedShiny"
-  | "shiny"
-  | "animated"
-  | "standard";
-
 export type BeastSlayerEntry = {
   rank: number;
   beastId: string;
   beastName: string;
+  beastRank: number;
   owner: string | null;
   kills: number;
-};
-
-export type BeastNameLeaderboardEntry = {
-  rank: number;
-  beast_name: string;
-  value: number;
 };
 
 export type BeastPowerRank = {
@@ -103,8 +91,6 @@ export type LeaderboardEntry = {
 };
 
 export type PowerRankLeaderboard = LeaderboardEntry[];
-
-export type BeastCollectionLeaderboard = LeaderboardEntry[];
 
 
 export type FetchLeaderboardOptions = {

@@ -59,12 +59,12 @@ export default defineConfig({
     https: {},
     proxy: {
       "/torii": {
-        target: "https://api.cartridge.gg/x/pg-beasts/torii",
+        target: "https://torii-production-7359.up.railway.app",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/torii/, ""),
       },
       "/arcade": {
-        target: "https://api.cartridge.gg/x/arcade-main/torii",
+        target: "https://torii-production-7359.up.railway.app",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/arcade/, ""),
       },

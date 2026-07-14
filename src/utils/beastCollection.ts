@@ -7,6 +7,8 @@ export type BeastCollectionStats = {
   animatedCount: number;
   shinyCount: number;
   standardCount: number;
+  totalPower: number;
+  totalHealth: number;
   mostPowerful: Beast | null;
   mostPowerfulTitle: string | null;
   rarest: Beast | null;
@@ -25,6 +27,8 @@ const DEFAULT_STATS: BeastCollectionStats = {
   animatedCount: 0,
   shinyCount: 0,
   standardCount: 0,
+  totalPower: 0,
+  totalHealth: 0,
   mostPowerful: null,
   mostPowerfulTitle: null,
   rarest: null,
@@ -130,6 +134,8 @@ export function computeBeastCollectionStats(beasts: Beast[]): BeastCollectionSta
   let animatedOnly = 0;
   let shinyOnly = 0;
   let standard = 0;
+  let totalPower = 0;
+  let totalHealth = 0;
   let mostPowerful: Beast | null = null;
   let rarest: Beast | null = null;
   let highestRanked: Beast | null = null;
@@ -200,6 +206,16 @@ export function computeBeastCollectionStats(beasts: Beast[]): BeastCollectionSta
       }
     }
 
+    totalPower += typeof beast.power === "number" && Number.isFinite(beast.power) ? beast.power : 0;
+
+    const healthAttr = beast.attributes.find(
+      (attr) => attr.trait_type?.toLowerCase() === "health"
+    )?.value;
+    if (healthAttr != null) {
+      const h = typeof healthAttr === "number" ? healthAttr : Number(healthAttr);
+      if (Number.isFinite(h)) totalHealth += h;
+    }
+
     if (!mostPowerful || (beast.power ?? 0) > (mostPowerful.power ?? 0)) {
       mostPowerful = beast;
       const trimmedName = beast.name?.trim() ?? "";
@@ -254,6 +270,8 @@ export function computeBeastCollectionStats(beasts: Beast[]): BeastCollectionSta
     animatedCount: animatedOnly,
     shinyCount: shinyOnly,
     standardCount: standard,
+    totalPower,
+    totalHealth,
     mostPowerful,
     mostPowerfulTitle,
     rarest,

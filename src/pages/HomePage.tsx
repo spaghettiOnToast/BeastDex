@@ -305,13 +305,50 @@ function HomePage() {
   const handleMultiFilterChange = useCallback((trait: string, values: string[]) => {
     setPage(1);
     setAttributeFilters((prev) => {
-      const newFilters = { ...prev };
-      if (values && values.length > 0) {
-        newFilters[trait] = values;
-      } else {
-        delete newFilters[trait];
-      }
-      return newFilters;
+      const next = { ...prev };
+      if (values && values.length > 0) next[trait] = values;
+      else delete next[trait];
+      return next;
+    });
+  }, []);
+
+  const handleRankRangeChange = useCallback((rankValues: string[]) => {
+    setPage(1);
+    setAttributeFilters((prev) => {
+      const next = { ...prev };
+      if (rankValues.length > 0) next["Rank"] = rankValues;
+      else delete next["Rank"];
+      return next;
+    });
+  }, []);
+
+  const handleHealthRangeChange = useCallback((min: number, max: number) => {
+    setPage(1);
+    setAttributeFilters((prev) => {
+      const next = { ...prev };
+      if (min === -1 && max === -1) delete next["Health"];
+      else next["Health"] = [String(min), String(max)];
+      return next;
+    });
+  }, []);
+
+  const handleLevelRangeChange = useCallback((min: number, max: number) => {
+    setPage(1);
+    setAttributeFilters((prev) => {
+      const next = { ...prev };
+      if (min === -1 && max === -1) delete next["Level"];
+      else next["Level"] = [String(min), String(max)];
+      return next;
+    });
+  }, []);
+
+  const handleAdventurersKilledRangeChange = useCallback((min: number, max: number) => {
+    setPage(1);
+    setAttributeFilters((prev) => {
+      const next = { ...prev };
+      if (min === -1 && max === -1) delete next["Adventurers Killed"];
+      else next["Adventurers Killed"] = [String(min), String(max)];
+      return next;
     });
   }, []);
 
@@ -606,6 +643,10 @@ function HomePage() {
         filtersError={filtersError}
         onFilterChange={handleFilterChange}
         onMultiFilterChange={handleMultiFilterChange}
+        onRankRangeChange={handleRankRangeChange}
+        onHealthRangeChange={handleHealthRangeChange}
+        onLevelRangeChange={handleLevelRangeChange}
+        onAdventurersKilledRangeChange={handleAdventurersKilledRangeChange}
         onResetFilters={handleResetFilters}
       />
     </AppLayout>
