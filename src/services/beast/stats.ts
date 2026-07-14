@@ -1,18 +1,8 @@
 import { BEAST_STATS_CACHE_TTL_MS } from "./constants";
-import { buildBeastStatsQuery } from "./queries";
-import { runBeastSql } from "./sqlClient";
+import { collectablesClient } from "./collectablesClient";
 import type { BeastStats } from "./types";
 
 let statsCache: { data: BeastStats; expiresAt: number } | null = null;
-
-function parseNumber(value: unknown): number {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
 
 export async function fetchBeastStats(forceRefresh = false): Promise<BeastStats> {
   const now = Date.now();
@@ -20,25 +10,18 @@ export async function fetchBeastStats(forceRefresh = false): Promise<BeastStats>
     return statsCache.data;
   }
 
-  const query = buildBeastStatsQuery();
-  const rows = await runBeastSql<
-    Array<{ minted_count: number | string; unique_owners: number | string }>
-  >(query, "fetchBeastStats");
+  const raw = await collectablesClient.beasts.stats();
 
-  const statsRow = rows?.[0];
-  const mintedCount = parseNumber(statsRow?.minted_count);
-  const uniqueOwners = parseNumber(statsRow?.unique_owners);
+  const mintedCount =
+    typeof raw["total"] === "number" ? raw["total"] : 0;
 
   const data: BeastStats = {
     mintedCount,
-    uniqueOwners,
+    uniqueOwners: 0,
     fetchedAt: now,
   };
 
-  statsCache = {
-    data,
-    expiresAt: now + BEAST_STATS_CACHE_TTL_MS,
-  };
+  statsCache = { data, expiresAt: now + BEAST_STATS_CACHE_TTL_MS };
 
   return data;
 }

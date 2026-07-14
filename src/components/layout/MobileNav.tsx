@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, BarChart3, Home, Store, Package, Sword, type LucideIcon } from "lucide-react";
+import { Menu, X, BarChart3, Home, Store, Package, type LucideIcon } from "lucide-react";
 import { useAccount } from "@starknet-react/core";
 import { Button } from "../ui/button";
 

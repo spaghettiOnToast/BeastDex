@@ -1,4 +1,29 @@
+import type { Beast as SdkBeast } from "@provable-games/collectables";
+import { beastFullName, beastTraits, beastImageUrl } from "@provable-games/collectables";
 import type { Beast, BeastAttribute, BeastMetadata } from "./types";
+
+const COLLECTABLES_BASE_URL = "/collectables";
+
+export function mapSdkBeast(sdkBeast: SdkBeast): Beast {
+  const fullName = beastFullName(sdkBeast);
+  const traits = beastTraits(sdkBeast);
+  const imageUrl = beastImageUrl(sdkBeast, { baseUrl: COLLECTABLES_BASE_URL });
+  const attributes: BeastAttribute[] = traits.map((t) => ({
+    trait_type: t.trait_type,
+    value: t.value,
+  }));
+
+  return {
+    id: `beasts_nft:0x${sdkBeast.tokenId.toString(16)}`,
+    numericId: sdkBeast.tokenId,
+    name: fullName,
+    image: imageUrl,
+    owner: sdkBeast.owner ?? null,
+    attributes,
+    metadata: { name: fullName, image: imageUrl, attributes },
+    power: sdkBeast.power,
+  };
+}
 
 type AttributeLike = {
   trait_type?: unknown;

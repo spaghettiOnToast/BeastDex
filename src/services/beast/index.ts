@@ -1,16 +1,83 @@
-import { mapBeastRow, hasCompleteMetadata, type BeastRow } from "./helpers";
+import { mapBeastRow, mapSdkBeast, hasCompleteMetadata, type BeastRow } from "./helpers";
 export { hasCompleteMetadata };
-import {
-  buildAttributeFiltersQuery,
-  buildBeastsByIdListQuery,
-  buildBeastsQuery,
-  buildBeastByIdQuery,
-  buildOwnerBeastStatsQuery,
-  buildTopBeastsQuery,
-} from "./queries";
 import { runBeastSql } from "./sqlClient";
+import { collectablesClient } from "./collectablesClient";
+import {
+  BEAST_NAMES,
+  beastType,
+  beastTier,
+  normalizeAddress,
+} from "@provable-games/collectables";
+import type { BeastQuery } from "@provable-games/collectables";
 import { normaliseStarknetAddress } from "../../utils/address";
 import { CONTRACT_ADDRESS, EXCLUDED_OWNER_ADDRESS, ZERO_BALANCE } from "./constants";
+
+// ─── Cursor cache for SDK page emulation ────────────────────────────────────
+// Maps stable query key → Map<page, nextCursor from that page>
+const _beastCursorCache = new Map<string, Map<number, string | null>>();
+
+function _sdkQueryKey(q: BeastQuery): string {
+  return JSON.stringify(q, Object.keys(q as object).sort());
+}
+
+function _getCursor(q: BeastQuery, page: number): string | undefined {
+  const cursors = _beastCursorCache.get(_sdkQueryKey(q));
+  const c = cursors?.get(page - 1);
+  return c ?? undefined;
+}
+
+function _setCursor(q: BeastQuery, page: number, cursor: string | null) {
+  const key = _sdkQueryKey(q);
+  if (!_beastCursorCache.has(key)) _beastCursorCache.set(key, new Map());
+  _beastCursorCache.get(key)!.set(page, cursor);
+}
+
+// ─── Sort / filter mapping ───────────────────────────────────────────────────
+function _mapSort(sort: string): { sort: BeastQuery["sort"]; order: "asc" | "desc" } {
+  switch (sort) {
+    case "beast": return { sort: "name", order: "asc" };
+    case "tier": return { sort: "tier", order: "asc" };
+    case "health": return { sort: "health", order: "desc" };
+    case "rank": return { sort: "rank", order: "asc" };
+    case "last-death": return { sort: "last_death_timestamp", order: "desc" };
+    default: return { sort: "power", order: "desc" };
+  }
+}
+
+type AttributeFiltersInput = Record<string, Array<string | number>>;
+
+function _mapAttributeFilters(filters: AttributeFiltersInput): Partial<BeastQuery> {
+  const q: Partial<BeastQuery> = {};
+  for (const [trait, values] of Object.entries(filters)) {
+    if (!values || values.length === 0) continue;
+    const key = trait.toLowerCase();
+    if (key === "type") {
+      q.typeIn = values as ("Magic" | "Hunter" | "Brute")[];
+    } else if (key === "tier") {
+      q.tierIn = values.map(Number);
+    } else if (key === "beast" || key === "name") {
+      q.nameIn = values.map(String);
+    } else if (key === "shiny") {
+      if (values.some((v) => v === "true" || v === "1" || v === 1)) q.shiny = true;
+      else q.shiny = false;
+    } else if (key === "animated") {
+      if (values.some((v) => v === "true" || v === "1" || v === 1)) q.animated = true;
+      else q.animated = false;
+    }
+  }
+  return q;
+}
+
+function _parseTokenId(id: string | number): number | null {
+  const s = String(id).trim().toLowerCase();
+  if (/^\d+$/.test(s)) return parseInt(s, 10);
+  if (/^0x[0-9a-f]+$/.test(s)) return parseInt(s, 16);
+  if (s.includes(":")) {
+    const tail = s.slice(s.lastIndexOf(":") + 1);
+    if (/^0x[0-9a-f]+$/.test(tail)) return parseInt(tail, 16);
+  }
+  return null;
+}
 import type {
   Beast,
   BeastAttributeFilters,
@@ -71,18 +138,31 @@ export async function fetchBeasts({
   page = 1,
   sort = "default",
 }: FetchBeastsOptions = {}): Promise<FetchBeastsResponse> {
-  const params = { limit, search, attributeFilters, ownerAddresses, page, sort };
+  const { sort: sdkSort, order } = _mapSort(sort);
+  const filterParams = _mapAttributeFilters(attributeFilters as AttributeFiltersInput);
 
-  return apiCache.get("beast-query", params, async () => {
-    const query = buildBeastsQuery(params);
-    const rows = await runBeastSql<BeastRow[]>(query, "fetchBeasts");
-    const beasts = rows.map(mapBeastRow);
+  const baseQuery: BeastQuery = {
+    ...filterParams,
+    ...(search ? { search } : {}),
+    ...(ownerAddresses?.length === 1
+      ? { owner: normalizeAddress(ownerAddresses[0]) }
+      : {}),
+    sort: sdkSort,
+    order,
+    limit,
+    includeOwner: true,
+  };
 
-    const total =
-      rows.length > 0 ? Number(rows[0]?.total_count ?? beasts.length) : 0;
+  const cursor = _getCursor(baseQuery, page);
+  const sdkQuery: BeastQuery = cursor ? { ...baseQuery, cursor } : baseQuery;
 
-    return { beasts, total };
-  });
+  const result = await collectablesClient.beasts.list(sdkQuery);
+  _setCursor(baseQuery, page, result.nextCursor);
+
+  return {
+    beasts: result.items.map(mapSdkBeast),
+    total: result.total,
+  };
 }
 
 /**
@@ -92,9 +172,13 @@ export async function fetchBeasts({
  */
 export async function fetchTopBeasts(limit: number = 10): Promise<Beast[]> {
   return apiCache.get("top-beasts", { limit }, async () => {
-    const query = buildTopBeastsQuery(limit);
-    const rows = await runBeastSql<BeastRow[]>(query, "fetchTopBeasts");
-    return rows.map(mapBeastRow);
+    const result = await collectablesClient.beasts.list({
+      sort: "power",
+      order: "desc",
+      limit,
+      includeOwner: true,
+    });
+    return result.items.map(mapSdkBeast);
   });
 }
 
@@ -147,107 +231,72 @@ export function deriveTokenHex(identifier: string): string[] {
 export async function fetchBeastById(
   id: string | number
 ): Promise<Beast | null> {
-  const identifier = String(id);
+  const tokenId = _parseTokenId(id);
+  if (tokenId === null || tokenId <= 0) return null;
 
-  return apiCache.get("beast-by-id", { id: identifier }, async () => {
-    const tokenHexes = deriveTokenHex(identifier);
-    // Use the first hex variant for the single-ID query
-    const query = buildBeastByIdQuery(identifier, tokenHexes[0]);
-    const rows = await runBeastSql<BeastRow[]>(query, "fetchBeastById");
-
-    if (!rows || rows.length === 0) {
+  return apiCache.get("beast-by-id", { id: tokenId }, async () => {
+    try {
+      const sdkBeast = await collectablesClient.beasts.get(tokenId);
+      return mapSdkBeast(sdkBeast);
+    } catch {
       return null;
     }
-
-    const beast = mapBeastRow(rows[0]);
-
-    return beast;
   });
 }
 
 export async function fetchBeastsByIds(
   ids: Array<string | number>
 ): Promise<Beast[]> {
-  const identifiers = Array.from(
+  const numericIds = Array.from(
     new Set(
       ids
-        .map((value) => String(value).trim())
-        .filter((value) => value.length > 0)
-        .map((value) => value.toLowerCase())
+        .map(_parseTokenId)
+        .filter((id): id is number => id !== null && id > 0)
     )
   );
 
-  if (identifiers.length === 0) {
-    return [];
-  }
+  if (numericIds.length === 0) return [];
 
-  // Batch into chunks to avoid oversized SQL IN clauses, run in parallel
-  const BATCH_SIZE = 50;
-  const batches: string[][] = [];
-  for (let i = 0; i < identifiers.length; i += BATCH_SIZE) {
-    batches.push(identifiers.slice(i, i + BATCH_SIZE));
+  const BATCH_SIZE = 100;
+  const batches: number[][] = [];
+  for (let i = 0; i < numericIds.length; i += BATCH_SIZE) {
+    batches.push(numericIds.slice(i, i + BATCH_SIZE));
   }
 
   const results = await Promise.all(
-    batches.map(async (batch) => {
-      const tokenHexes = Array.from(
-        new Set(
-          batch
-            .flatMap((identifier) => deriveTokenHex(identifier))
-            .map((hex) => hex.toLowerCase())
-        )
-      );
-
-      const query = buildBeastsByIdListQuery({
-        identifiers: batch,
-        tokenHexes,
-      });
-      const rows = await runBeastSql<BeastRow[]>(query, "fetchBeastsByIds", {
-        timeoutMs: 60_000,
-      });
-      return rows.map(mapBeastRow);
-    })
+    batches.map((batch) =>
+      collectablesClient.beasts
+        .list({ tokenIdIn: batch, limit: BATCH_SIZE, includeOwner: true })
+        .then((page) => page.items.map(mapSdkBeast))
+    )
   );
 
   return results.flat();
 }
 
 export async function fetchBeastAttributeFilters(): Promise<BeastAttributeFilters> {
-  return apiCache.get("beast-filters", {}, async () => {
-    const query = buildAttributeFiltersQuery();
-    const rows = await runBeastSql<
-      Array<{ trait_type?: string | null; values_json?: string | null }>
-    >(query, "fetchBeastAttributeFilters");
+  // Static filters derived from SDK constants — no network call needed.
+  const beastIdNums = Array.from(
+    new Set(Object.keys(BEAST_NAMES).map(Number))
+  ).sort((a, b) => a - b);
 
-    return rows.reduce<BeastAttributeFilters>((acc, row) => {
-      const trait = row?.trait_type;
-      const rawValues = row?.values_json;
-      let values: unknown[] = [];
+  const uniqueNames = Array.from(new Set(Object.values(BEAST_NAMES))).sort();
+  const uniqueTypes = Array.from(
+    new Set(beastIdNums.map((id) => beastType(id)))
+  ).sort();
+  const uniqueTiers = Array.from(
+    new Set(beastIdNums.map((id) => beastTier(id)))
+  )
+    .sort((a, b) => a - b)
+    .map(String);
 
-      if (typeof rawValues === "string" && rawValues.length > 0) {
-        try {
-          const parsed = JSON.parse(rawValues);
-          if (Array.isArray(parsed)) {
-            values = parsed;
-          }
-        } catch (error) {
-          console.warn(
-            "⚠️ Failed to parse attribute filter values JSON",
-            error,
-            rawValues
-          );
-        }
-      }
-
-      if (typeof trait === "string" && trait.length > 0) {
-        acc[trait] = values
-          .map((value: unknown) => (value == null ? null : String(value)))
-          .filter((value): value is string => Boolean(value));
-      }
-
-      return acc;
-    }, {});
-  });
+  return {
+    Beast: uniqueNames,
+    Type: uniqueTypes,
+    Tier: uniqueTiers,
+    Shiny: ["true", "false"],
+    Animated: ["true", "false"],
+  };
 }
 
 export async function fetchBeastPowerRank(
@@ -1176,47 +1225,24 @@ export async function fetchOwnerBeastStats(
 ): Promise<OwnerBeastStats> {
   const normalised = normaliseStarknetAddress(ownerAddress);
   if (!normalised) {
-    return {
-      totalBeasts: 0,
-      totalPower: 0,
-      uniqueBeastTypes: 0,
-      uniqueTiers: 0,
-      maxPower: 0,
-    };
+    return { totalBeasts: 0, totalPower: 0, uniqueBeastTypes: 0, uniqueTiers: 0, maxPower: 0 };
   }
 
   return apiCache.get("owner-beast-stats", { address: normalised }, async () => {
-    const query = buildOwnerBeastStatsQuery(ownerAddress);
-
-    type StatsRow = {
-      total_beasts: number;
-      total_power: number;
-      unique_beast_types: number;
-      unique_tiers: number;
-      max_power: number;
-    };
-
-    const rows = await runBeastSql<StatsRow[]>(query, "fetchOwnerBeastStats");
-
-    if (!rows || rows.length === 0) {
+    try {
+      const stats = await collectablesClient.beasts.ownerStats(
+        normalizeAddress(normalised)
+      );
       return {
-        totalBeasts: 0,
+        totalBeasts: stats.total,
         totalPower: 0,
-        uniqueBeastTypes: 0,
+        uniqueBeastTypes: stats.uniqueBeastIds,
         uniqueTiers: 0,
-        maxPower: 0,
+        maxPower: stats.bounds?.power[1] ?? 0,
       };
+    } catch {
+      return { totalBeasts: 0, totalPower: 0, uniqueBeastTypes: 0, uniqueTiers: 0, maxPower: 0 };
     }
-
-    const row = rows[0];
-
-    return {
-      totalBeasts: Number(row.total_beasts) || 0,
-      totalPower: Number(row.total_power) || 0,
-      uniqueBeastTypes: Number(row.unique_beast_types) || 0,
-      uniqueTiers: Number(row.unique_tiers) || 0,
-      maxPower: Number(row.max_power) || 0,
-    };
   });
 }
 
