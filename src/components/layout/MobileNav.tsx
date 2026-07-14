@@ -30,7 +30,7 @@ export function MobileNav({ onNavigate }: Props) {
   const navItems: NavItem[] = [
     { to: "/", label: "Explore", icon: Home },
     { to: collectionPath, label: "Collection", icon: Package },
-    { to: "/marketplace", label: "Marketplace", icon: Store },
+    // { to: "/marketplace", label: "Marketplace", icon: Store },
     { to: "/statistics", label: "Stats", icon: BarChart3 },
     // { to: "/dungeons", label: "Dungeons", icon: Sword },
   ];
