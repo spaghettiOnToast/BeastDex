@@ -182,6 +182,9 @@ export function BeastSlayerLeaderboard() {
                   >
                     {entry.beastName}
                   </Link>
+                  <span className="ml-2 text-xs text-zinc-500">
+                    #{entry.beastRank > 0 ? entry.beastRank : entry.beastId}
+                  </span>
                 </div>
 
                 <div className="flex items-center">

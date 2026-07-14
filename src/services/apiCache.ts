@@ -22,14 +22,8 @@ class ApiCache {
     this.cacheConfigs.set("adventurer-deaths", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("beast-stats", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("beast-highlights", { ttl: 5 * 60 * 1000 }); // 5 minutes
-    this.cacheConfigs.set("beast-collection-leaderboard", { ttl: 5 * 60 * 1000 }); // 5 minutes
-    this.cacheConfigs.set("most-collected-beast", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("beast-of-the-day", { ttl: 3 * 60 * 1000 }); // 3 minutes
-    this.cacheConfigs.set("beast-rarity-leaderboard", { ttl: 5 * 60 * 1000 }); // 5 minutes
-    this.cacheConfigs.set("beast-slayer-leaderboard", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("power-rank-leaderboard", { ttl: 5 * 60 * 1000 }); // 5 minutes
-    this.cacheConfigs.set("most-collected-beast-leaderboard", { ttl: 5 * 60 * 1000 }); // 5 minutes
-    this.cacheConfigs.set("beast-of-the-day-leaderboard", { ttl: 3 * 60 * 1000 }); // 3 minutes
     this.cacheConfigs.set("owner-beast-stats", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("owner-beast-highlights", { ttl: 5 * 60 * 1000 }); // 5 minutes
   }
@@ -117,15 +111,8 @@ class ApiCache {
       'beast-query',
       'beast-stats',
       'beast-highlights',
-      'beast-collection-leaderboard',
-      'most-collected-beast',
       'beast-of-the-day',
-      'beast-rarity-leaderboard',
-      'beast-slayer-leaderboard',
       'power-rank-leaderboard',
-      'most-collected-beast-leaderboard',
-      'beast-of-the-day-leaderboard',
-      'beast-slayer-leaderboard',
     ];
 
     beastEndpoints.forEach(endpoint => this.clearEndpoint(endpoint));

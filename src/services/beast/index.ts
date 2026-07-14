@@ -1,4 +1,4 @@
-import { mapBeastRow, mapSdkBeast, hasCompleteMetadata, type BeastRow } from "./helpers";
+import { mapSdkBeast, hasCompleteMetadata } from "./helpers";
 export { hasCompleteMetadata };
 import { runBeastSql } from "./sqlClient";
 import { collectablesClient } from "./collectablesClient";
@@ -12,11 +12,21 @@ import {
 } from "@provable-games/collectables";
 import type { BeastQuery } from "@provable-games/collectables";
 import { normaliseStarknetAddress } from "../../utils/address";
-import { CONTRACT_ADDRESS, EXCLUDED_OWNER_ADDRESS, ZERO_BALANCE } from "./constants";
+import { CONTRACT_ADDRESS, ZERO_BALANCE, EXCLUDED_OWNER_ADDRESS } from "./constants";
 
 // ─── Cursor cache for SDK page emulation ────────────────────────────────────
 // Maps stable query key → Map<page, nextCursor from that page>
 const _beastCursorCache = new Map<string, Map<number, string | null>>();
+
+// Module-level cache for Slayer leaderboard (excludes EXCLUDED_OWNER_ADDRESS)
+type SlayerCache = { timestamp: number; entries: import("./types").BeastSlayerEntry[] };
+let _slayerCache: SlayerCache | null = null;
+const SLAYER_CACHE_TTL_MS = 5 * 60 * 1000;
+
+// Module-level cache for Beast of the Day (24h window, sorted client-side)
+type BotdEntry = { rank: number; beast: import("./types").Beast; owner: string; rarity_score: number; power: number; beast_rank: number; last_death: number };
+let _beastOfTheDayCache: { timestamp: number; entries: BotdEntry[] } | null = null;
+const BOTD_CACHE_TTL_MS = 3 * 60 * 1000;
 
 function _sdkQueryKey(q: BeastQuery): string {
   return JSON.stringify(q, Object.keys(q as object).sort());
@@ -105,17 +115,15 @@ import type {
   FetchBeastsOptions,
   FetchLeaderboardOptions,
   PowerRankLeaderboard,
-  BeastCollectionLeaderboard,
-  BeastRarityLeaderboardCategory,
   BeastSlayerEntry,
-  BeastNameLeaderboardEntry,
 } from "./types";
 import { fetchBeastStats } from "./stats";
-import { fetchBeastHighlights } from "./highlights";
+import { fetchBeastHighlights, fetchBeastCollectedByName } from "./highlights";
+export type { BeastNameCount } from "./highlights";
 import { apiCache } from "../apiCache";
 
 export { TOTAL_BEAST_SUPPLY, MAX_BEASTS_PER_TYPE, MAX_BEASTS_PER_TIER } from "./constants";
-export { fetchBeastStats, fetchBeastHighlights };
+export { fetchBeastStats, fetchBeastHighlights, fetchBeastCollectedByName };
 export type {
   AttributeFilterInput,
   Beast,
@@ -127,11 +135,8 @@ export type {
   BeastSortField,
   BeastStats,
   PowerRankLeaderboard,
-  BeastCollectionLeaderboard,
   FetchLeaderboardOptions,
-  BeastRarityLeaderboardCategory,
   BeastSlayerEntry,
-  BeastNameLeaderboardEntry,
 } from "./types";
 
 export type OwnerBeastStats = {
@@ -158,22 +163,23 @@ export async function fetchBeasts({
   const { sort: sdkSort, order } = _mapSort(sort);
   const filterParams = _mapAttributeFilters(attributeFilters as AttributeFiltersInput);
 
+  const ownerAddress = ownerAddresses?.length === 1 ? normalizeAddress(ownerAddresses[0]) : null;
+
   const baseQuery: BeastQuery = {
     ...filterParams,
     ...(search ? { search } : {}),
-    ...(ownerAddresses?.length === 1
-      ? { owner: normalizeAddress(ownerAddresses[0]) }
-      : {}),
     sort: sdkSort,
     order,
-    limit: Math.min(limit, 100), // SDK caps at 100
+    limit: Math.min(limit, ownerAddress ? 1000 : 100),
     includeOwner: true,
   };
 
   const cursor = _getCursor(baseQuery, page);
   const sdkQuery: BeastQuery = cursor ? { ...baseQuery, cursor } : baseQuery;
 
-  const result = await collectablesClient.beasts.list(sdkQuery);
+  const result = ownerAddress
+    ? await collectablesClient.beasts.byOwner(ownerAddress, sdkQuery)
+    : await collectablesClient.beasts.list(sdkQuery);
   _setCursor(baseQuery, page, result.nextCursor);
 
   return {
@@ -392,246 +398,6 @@ export async function fetchPowerRankLeaderboard({
   });
 }
 
-export async function fetchBeastCollectionLeaderboard({
-  limit = 10,
-  offset = 0,
-}: FetchLeaderboardOptions = {}): Promise<BeastCollectionLeaderboard> {
-  return apiCache.get("beast-collection-leaderboard", { limit, offset }, async () => {
-    const query = `
-      WITH owner_counts AS (
-        SELECT
-          LOWER(b.account_address) as owner,
-          COUNT(*) as beast_count
-        FROM tokens t
-        JOIN token_balances b
-          ON t.id = b.token_id
-          AND t.contract_address = b.contract_address
-        WHERE t.contract_address = '${CONTRACT_ADDRESS}'
-          AND b.balance > '${ZERO_BALANCE}'
-          AND json_valid(t.metadata) = 1
-          AND b.account_address IS NOT NULL
-          AND b.account_address != ''
-        GROUP BY LOWER(b.account_address)
-      )
-      SELECT
-        ROW_NUMBER() OVER (ORDER BY beast_count DESC) as rank,
-        owner,
-        beast_count as value
-      FROM owner_counts
-      ORDER BY beast_count DESC
-      LIMIT ${limit} OFFSET ${offset}
-    `;
-
-    type BeastCountRow = {
-      rank: number;
-      owner: string;
-      value: number;
-    };
-
-    const rows = await runBeastSql<BeastCountRow[]>(query, "fetchBeastCollectionLeaderboard");
-    return rows.map(row => ({
-      rank: row.rank,
-      owner: row.owner,
-      username: null, // Will be resolved by username service
-      value: row.value,
-    }));
-  });
-}
-
-function buildBeastRarityWhereClause(category: BeastRarityLeaderboardCategory): string {
-  switch (category) {
-    case "all":
-      return "1 = 1";
-    case "animatedShiny":
-      return "is_shiny = 1 AND is_animated = 1";
-    case "shiny":
-      return "is_shiny = 1";
-    case "animated":
-      return "is_animated = 1";
-    case "standard":
-      return "is_shiny = 0 AND is_animated = 0";
-    default:
-      return "1 = 0";
-  }
-}
-
-export async function fetchBeastRarityBeastLeaderboard({
-  category,
-  limit = 10,
-  offset = 0,
-  ascending = false,
-}: FetchLeaderboardOptions & { category: BeastRarityLeaderboardCategory; ascending?: boolean }): Promise<BeastNameLeaderboardEntry[]> {
-  const safeCategory = category ?? "all";
-
-  if (safeCategory === "all") {
-    return fetchMostCollectedBeastLeaderboard({ limit, offset, ascending });
-  }
-
-  return apiCache.get(
-    "beast-rarity-leaderboard",
-    { category: safeCategory, limit, offset, ascending },
-    async () => {
-      const whereClause = buildBeastRarityWhereClause(safeCategory);
-      if (!whereClause || whereClause === "1 = 0") {
-        return [];
-      }
-
-      const orderDirection = ascending ? "ASC" : "DESC";
-
-      const query = `
-        WITH all_token_attrs AS (
-          SELECT
-            t.id,
-            json_extract(attr.value, '$.trait_type') AS trait,
-            json_extract(attr.value, '$.value') AS value
-          FROM tokens t
-          JOIN json_each(
-            CASE
-              WHEN json_valid(t.metadata) = 1 THEN t.metadata
-              ELSE '{"attributes":[]}'
-            END,
-            '$.attributes'
-          ) attr
-          WHERE t.contract_address = '${CONTRACT_ADDRESS}'
-            AND json_valid(t.metadata) = 1
-            AND json_extract(attr.value, '$.trait_type') IS NOT NULL
-            AND json_extract(attr.value, '$.value') IS NOT NULL
-        ),
-        all_beasts AS (
-          SELECT DISTINCT
-            MAX(CASE WHEN LOWER(trait) = 'beast' THEN value END) AS beast_name
-          FROM all_token_attrs
-          WHERE LOWER(trait) = 'beast'
-          GROUP BY id
-        ),
-        owned_token_attrs AS (
-          SELECT
-            t.id,
-            json_extract(attr.value, '$.trait_type') AS trait,
-            json_extract(attr.value, '$.value') AS value
-          FROM tokens t
-          JOIN token_balances b
-            ON t.id = b.token_id
-           AND t.contract_address = b.contract_address
-          JOIN json_each(
-            CASE
-              WHEN json_valid(t.metadata) = 1 THEN t.metadata
-              ELSE '{"attributes":[]}'
-            END,
-            '$.attributes'
-          ) attr
-          WHERE t.contract_address = '${CONTRACT_ADDRESS}'
-            AND b.balance > '${ZERO_BALANCE}'
-            AND json_valid(t.metadata) = 1
-            AND json_extract(attr.value, '$.trait_type') IS NOT NULL
-            AND json_extract(attr.value, '$.value') IS NOT NULL
-            AND b.account_address IS NOT NULL
-            AND b.account_address != ''
-        ),
-        normalized AS (
-          SELECT
-            id,
-            MAX(CASE WHEN LOWER(trait) LIKE 'shiny%' AND value IN ('1','true','True','TRUE') THEN 1 ELSE 0 END) AS is_shiny,
-            MAX(CASE WHEN LOWER(trait) LIKE 'animated%' AND value IN ('1','true','True','TRUE') THEN 1 ELSE 0 END) AS is_animated,
-            MAX(CASE WHEN LOWER(trait) = 'beast' THEN value END) AS beast_name
-          FROM owned_token_attrs
-          GROUP BY id
-        ),
-        filtered AS (
-          SELECT
-            beast_name
-          FROM normalized
-          WHERE beast_name IS NOT NULL
-            AND ${whereClause}
-        ),
-        counts AS (
-          SELECT
-            ab.beast_name,
-            COUNT(f.beast_name) AS total
-          FROM all_beasts ab
-          LEFT JOIN filtered f ON ab.beast_name = f.beast_name
-          WHERE ab.beast_name IS NOT NULL
-          GROUP BY ab.beast_name
-        )
-        SELECT
-          ROW_NUMBER() OVER (ORDER BY total ${orderDirection}, beast_name ASC) AS rank,
-          beast_name,
-          total AS value
-        FROM counts
-        ORDER BY total ${orderDirection}, beast_name ASC
-        LIMIT ${limit} OFFSET ${offset};
-      `;
-
-      type BeastRarityRow = {
-        rank: number;
-        beast_name: string;
-        value: number;
-      };
-
-      const rows = await runBeastSql<BeastRarityRow[]>(query, "fetchBeastRarityBeastLeaderboard");
-      return rows.map((row) => ({
-        rank: row.rank,
-        beast_name: row.beast_name,
-        value: row.value,
-      }));
-    }
-  );
-}
-
-export async function fetchMostCollectedBeastLeaderboard({
-  limit = 10,
-  offset = 0,
-  ascending = false,
-}: FetchLeaderboardOptions & { ascending?: boolean } = {}): Promise<BeastNameLeaderboardEntry[]> {
-  return apiCache.get("most-collected-beast-leaderboard", { limit, offset, ascending }, async () => {
-    const query = `
-      WITH beast_counts AS (
-        SELECT
-          json_extract(attr.value, '$.value') as beast_name,
-          COUNT(DISTINCT t.id) as beast_count
-        FROM tokens t
-        JOIN token_balances b
-          ON t.id = b.token_id
-          AND t.contract_address = b.contract_address
-        JOIN json_each(
-          CASE
-            WHEN json_valid(t.metadata) = 1 THEN t.metadata
-            ELSE '{"attributes":[]}'
-          END,
-          '$.attributes'
-        ) attr
-        WHERE t.contract_address = '${CONTRACT_ADDRESS}'
-          AND b.balance > '${ZERO_BALANCE}'
-          AND json_valid(t.metadata) = 1
-          AND LOWER(json_extract(attr.value, '$.trait_type')) = 'beast'
-          AND json_extract(attr.value, '$.value') IS NOT NULL
-          AND json_extract(attr.value, '$.value') != ''
-        GROUP BY json_extract(attr.value, '$.value')
-      )
-      SELECT
-        ROW_NUMBER() OVER (ORDER BY beast_count ${ascending ? 'ASC' : 'DESC'}) as rank,
-        beast_name,
-        beast_count as value
-      FROM beast_counts
-      ORDER BY beast_count ${ascending ? 'ASC' : 'DESC'}
-      LIMIT ${limit} OFFSET ${offset}
-    `;
-
-    type BeastNameCountRow = {
-      rank: number;
-      beast_name: string;
-      value: number;
-    };
-
-    const rows = await runBeastSql<BeastNameCountRow[]>(query, "fetchMostCollectedBeastLeaderboard");
-    return rows.map(row => ({
-      rank: row.rank,
-      beast_name: row.beast_name,
-      value: row.value,
-    }));
-  });
-}
-
 export async function fetchBeastOfTheDayLeaderboard({
   limit = 10,
   offset = 0,
@@ -644,202 +410,77 @@ export async function fetchBeastOfTheDayLeaderboard({
   beast_rank: number;
   last_death: number;
 }>> {
-  return apiCache.get("beast-of-the-day-leaderboard", { limit, offset }, async () => {
-    // Calculate 24 hours ago timestamp
-    const twentyFourHoursAgo = Math.floor(Date.now() / 1000) - (24 * 60 * 60);
+  const now = Date.now();
 
-    const query = `
-      WITH beast_data AS (
-        SELECT
-          t.id,
-          t.metadata,
-          LOWER(b.account_address) as owner,
-          -- Extract attributes
-          (SELECT json_extract(attr.value, '$.value')
-           FROM json_each(t.metadata, '$.attributes') attr
-           WHERE LOWER(json_extract(attr.value, '$.trait_type')) = 'beast') as beast_name,
-          (SELECT CAST(json_extract(attr.value, '$.value') AS INTEGER)
-           FROM json_each(t.metadata, '$.attributes') attr
-           WHERE LOWER(json_extract(attr.value, '$.trait_type')) = 'last death timestamp') as last_death,
-          (SELECT CAST(json_extract(attr.value, '$.value') AS REAL)
-           FROM json_each(t.metadata, '$.attributes') attr
-           WHERE LOWER(json_extract(attr.value, '$.trait_type')) LIKE '%power%') as power,
-          (SELECT CAST(json_extract(attr.value, '$.value') AS INTEGER)
-           FROM json_each(t.metadata, '$.attributes') attr
-           WHERE LOWER(json_extract(attr.value, '$.trait_type')) = 'rank') as beast_rank,
-          (SELECT json_extract(attr.value, '$.value')
-           FROM json_each(t.metadata, '$.attributes') attr
-           WHERE LOWER(json_extract(attr.value, '$.trait_type')) = 'animated') as animated,
-          (SELECT json_extract(attr.value, '$.value')
-           FROM json_each(t.metadata, '$.attributes') attr
-           WHERE LOWER(json_extract(attr.value, '$.trait_type')) = 'shiny') as shiny
-        FROM tokens t
-        JOIN token_balances b
-          ON t.id = b.token_id
-          AND t.contract_address = b.contract_address
-        WHERE t.contract_address = '${CONTRACT_ADDRESS}'
-          AND b.balance > '${ZERO_BALANCE}'
-          AND json_valid(t.metadata) = 1
-          AND b.account_address IS NOT NULL
-          AND b.account_address != ''
-      ),
-      recent_deaths AS (
-        SELECT
-          *,
-          -- Calculate rarity score: Shiny Animated = 3, Shiny = 2, Animated = 2, Standard = 1
-          CASE
-            WHEN (animated = '1' OR animated = 1) AND (shiny = '1' OR shiny = 1) THEN 3
-            WHEN (shiny = '1' OR shiny = 1) THEN 2
-            WHEN (animated = '1' OR animated = 1) THEN 2
-            ELSE 1
-          END as rarity_score
-        FROM beast_data
-        WHERE last_death IS NOT NULL
-          AND last_death >= ${twentyFourHoursAgo}
-          AND power IS NOT NULL
-          AND beast_rank IS NOT NULL
-      )
-      SELECT
-        ROW_NUMBER() OVER (
-          ORDER BY
-            rarity_score DESC,
-            power DESC,
-            beast_rank ASC
-        ) as rank,
-        id,
-        metadata,
-        owner,
-        rarity_score,
-        COALESCE(power, 0) as power,
-        COALESCE(beast_rank, 999999) as beast_rank,
-        last_death
-      FROM recent_deaths
-      ORDER BY
-        rarity_score DESC,
-        power DESC,
-        beast_rank ASC
-      LIMIT ${limit} OFFSET ${offset}
-    `;
+  if (!_beastOfTheDayCache || now - _beastOfTheDayCache.timestamp > BOTD_CACHE_TTL_MS) {
+    const twentyFourHoursAgo = Math.floor(now / 1000) - 24 * 60 * 60;
 
-    type BeastOfTheDayRow = {
-      rank: number;
-      id: string;
-      metadata: string;
-      owner: string;
-      rarity_score: number;
-      power: number;
-      beast_rank: number;
-      last_death: number;
-    };
-
-    const rows = await runBeastSql<BeastOfTheDayRow[]>(query, "fetchBeastOfTheDayLeaderboard");
-
-    return rows.map(row => {
-      // Parse the beast data using existing helper
-      const beastRow = {
-        id: row.id,
-        metadata: row.metadata,
-        account_address: row.owner,
-        contract_address: CONTRACT_ADDRESS,
-        token_id: row.id,
-        balance: "1",
-        total_count: 1
-      };
-
-      const beast = mapBeastRow(beastRow);
-
-      return {
-        rank: row.rank,
-        beast,
-        owner: row.owner,
-        rarity_score: row.rarity_score,
-        power: row.power,
-        beast_rank: row.beast_rank,
-        last_death: row.last_death,
-      };
+    const result = await collectablesClient.beasts.list({
+      lastDeathTimestampGte: twentyFourHoursAgo,
+      sort: "power",
+      order: "desc",
+      limit: 100,
+      includeOwner: true,
     });
-  });
+
+    const sorted = result.items
+      .map((item) => {
+        const isShiny = Boolean(item.shiny);
+        const isAnimated = Boolean(item.animated);
+        return {
+          beast: mapSdkBeast(item),
+          owner: item.owner ?? "",
+          rarity_score: isShiny && isAnimated ? 3 : isShiny || isAnimated ? 2 : 1,
+          power: item.power ?? 0,
+          beast_rank: item.rank ?? 999999,
+          last_death: item.lastDeathTimestamp ?? 0,
+        };
+      })
+      .sort(
+        (a, b) =>
+          b.rarity_score - a.rarity_score ||
+          b.power - a.power ||
+          a.beast_rank - b.beast_rank
+      )
+      .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
+
+    _beastOfTheDayCache = { timestamp: now, entries: sorted };
+  }
+
+  return _beastOfTheDayCache.entries.slice(offset, offset + limit);
 }
 
 export async function fetchBeastSlayerLeaderboard({
   limit = 10,
   offset = 0,
 }: FetchLeaderboardOptions = {}): Promise<BeastSlayerEntry[]> {
-  return apiCache.get("beast-slayer-leaderboard", { limit, offset }, async () => {
-    const query = `
-      WITH kills AS (
-        SELECT
-          t.id,
-          json_extract(t.metadata, '$.name') AS beast_name,
-          LOWER(b.account_address) AS owner,
-          MAX(
-            CAST(
-              CASE
-                WHEN json_type(attr.value, '$.value') IN ('integer', 'real', 'text')
-                  THEN json_extract(attr.value, '$.value')
-                ELSE NULL
-              END AS REAL
-            )
-          ) AS kills
-        FROM tokens t
-        JOIN token_balances b
-          ON t.id = b.token_id
-         AND t.contract_address = b.contract_address
-        JOIN json_each(
-          CASE
-            WHEN json_valid(t.metadata) = 1 THEN t.metadata
-            ELSE '{"attributes":[]}'
-          END,
-          '$.attributes'
-        ) attr
-        WHERE t.contract_address = '${CONTRACT_ADDRESS}'
-          AND b.balance > '${ZERO_BALANCE}'
-          AND json_valid(t.metadata) = 1
-          AND json_extract(attr.value, '$.trait_type') IS NOT NULL
-          AND json_extract(attr.value, '$.value') IS NOT NULL
-          AND LOWER(json_extract(attr.value, '$.trait_type')) LIKE '%adventurer%'
-          AND LOWER(json_extract(attr.value, '$.trait_type')) LIKE '%kill%'
-          AND LOWER(b.account_address) != '${EXCLUDED_OWNER_ADDRESS.toLowerCase()}'
-        GROUP BY t.id, beast_name, owner
-      ),
-      ranked AS (
-        SELECT
-          id,
-          COALESCE(beast_name, '') AS beast_name,
-          owner,
-          CAST(kills AS INTEGER) AS kills
-        FROM kills
-        WHERE kills IS NOT NULL
-          AND kills > 0
-      )
-      SELECT
-        ROW_NUMBER() OVER (ORDER BY kills DESC, id ASC) AS rank,
-        id,
-        beast_name,
-        owner,
-        kills
-      FROM ranked
-      ORDER BY kills DESC, id ASC
-      LIMIT ${limit} OFFSET ${offset};
-    `;
+  const now = Date.now();
 
-    type SlayerRow = {
-      rank: number;
-      id: string | number;
-      beast_name: string | null;
-      owner: string | null;
-      kills: number | null;
-    };
+  if (!_slayerCache || now - _slayerCache.timestamp > SLAYER_CACHE_TTL_MS) {
+    const result = await collectablesClient.beasts.list({
+      sort: "adventurers_killed",
+      order: "desc",
+      adventurersKilledGte: 1,
+      limit: 100,
+      includeOwner: true,
+    });
 
-    const rows = await runBeastSql<SlayerRow[]>(query, "fetchBeastSlayerLeaderboard");
-    return rows.map((row) => ({
-      rank: row.rank,
-      beastId: String(row.id),
-      beastName: row.beast_name && row.beast_name.trim().length > 0 ? row.beast_name : `Beast #${row.id}`,
-      owner: row.owner ?? null,
-      kills: Number.isFinite(row.kills ?? NaN) ? Number(row.kills) : 0,
-    }));
-  });
+    const excludedAddr = normalizeAddress(EXCLUDED_OWNER_ADDRESS);
+    const entries = result.items
+      .filter((item) => !item.owner || normalizeAddress(item.owner) !== excludedAddr)
+      .map((item, idx) => ({
+        rank: idx + 1,
+        beastId: String(item.tokenId),
+        beastName: mapSdkBeast(item).name,
+        beastRank: item.rank ?? 0,
+        owner: item.owner ?? null,
+        kills: item.adventurersKilled ?? 0,
+      }));
+
+    _slayerCache = { timestamp: now, entries };
+  }
+
+  return _slayerCache.entries.slice(offset, offset + limit);
 }
 
 export async function fetchOwnerBeastStats(
@@ -910,111 +551,28 @@ export async function fetchOwnerBeastHighlights(
   }
 
   return apiCache.get("owner-beast-highlights", { address: normalised }, async () => {
-    const variants = new Set<string>();
-    variants.add(normalised.toLowerCase());
-    if (normalised.startsWith("0x")) {
-      const padded = `0x${normalised.slice(2).padStart(64, "0")}`;
-      variants.add(padded.toLowerCase());
-    }
+    const addr = normalizeAddress(normalised);
 
-    const addressList = Array.from(variants)
-      .map((address) => `'${address.replace(/'/g, "''")}'`)
-      .join(", ");
+    const [animatedShiny, shinyOnly, animatedOnly, highestRanked, lastCollected] =
+      await Promise.all([
+        collectablesClient.beasts.byOwner(addr, { shiny: true, animated: true, sort: "power", order: "desc", limit: 1 }),
+        collectablesClient.beasts.byOwner(addr, { shiny: true, animated: false, sort: "power", order: "desc", limit: 1 }),
+        collectablesClient.beasts.byOwner(addr, { shiny: false, animated: true, sort: "power", order: "desc", limit: 1 }),
+        collectablesClient.beasts.byOwner(addr, { sort: "rank", order: "asc", limit: 1 }),
+        collectablesClient.beasts.byOwner(addr, { sort: "last_death_timestamp", order: "desc", limit: 1 }),
+      ]);
 
-    // Single combined query that computes all three highlights in one pass
-    // This avoids running the expensive base JOIN three times
-    const combinedQuery = `
-      WITH beast_attrs AS (
-        SELECT
-          t.id,
-          t.metadata,
-          b.account_address,
-          MAX(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) = 'shiny'
-                   AND json_extract(attr.value, '$.value') IN ('1', 1, 'true', 'True', 'TRUE')
-              THEN 1 ELSE 0 END) AS is_shiny,
-          MAX(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) = 'animated'
-                   AND json_extract(attr.value, '$.value') IN ('1', 1, 'true', 'True', 'TRUE')
-              THEN 1 ELSE 0 END) AS is_animated,
-          MAX(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) LIKE '%power%'
-              THEN CAST(json_extract(attr.value, '$.value') AS REAL) ELSE 0 END) AS power,
-          MIN(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) = 'rank'
-              THEN CAST(json_extract(attr.value, '$.value') AS INTEGER) ELSE 999999 END) AS rank_value,
-          MAX(CASE WHEN LOWER(json_extract(attr.value, '$.trait_type')) = 'last death timestamp'
-              THEN CAST(json_extract(attr.value, '$.value') AS INTEGER) ELSE 0 END) AS death_timestamp
-        FROM tokens t
-        JOIN token_balances b ON t.id = b.token_id AND t.contract_address = b.contract_address
-        JOIN json_each(CASE WHEN json_valid(t.metadata) = 1 THEN t.metadata ELSE '{"attributes":[]}' END, '$.attributes') attr
-        WHERE t.contract_address = '${CONTRACT_ADDRESS}'
-          AND b.balance > '${ZERO_BALANCE}'
-          AND json_valid(t.metadata) = 1
-          AND LOWER(b.account_address) IN (${addressList})
-        GROUP BY t.id
-      ),
-      rarest AS (
-        SELECT id, metadata, account_address, 'rarest' AS highlight_type
-        FROM beast_attrs
-        ORDER BY (is_shiny + is_animated) DESC, is_shiny DESC, is_animated DESC, power DESC
-        LIMIT 1
-      ),
-      highest_ranked AS (
-        SELECT id, metadata, account_address, 'highest_ranked' AS highlight_type
-        FROM beast_attrs
-        WHERE rank_value < 999999
-        ORDER BY rank_value ASC
-        LIMIT 1
-      ),
-      last_collected AS (
-        SELECT id, metadata, account_address, 'last_collected' AS highlight_type
-        FROM beast_attrs
-        WHERE death_timestamp > 0
-        ORDER BY death_timestamp DESC
-        LIMIT 1
-      )
-      SELECT * FROM rarest
-      UNION ALL
-      SELECT * FROM highest_ranked
-      UNION ALL
-      SELECT * FROM last_collected;
-    `;
+    // Rarest: animated+shiny > shiny-only > animated-only > null
+    const rarestItem = animatedShiny.items[0] ?? shinyOnly.items[0] ?? animatedOnly.items[0] ?? null;
+    const highestRankedItem = highestRanked.items[0] ?? null;
+    const lastCollectedItem = lastCollected.items[0] ?? null;
 
-    type BeastQueryRow = {
-      id: string;
-      metadata: string;
-      account_address: string;
-      highlight_type: string;
-    };
-
-    const rows = await runBeastSql<BeastQueryRow[]>(combinedQuery, "fetchOwnerBeastHighlights");
-
-    const mapRowToBeast = (row: BeastQueryRow | undefined): Beast | null => {
-      if (!row) return null;
-      try {
-        const beastRow: BeastRow = {
-          id: row.id,
-          metadata: row.metadata,
-          account_address: row.account_address,
-          power: undefined,
-          total_count: undefined,
-        };
-        return mapBeastRow(beastRow);
-      } catch (e) {
-        console.warn("Failed to parse beast row:", e);
-        return null;
-      }
-    };
-
-    // Parse results by highlight type
-    const rarestRow = rows?.find(r => r.highlight_type === "rarest");
-    const highestRankedRow = rows?.find(r => r.highlight_type === "highest_ranked");
-    const lastCollectedRow = rows?.find(r => r.highlight_type === "last_collected");
-
-    const lastCollectedBeast = mapRowToBeast(lastCollectedRow);
+    const lastCollectedBeast = lastCollectedItem ? mapSdkBeast(lastCollectedItem) : null;
 
     return {
-      rarest: mapRowToBeast(rarestRow),
-      highestRanked: mapRowToBeast(highestRankedRow),
+      rarest: rarestItem ? mapSdkBeast(rarestItem) : null,
+      highestRanked: highestRankedItem ? mapSdkBeast(highestRankedItem) : null,
       lastCollected: lastCollectedBeast,
-      // Use the beast's name directly - no separate "death_name" attribute needed
       lastCollectedName: lastCollectedBeast?.name ?? null,
     };
   });
