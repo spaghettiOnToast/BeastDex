@@ -18,8 +18,8 @@ import { TermsOfServiceDialog } from "./components/legal/TermsOfServiceDialog";
 import { Toaster } from "sonner";
 import { Analytics } from "@vercel/analytics/react";
 
-// Set to false to bring the site back online
-const MAINTENANCE_MODE = true;
+// Set to true to show maintenance page
+const MAINTENANCE_MODE = false;
 
 // Lazy load pages for better performance
 const HomePage = lazy(() => import("./pages/HomePage"));
