@@ -8,7 +8,7 @@ const ARCADE_GRAPHQL_ENDPOINT = import.meta.env.VITE_ARCADE_TORII_BASE
   ? `${import.meta.env.VITE_ARCADE_TORII_BASE}/graphql`
   : import.meta.env.DEV
     ? "/arcade/graphql"
-    : "https://api.cartridge.gg/x/arcade-main/torii/graphql";
+    : "https://torii-production-7359.up.railway.app/graphql";
 
 // Minimal order shape compatible with existing hydrateOrders flow
 export type ArcadeOrderModelCompat = {

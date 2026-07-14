@@ -3,7 +3,7 @@ export const CONTRACT_ADDRESS =
 
 const DEFAULT_TORII_SQL_ENDPOINT = import.meta.env.DEV
   ? "/torii/sql"
-  : "https://api.cartridge.gg/x/pg-beasts/torii/sql";
+  : "https://torii-production-7359.up.railway.app/sql";
 
 export const TORII_SQL_ENDPOINT =
   (import.meta.env.VITE_TORII_SQL_ENDPOINT as string | undefined)?.trim() ||
@@ -11,7 +11,7 @@ export const TORII_SQL_ENDPOINT =
 
 export const TORII_GRAPHQL_ENDPOINT = import.meta.env.DEV
   ? "/torii/graphql"
-  : "https://api.cartridge.gg/x/pg-beasts/torii/graphql";
+  : "https://torii-production-7359.up.railway.app/graphql";
 
 export const TOTAL_BEAST_SUPPLY = 93225;
 

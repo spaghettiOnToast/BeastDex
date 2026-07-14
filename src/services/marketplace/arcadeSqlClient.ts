@@ -1,20 +1,21 @@
 /**
  * Arcade SQL Client
  *
- * SQL client configured for the arcade-main Torii endpoint
- * Used for querying order status directly (bypassing pg-beasts sync lag)
+ * SQL client configured for the torii-beastdex endpoint
+ * Used for querying order status directly
  */
 
 import { createSqlClient } from "../shared/sqlClient";
 
-// Arcade-main SQL endpoint (same pattern as pg-beasts but different slot)
-const ARCADE_SQL_ENDPOINT = import.meta.env.DEV
-  ? "/arcade/sql" // Proxy in dev
-  : "https://api.cartridge.gg/x/arcade-main/torii/sql";
+const ARCADE_SQL_ENDPOINT =
+  (import.meta.env.VITE_ARCADE_TORII_SQL as string | undefined)?.trim() ||
+  (import.meta.env.DEV
+    ? "/arcade/sql"
+    : "https://torii-production-7359.up.railway.app/sql");
 
 export const runArcadeSql = createSqlClient({
   endpoint: ARCADE_SQL_ENDPOINT,
-  label: "ArcadeSQL",
+  label: "ToriiSQL",
   defaultOptions: {
     retries: 1, // Fewer retries for validation queries
     baseDelayMs: 500,
@@ -23,10 +24,8 @@ export const runArcadeSql = createSqlClient({
 });
 
 /**
- * Batch check order statuses directly from arcade-main
+ * Batch check order statuses from torii-beastdex.
  * Returns a map of orderId -> isActive (status === 1)
- *
- * This bypasses pg-beasts sync lag by querying arcade-main directly
  */
 export async function batchCheckOrderStatuses(
   orderIds: string[]
