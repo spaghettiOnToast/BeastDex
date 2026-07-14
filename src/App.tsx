@@ -18,6 +18,9 @@ import { TermsOfServiceDialog } from "./components/legal/TermsOfServiceDialog";
 import { Toaster } from "sonner";
 import { Analytics } from "@vercel/analytics/react";
 
+// Set to false to bring the site back online
+const MAINTENANCE_MODE = true;
+
 // Lazy load pages for better performance
 const HomePage = lazy(() => import("./pages/HomePage"));
 const BeastDetailPage = lazy(() => import("./pages/BeastDetailPage"));
@@ -42,7 +45,34 @@ const provider = jsonRpcProvider({
   },
 });
 
+function MaintenancePage() {
+  return (
+    <div className="min-h-screen bg-[#09090b] flex items-center justify-center px-4">
+      <div className="text-center max-w-md">
+        <div className="text-6xl mb-6">⚔️</div>
+        <h1 className="text-2xl font-bold text-white mb-3">Under Maintenance</h1>
+        <p className="text-zinc-400 mb-6 leading-relaxed">
+          BeastDex is currently undergoing maintenance while we upgrade our infrastructure. We'll be back shortly.
+        </p>
+        <div className="inline-flex items-center gap-2 text-sm text-zinc-500 border border-white/[0.06] rounded-lg px-4 py-2">
+          <span className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+          Work in progress
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
+  if (MAINTENANCE_MODE) {
+    return (
+      <>
+        <MaintenancePage />
+        <Analytics />
+      </>
+    );
+  }
+
   return (
     <StarknetConfig
       chains={[mainnet]}
