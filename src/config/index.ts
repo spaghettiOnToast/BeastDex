@@ -1,4 +1,4 @@
-const DEFAULT_PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 48;
 const MAX_INITIAL_PAGES = 5;
 const USERNAME_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const REQUEST_TIMEOUT = 30000; // 30 seconds

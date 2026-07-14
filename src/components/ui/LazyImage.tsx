@@ -90,6 +90,7 @@ export const LazyImage = memo(function LazyImage({
           className={`${className} ${
             isLoaded ? "opacity-100" : "opacity-0"
           } transition-opacity duration-300`}
+          style={{ imageRendering: "pixelated" }}
           onLoad={handleLoad}
           onError={handleError}
         />

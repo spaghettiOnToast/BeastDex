@@ -29,12 +29,9 @@ import { Grid, Table } from "lucide-react";
 import {
   fetchBeastAttributeFilters,
   fetchBeasts,
-  fetchBeastCombinedRanks,
   fetchOwnerBeastStats,
   fetchOwnerBeastHighlights,
   type Beast,
-  type BeastPowerRank,
-  type BeastHealthRank,
   type OwnerBeastStats,
   type OwnerBeastHighlights,
 } from "../services/beast";
@@ -196,8 +193,6 @@ function CollectionPage() {
   const [summitRank, setSummitRank] = useState<OwnerSummitRank | null>(null);
   const [ownerStats, setOwnerStats] = useState<OwnerBeastStats | null>(null);
   const [beastHighlights, setBeastHighlights] = useState<OwnerBeastHighlights | null>(null);
-  const [accountRanking, setAccountRanking] = useState<BeastPowerRank | null>(null);
-  const [healthRanking, setHealthRanking] = useState<BeastHealthRank | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
 
@@ -320,8 +315,6 @@ function CollectionPage() {
       setSummitRank(null);
       setOwnerStats(null);
       setBeastHighlights(null);
-      setAccountRanking(null);
-      setHealthRanking(null);
       setSummaryError(identifierError);
       setSummaryLoading(false);
       return;
@@ -336,21 +329,19 @@ function CollectionPage() {
       // Fetch extra stats in parallel with beast loading
       Promise.all([
         fetchOwnerSummitRankFromApi(resolvedAddress).catch(() => null),
-        fetchBeastCombinedRanks(resolvedAddress).catch(() => ({ powerRank: null, healthRank: null })),
         fetchOwnerBeastStats(resolvedAddress).catch(() => null),
         fetchOwnerBeastHighlights(resolvedAddress).catch(() => null),
-      ]).then(([summit, ranks, stats, highlights]) => {
+      ]).then(([summit, stats, highlights]) => {
         if (summaryRequestRef.current === requestId) {
           setSummitRank(summit);
-          setAccountRanking(ranks.powerRank);
-          setHealthRanking(ranks.healthRank);
           setOwnerStats(stats);
           setBeastHighlights(highlights);
         }
       });
 
       // Load ALL user's beasts efficiently (we only need their collection, not random samples)
-      const limit = 300; // Larger batch for faster loading
+      // NOTE: SDK caps each request at 100 items regardless of the limit passed
+      const limit = 100;
       let allUserBeasts: Beast[] = [];
       let currentPage = 1;
       let hasMoreData = true;
@@ -375,11 +366,9 @@ function CollectionPage() {
         setOwnedBeasts(allUserBeasts);
         setCollectionStats(computeBeastCollectionStats(allUserBeasts));
 
-        // Check if we have more data
-        hasMoreData = batch.length === limit && allUserBeasts.length < total;
         currentPage++;
 
-        // Early break if we have all the data
+        // Stop when we've loaded everything or got a short page
         if (allUserBeasts.length >= total || batch.length < limit) {
           hasMoreData = false;
         }
@@ -394,8 +383,6 @@ function CollectionPage() {
       setSummitRank(null);
       setOwnerStats(null);
       setBeastHighlights(null);
-      setAccountRanking(null);
-      setHealthRanking(null);
       setSummaryError(getUserFriendlyErrorMessage(err, "Failed to load collection"));
     } finally {
       if (summaryRequestRef.current === requestId) {
@@ -920,13 +907,6 @@ function CollectionPage() {
     return null;
   }, [mostPowerfulBeast]);
 
-  const rankDisplay =
-    accountRanking?.rank != null
-      ? `#${accountRanking.rank.toLocaleString()}`
-      : "—";
-  const rankSubheading = accountRanking?.totalOwners
-    ? `of ${accountRanking.totalOwners.toLocaleString()}`
-    : "";
 
   // Display stats for ThreeColumnStatsLayout
   const displayStats = useMemo(() => ({
@@ -959,20 +939,13 @@ function CollectionPage() {
         key: "power",
         icon: "🔮",
         label: "Combined Power",
-        value: (ownerStats?.totalPower ?? 0).toLocaleString(),
-      },
-      {
-        key: "rank",
-        icon: "🏆",
-        label: "Power Rank",
-        value: rankDisplay,
-        sub: rankSubheading || "Global leaderboard",
+        value: collectionStats.totalPower.toLocaleString(),
       },
       {
         key: "health",
         icon: "❤️",
         label: "Combined Health",
-        value: (healthRanking?.totalHealth ?? 0).toLocaleString(),
+        value: collectionStats.totalHealth.toLocaleString(),
       },
       ...(summitRank?.rank != null
         ? [
@@ -986,7 +959,7 @@ function CollectionPage() {
           ]
         : []),
     ],
-    [ownerStats, ownedBeasts.length, rankDisplay, rankSubheading, healthRanking, summitRank]
+    [ownerStats, collectionStats, ownedBeasts.length, summitRank]
   );
 
   const [selectedBeast, setSelectedBeast] = useState<Beast | null>(null);
