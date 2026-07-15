@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useMarketplaceListings } from "./useMarketplaceListings";
 import { useUserBeasts } from "../../../hooks/useUserBeasts";
 import { useBeastFilters } from "../../../hooks/useBeastFilters";
+import { useBeastLookup } from "../../../hooks/useBeastLookup";
 
 /**
  * Hook for managing all marketplace data fetching and state
@@ -14,6 +15,18 @@ import { useBeastFilters } from "../../../hooks/useBeastFilters";
 export function useMarketplaceData(address: string | undefined) {
   // Marketplace listings (orders + hydration)
   const listingsHook = useMarketplaceListings();
+
+  // fetchListingsWithMetadataSingleQuery only fetches order data (beast: null) —
+  // hydrate beast metadata here via the SDK, same as the Sold tab does.
+  const listingTokenIds = useMemo(
+    () => listingsHook.listings.map((l) => l.tokenId),
+    [listingsHook.listings]
+  );
+  const { getBeast } = useBeastLookup(listingsHook.listings, listingTokenIds);
+  const listings = useMemo(
+    () => listingsHook.listings.map((l) => ({ ...l, beast: getBeast(l.tokenId) ?? null })),
+    [listingsHook.listings, getBeast]
+  );
 
   // User's owned beasts - defer loading until "My Listings" tab is opened
   // This reduces initial load by avoiding pagination queries upfront
@@ -30,9 +43,9 @@ export function useMarketplaceData(address: string | undefined) {
    */
   const recentListings = useMemo(() => {
     // First deduplicate by tokenId, keeping the most recent listing per beast
-    const listingsByTokenId = new Map<string, typeof listingsHook.listings[0]>();
+    const listingsByTokenId = new Map<string, typeof listings[0]>();
 
-    for (const listing of listingsHook.listings) {
+    for (const listing of listings) {
       if (!listing.active) continue;
 
       const tokenId = String(listing.tokenId).trim();
@@ -73,11 +86,11 @@ export function useMarketplaceData(address: string | undefined) {
         return (b.orderId ?? 0) - (a.orderId ?? 0);
       })
       .slice(0, 102);
-  }, [listingsHook.listings]);
+  }, [listings]);
 
   return {
     // Listings
-    listings: listingsHook.listings,
+    listings,
     listingsError: listingsHook.listingsError,
 
     // Orders
