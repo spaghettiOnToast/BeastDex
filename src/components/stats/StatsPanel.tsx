@@ -45,7 +45,7 @@ type StatsPanelProps = {
 
 export const StatsPanel = memo(function StatsPanel({
   mintedCount,
-  uniqueOwners,
+  uniqueOwners: _uniqueOwners,
   mintedLoading,
   mintedError,
   highlights,

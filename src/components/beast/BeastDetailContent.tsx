@@ -145,7 +145,7 @@ export function BeastDetailContent({
         {/* Left: CometCard (green glow + tilt) with BeastCard content overlaid */}
         <div className="w-[360px] flex-shrink-0 flex items-center justify-start">
           <CometCard className="w-full">
-            <BeastCard beast={beast} owned={false} noBg large />
+            <BeastCard beast={beast} owned={false} />
           </CometCard>
         </div>
 

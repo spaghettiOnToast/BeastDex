@@ -35,13 +35,11 @@ export default function TopBar({ filtersControl, onLogoClick }: Props) {
       {/* Desktop Navigation */}
       <div className="hidden md:flex items-center gap-2 lg:gap-4 flex-shrink-0">
         <Button
-          asChild
-          className="bg-[#0ef] text-black text-xs font-semibold uppercase tracking-wide hover:bg-[#0df] hover:text-black h-9 px-3 lg:px-4 lg:min-w-[130px]"
+          disabled
+          className="bg-[#0ef]/40 text-black/40 text-xs font-semibold uppercase tracking-wide h-9 px-3 lg:px-4 lg:min-w-[130px] cursor-not-allowed"
         >
-          <Link to="/marketplace">
-            <Store className="h-4 w-4" />
-            <span className="hidden lg:inline">Marketplace</span>
-          </Link>
+          <Store className="h-4 w-4" />
+          <span className="hidden lg:inline">Marketplace</span>
         </Button>
         <Button
           asChild

@@ -15,7 +15,7 @@
     "@cartridge/arcade": "^0.3.12",
     "@cartridge/connector": "^0.10.5",
     "@cartridge/controller": "^0.10.5",
-    "@provable-games/collectables": "^0.4.0",
+    "@provable-games/collectables": "^0.5.1",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",

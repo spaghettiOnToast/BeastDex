@@ -356,14 +356,6 @@ export function SummitStats({
   const [alliesLoading, setAlliesLoading] = useState(false);
   const diplomacyBonus = computeDiplomacyBonus(allies);
 
-  // Extract real NFT token ID from beast.id (format: "contract:0x{64-hex}")
-  // beast.numericId can be the beast type ID from metadata, not the NFT token ID
-  const tokenId = (() => {
-    if (!beast.id) return 0;
-    const hex = beast.id.includes(":") ? beast.id.slice(beast.id.lastIndexOf(":") + 1) : beast.id;
-    if (/^0x[0-9a-f]+$/i.test(hex)) return Number.parseInt(hex, 16);
-    return beast.numericId || 0;
-  })();
 
   // Resolve prefix/suffix IDs: prefer API data, fall back to parsing beast name
   let prefixId = summitData?.prefixId ?? 0;
