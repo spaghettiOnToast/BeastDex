@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "../ui/alert";
 import { Send, Loader2, CheckCircle2, X } from "lucide-react";
 import { lookupControllerAddresses } from "../../services/controller";
 import { normaliseStarknetAddress } from "../../utils/address";
+import BeastCard from "./BeastCard";
 import { CONTRACT_ADDRESS } from "../../services/beast/constants";
 import type { Beast } from "../../services/beast";
 
@@ -229,11 +230,9 @@ export function SendBeastsDialog({
             <div className={`${count > 4 ? "max-h-48" : ""} overflow-y-auto space-y-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] p-2`}>
               {beasts.map((beast) => (
                 <div key={beast.id} className="flex items-center gap-2.5 text-xs py-1 px-1.5 rounded-lg hover:bg-white/[0.04]">
-                  <img
-                    src={beast.image}
-                    alt={beast.name}
-                    className="h-9 w-9 rounded-md object-cover border border-white/[0.08] bg-black shrink-0"
-                  />
+                  <div className="w-10 shrink-0">
+                    <BeastCard beast={beast} />
+                  </div>
                   <span className="text-zinc-200 truncate flex-1 font-medium">{beast.name}</span>
                   {onRemoveBeast && (
                     <button
