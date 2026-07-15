@@ -1,6 +1,6 @@
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { renderBeastCardSvg, type BeastCardInput } from "@provable-games/collectables";
+import { fetchBeastCardImgSrc, type BeastCardInput } from "@provable-games/collectables";
 import type { Beast, BeastAttribute } from "../../services/beast";
 
 type Props = {
@@ -70,16 +70,20 @@ const BeastCard = memo(function BeastCard({
   // Render the canonical on-chain card SVG (same generator as the token_uri) with
   // our hosted sprite as the art — no more hand-built DOM/CSS card layout.
   //
-  // `art` gets embedded as a plain <image href> inside the SVG. Rendering that SVG
-  // via `<img src="data:image/svg+xml,...">` puts it in a sandboxed "image context"
-  // with an opaque origin, where the browser blocks the <image>'s external fetch
-  // regardless of the URL — so instead inline the SVG markup directly into the
-  // page's own DOM (real origin, no restriction), and let it size off its viewBox.
-  const cardSvgMarkup = useMemo(
-    () => renderBeastCardSvg(cardInput, { art: image || undefined })
-      .replace("width='250' height='350'", "width='100%' height='100%'"),
-    [cardInput, image]
-  );
+  // fetchBeastCardImgSrc fetches the sprite once and inlines it as a data URI
+  // inside the card SVG, so the result is fully self-contained (no external
+  // <image href> left to fetch) and safe to use directly as an <img src> — the
+  // sandboxed image context an <img>'s SVG runs in blocks external fetches, which
+  // is why a card whose art is a bare URL renders with a blank art box otherwise.
+  const [cardImageSrc, setCardImageSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setCardImageSrc(null);
+    fetchBeastCardImgSrc({ ...cardInput, image: image || undefined }).then((src) => {
+      if (alive) setCardImageSrc(src);
+    });
+    return () => { alive = false; };
+  }, [cardInput, image]);
 
   const renderOwner = () => {
     if (missing || !owned || !owner) return null;
@@ -118,18 +122,16 @@ const BeastCard = memo(function BeastCard({
       )}
       <div style={{
         position: "relative", width: "100%", aspectRatio: "250 / 350", lineHeight: 0,
-        borderRadius: 10, overflow: "hidden",
+        borderRadius: 10, overflow: "hidden", background: "#1b1b1f",
         boxShadow: hasAllVariants && !missing ? "0 0 0 2px #39ff14" : undefined,
       }}>
-        <div
-          style={{ width: "100%", height: "100%" }}
-          role="img"
-          aria-label={String(getAttr(attributes, "Beast") ?? beast.name)}
-          // renderBeastCardSvg's output is our own trusted, deterministically-generated
-          // markup (no user input) — inlined directly so its <image href> resolves
-          // against the page's real origin instead of a sandboxed data: URI.
-          dangerouslySetInnerHTML={{ __html: cardSvgMarkup }}
-        />
+        {cardImageSrc && (
+          <img
+            src={cardImageSrc}
+            alt={String(getAttr(attributes, "Beast") ?? beast.name)}
+            style={{ width: "100%", height: "100%", display: "block" }}
+          />
+        )}
         {missing && (
           <div style={{
             position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
