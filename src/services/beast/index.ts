@@ -277,7 +277,9 @@ export async function fetchBeastsByIds(
 
   if (numericIds.length === 0) return [];
 
-  const BATCH_SIZE = 100;
+  // The API rejects token_id_in arrays over 50 elements outright (400), so
+  // this must stay <= 50 — it's not just a page size.
+  const BATCH_SIZE = 50;
   const batches: number[][] = [];
   for (let i = 0; i < numericIds.length; i += BATCH_SIZE) {
     batches.push(numericIds.slice(i, i + BATCH_SIZE));
