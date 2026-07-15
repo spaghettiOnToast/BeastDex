@@ -16,6 +16,7 @@ import { toBigIntSafe } from "../../utils/bigint";
 import { getOrderValidities, getPublicProvider } from "../../services/marketplace/approvals";
 import { useEkuboTokens, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
 import { useSoldListings } from "../../contexts/SoldListingsContext";
+import BeastCard from "../beast/BeastCard";
 
 type Props = {
   open: boolean;
@@ -219,20 +220,12 @@ export default function PurchaseCartDialog({
                     : "bg-gray-900/50 border-gray-800 hover:border-gray-700"
                 }`}
               >
-                {listing.beast?.image && (
-                  <div className="relative group/img flex-shrink-0">
-                    <img
-                      src={listing.beast.image}
-                      alt={listing.beast.name}
-                      className={`w-16 h-20 rounded object-contain bg-gray-800/50 ${isInvalid ? "grayscale" : ""}`}
-                    />
+                {listing.beast && (
+                  <div className={`relative group/img flex-shrink-0 w-16 ${isInvalid ? "grayscale" : ""}`}>
+                    <BeastCard beast={listing.beast} />
                     {/* Hover expand preview */}
-                    <div className="absolute left-0 top-0 z-50 opacity-0 group-hover/img:opacity-100 pointer-events-none transition-opacity duration-200">
-                      <img
-                        src={listing.beast.image}
-                        alt={listing.beast.name}
-                        className={`w-32 h-40 rounded-lg object-contain bg-gray-900 border border-gray-700 shadow-xl -translate-x-2 -translate-y-2 ${isInvalid ? "grayscale" : ""}`}
-                      />
+                    <div className="absolute left-0 top-0 z-50 w-40 opacity-0 group-hover/img:opacity-100 pointer-events-none transition-opacity duration-200 -translate-x-2 -translate-y-2">
+                      <BeastCard beast={listing.beast} />
                     </div>
                   </div>
                 )}

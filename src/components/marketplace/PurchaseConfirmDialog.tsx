@@ -15,6 +15,7 @@ import TokenIcon from "../ui/TokenIcon";
 import { useSelectedToken, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
 import { useControllerUsernames } from "../../hooks/useControllerUsernames";
 import { normaliseStarknetAddress } from "../../utils/address";
+import BeastCard from "../beast/BeastCard";
 
 type Props = {
   open: boolean;
@@ -68,13 +69,11 @@ export default function PurchaseConfirmDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {listing.beast?.image && (
+          {listing.beast && (
             <div className="flex justify-center">
-              <img
-                src={listing.beast.image}
-                alt={listing.beast.name}
-                className="max-w-[200px] w-full rounded-lg"
-              />
+              <div className="w-[200px]">
+                <BeastCard beast={listing.beast} />
+              </div>
             </div>
           )}
 
