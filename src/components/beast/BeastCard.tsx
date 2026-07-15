@@ -16,6 +16,10 @@ type Props = {
   noBg?: boolean;
   /** When true, uses larger font sizes for detail/dialog views */
   large?: boolean;
+  /** When true, uses a shorter, wider layout for inline list rows */
+  compact?: boolean;
+  /** When true, renders a tiny thumbnail: art + stat tiles only, no name header */
+  thumbnail?: boolean;
   className?: string;
 };
 
@@ -39,9 +43,9 @@ const TIER_COLORS: Record<number, string> = {
   1: "#ff8800", 2: "#8c00bf", 3: "#0000ff", 4: "#00ff00", 5: "#ffffff",
 };
 
-function LsLogo({ color }: { color: string }) {
+function LsLogo({ color, width = 9, height = 20 }: { color: string; width?: number; height?: number }) {
   return (
-    <svg viewBox="0 0 347 804" style={{ width: 9, height: 20, display: "block", flexShrink: 0 }}>
+    <svg viewBox="0 0 347 804" style={{ width, height, display: "block", flexShrink: 0 }}>
       <path fillRule="evenodd" clipRule="evenodd" fill={color}
         d="M242.9 629.232H69.4V349.536H0V699.071H242.9V629.232ZM312.3 69.9071V0H34.7V69.9071H0V314.582H104.1V384.489H242.9V314.582H347V69.9071H312.3ZM277.6 244.675H208.2V314.582H138.8V244.675H69.4V139.814H138.8V244.675H208.2V139.814H277.6V244.675ZM104.1 594.279H277.6V734.093H0V804H312.3V734.093H347V524.372H173.5V489.418H347V419.511H104.1V594.279Z"
       />
@@ -49,9 +53,9 @@ function LsLogo({ color }: { color: string }) {
   );
 }
 
-function TrophyIcon() {
+function TrophyIcon({ size = 15 }: { size?: number }) {
   return (
-    <svg viewBox="0 0 18 18" style={{ width: 15, height: 15, display: "block" }}>
+    <svg viewBox="0 0 18 18" style={{ width: size, height: size, display: "block" }}>
       <g fill="#c0c0c0" stroke="#8a8a8a" strokeWidth={1}>
         <rect x={4} y={6} width={10} height={8} rx={1} />
         <rect x={2} y={7} width={2} height={3} />
@@ -62,9 +66,9 @@ function TrophyIcon() {
   );
 }
 
-function CrownIcon() {
+function CrownIcon({ size = 15 }: { size?: number }) {
   return (
-    <svg viewBox="0 0 20 19" style={{ width: 15, height: 15, display: "block" }}>
+    <svg viewBox="0 0 20 19" style={{ width: size, height: size, display: "block" }}>
       <g fill="#e6c56e" stroke="#af8a3c" strokeWidth={1}>
         <path d="M2 14h16l-1.5 4h-13z" />
         <path d="m2 14 2-9 3 5 4-5 3 5 2-5 2 9Z" strokeLinejoin="round" strokeLinecap="round" />
@@ -76,17 +80,17 @@ function CrownIcon() {
   );
 }
 
-function BoltIcon() {
+function BoltIcon({ width = 7, height = 13 }: { width?: number; height?: number }) {
   return (
-    <svg viewBox="0 0 9 18" style={{ width: 7, height: 13, display: "block" }}>
+    <svg viewBox="0 0 9 18" style={{ width, height, display: "block" }}>
       <path d="M6 2 2 9h5l-4 7" fill="none" stroke="#ffd166" strokeWidth={2} strokeLinejoin="round" />
     </svg>
   );
 }
 
-function HeartIcon() {
+function HeartIcon({ width = 10, height = 9 }: { width?: number; height?: number }) {
   return (
-    <svg viewBox="0 0 26 24" style={{ width: 10, height: 9, display: "block" }}>
+    <svg viewBox="0 0 26 24" style={{ width, height, display: "block" }}>
       <path d="M13 11c0-6 9-6 9 0s-9 10.5-9 10.5S4 17 4 11s9-6 9 0Z" fill="none" stroke="#ff6b6b" strokeWidth={3} />
     </svg>
   );
@@ -104,6 +108,8 @@ const BeastCard = memo(function BeastCard({
   hasAllVariants = false,
   noBg = false,
   large = false,
+  compact = false,
+  thumbnail = false,
   className,
 }: Props) {
   const { image, owner, attributes, numericId, power } = beast;
@@ -126,8 +132,39 @@ const BeastCard = memo(function BeastCard({
   const tierColor = TIER_COLORS[tierNum] ?? "#ffffff";
   const ringBg = shiny ? RAINBOW : GOLD_FRAME;
 
-  // Size tokens — scale up for large (detail) variant
-  const sz = {
+  // Size tokens — scale up for large (detail) variant, down for compact (list row)
+  // and thumbnail (tiny inline icon) variants
+  const sz = thumbnail ? {
+    pad:        "1px 2px 0",
+    prefixSize: 4,
+    nameSize:   6,
+    rankSize:   4,
+    artRatio:   "220 / 100",
+    artPad:     "0 3px",
+    artRadius:  4,
+    rowPad1:    "1px 3px 0",
+    rowPad2:    "1px 3px 2px",
+    rowGap:     1,
+    lbl:        5,
+    val:        7,
+    tilePad:    "1px 1px",
+    logoW: 3, logoH: 7, iconSize: 6, boltW: 4, boltH: 7, heartW: 6, heartH: 5,
+  } : compact ? {
+    pad:        "4px 6px 2px",
+    prefixSize: 9,
+    nameSize:   14,
+    rankSize:   10,
+    artRatio:   "220 / 110",
+    artPad:     "0 6px",
+    artRadius:  5,
+    rowPad1:    "3px 6px 0",
+    rowPad2:    "2px 6px 6px",
+    rowGap:     2,
+    lbl:        8,
+    val:        11,
+    tilePad:    "2px 2px",
+    logoW: 9, logoH: 20, iconSize: 15, boltW: 7, boltH: 13, heartW: 10, heartH: 9,
+  } : {
     pad:        large ? "10px 12px 6px" : "8px 8px 4px",
     prefixSize: large ? 15 : 12,
     nameSize:   large ? 30 : 22,
@@ -141,6 +178,7 @@ const BeastCard = memo(function BeastCard({
     lbl:        large ? 14 : 11,
     val:        large ? 20 : 15,
     tilePad:    large ? "6px 4px" : "4px 2px",
+    logoW: 9, logoH: 20, iconSize: 15, boltW: 7, boltH: 13, heartW: 10, heartH: 9,
   };
 
   const renderOwner = () => {
@@ -186,8 +224,8 @@ const BeastCard = memo(function BeastCard({
         fontFamily: FONT, display: "flex", flexDirection: "column",
       }}>
         {/* Header: logo | names | rank */}
-        <div style={{ display: "flex", alignItems: "center", padding: sz.pad, gap: 4 }}>
-          <LsLogo color={tierColor} />
+        <div style={{ display: "flex", alignItems: "center", padding: sz.pad, gap: thumbnail ? 2 : 4 }}>
+          <LsLogo color={tierColor} width={sz.logoW} height={sz.logoH} />
 
           <div style={{ flex: 1, textAlign: "center", minWidth: 0 }}>
             <div style={{ fontFamily: FONT, fontSize: sz.prefixSize, color: "#fff", letterSpacing: 1, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -202,16 +240,16 @@ const BeastCard = memo(function BeastCard({
             </div>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, flexShrink: 0 }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: thumbnail ? 0 : 2, flexShrink: 0 }}>
             {rank != null ? (
               <>
-                {Number(rank) === 1 ? <CrownIcon /> : <TrophyIcon />}
+                {Number(rank) === 1 ? <CrownIcon size={sz.iconSize} /> : <TrophyIcon size={sz.iconSize} />}
                 <span style={{ fontFamily: FONT, fontSize: sz.rankSize, color: Number(rank) === 1 ? "#e6c56e" : "#b0b0b6", lineHeight: 1 }}>
                   {rank}
                 </span>
               </>
             ) : numericId ? (
-              <span style={{ fontFamily: FONT, fontSize: 11, color: "#444", lineHeight: 1 }}>#{numericId}</span>
+              <span style={{ fontFamily: FONT, fontSize: sz.rankSize, color: "#444", lineHeight: 1 }}>#{numericId}</span>
             ) : null}
           </div>
         </div>
@@ -258,8 +296,8 @@ const BeastCard = memo(function BeastCard({
         {/* Stat row 2: POWER / HEALTH */}
         <div style={{ display: "flex", gap: sz.rowGap, padding: sz.rowPad2 }}>
           {[
-            { label: "POWER", value: power ?? "—", icon: <BoltIcon /> },
-            { label: "HEALTH", value: health ?? "—", icon: <HeartIcon /> },
+            { label: "POWER", value: power ?? "—", icon: <BoltIcon width={sz.boltW} height={sz.boltH} /> },
+            { label: "HEALTH", value: health ?? "—", icon: <HeartIcon width={sz.heartW} height={sz.heartH} /> },
           ].map(({ label, value, icon }) => (
             <div key={label} style={{ flex: 1, background: PANEL, borderRadius: 4, padding: sz.tilePad, textAlign: "center" }}>
               <div style={{ fontFamily: FONT, fontSize: sz.lbl, color: "#c9c9d1", letterSpacing: "0.5px", lineHeight: 1 }}>{label}</div>

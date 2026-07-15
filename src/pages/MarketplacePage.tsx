@@ -1778,20 +1778,21 @@ export default function MarketplacePage() {
                           key={`sale-${idx}`}
                           className="rounded-lg border border-white/[0.06] bg-gradient-to-r from-black/40 to-gray-900/20 p-3 flex items-center gap-4 hover:border-white/[0.08] transition-colors"
                         >
-                          {/* Beast Image */}
-                          <div className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gradient-to-br from-gray-900/50 to-black/50 border border-white/[0.06]">
-                            {beast?.image ? (
-                              <img
-                                src={beast.image}
-                                alt={beast.name || `Beast #${tokenId}`}
-                                className="w-full h-full object-contain"
-                              />
+                          {/* Beast Card */}
+                          <button
+                            type="button"
+                            onClick={() => beast && setDetailModalSaleBeast({ ...beast, owner: from })}
+                            disabled={!beast}
+                            className="flex-shrink-0 w-16 text-left"
+                          >
+                            {beast ? (
+                              <BeastCard beast={beast} thumbnail />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center text-zinc-600 text-xs">
+                              <div className="w-full aspect-square rounded-lg overflow-hidden bg-gradient-to-br from-gray-900/50 to-black/50 border border-white/[0.06] flex items-center justify-center text-zinc-600 text-xs">
                                 No img
                               </div>
                             )}
-                          </div>
+                          </button>
                           {/* Sale Details */}
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-white truncate">{beast?.name || `Beast #${tokenId}`}</p>
@@ -1881,7 +1882,6 @@ export default function MarketplacePage() {
                       <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">Beast</th>
                       <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">Price</th>
                       <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">From / Seller</th>
-                      <th className="px-3 py-2.5 text-right font-semibold text-zinc-300">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2012,15 +2012,11 @@ export default function MarketplacePage() {
                               className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
                               disabled={!activity.listing && !activity.beast}
                             >
-                              <div className="w-8 h-8 rounded overflow-hidden bg-white/[0.06] flex-shrink-0">
-                                {activity.beast?.image ? (
-                                  <img
-                                    src={activity.beast.image}
-                                    alt={activity.beast.name || "Beast"}
-                                    className="w-full h-full object-contain"
-                                  />
+                              <div className="w-16 flex-shrink-0">
+                                {activity.beast ? (
+                                  <BeastCard beast={activity.beast} thumbnail />
                                 ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-zinc-600 text-[8px]">
+                                  <div className="w-full aspect-square rounded-lg overflow-hidden bg-white/[0.06] flex items-center justify-center text-zinc-600 text-[8px]">
                                     ?
                                   </div>
                                 )}
@@ -2049,66 +2045,6 @@ export default function MarketplacePage() {
                                   → {getUsername(activity.to) ||
                                     `${activity.to?.slice(0, 6)}...${activity.to?.slice(-4)}`}
                                 </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {activity.type === "listing" && activity.listing ? (
-                                address?.toLowerCase() === activity.listing.seller?.toLowerCase() ? (
-                                  <>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 px-2.5 text-[10px] font-semibold"
-                                      onClick={() => {
-                                        setEditingListing(activity.listing!);
-                                        setEditDialogOpen(true);
-                                      }}
-                                    >
-                                      Edit
-                                    </Button>
-                                    {activity.listing.active && (
-                                      <Button
-                                        variant="destructive"
-                                        size="sm"
-                                        className="h-7 px-2.5 text-[10px] font-semibold"
-                                        onClick={() => handleCancelListing(activity.listing!)}
-                                      >
-                                        Cancel
-                                      </Button>
-                                    )}
-                                  </>
-                                ) : (
-                                  <>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 px-2.5 text-[10px] font-semibold bg-gold/10 text-gold border-gold/50 hover:bg-gold/20"
-                                      onClick={() => {
-                                        setPurchasingListing(activity.listing!);
-                                        setPurchaseConfirmOpen(true);
-                                      }}
-                                      disabled={!activity.listing.active}
-                                    >
-                                      Buy
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 px-2.5 text-[10px] font-semibold"
-                                      onClick={() => {
-                                        setOfferBeast(activity.listing!.beast ?? null);
-                                        setOfferTokenId(activity.listing!.tokenId);
-                                        setMakeOfferOpen(true);
-                                      }}
-                                    >
-                                      Offer
-                                    </Button>
-                                  </>
-                                )
-                              ) : (
-                                <span className="text-zinc-500 text-[10px]">—</span>
                               )}
                             </div>
                           </td>
