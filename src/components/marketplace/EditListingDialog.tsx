@@ -18,6 +18,7 @@ import { toWei, fromWei } from "../../utils/price";
 import { toast } from "sonner";
 import type { AccountInterface, BigNumberish } from "starknet";
 import TokenSelect from "./TokenSelect";
+import BeastCard from "../beast/BeastCard";
 import { useSelectedToken, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
 import { isUserRejection } from "../../utils/transaction";
 import {
@@ -204,13 +205,11 @@ export default function EditListingDialog({
           <p className="text-sm text-zinc-400">No listing selected.</p>
         ) : (
           <div className="space-y-4">
-            {listing.beast?.image && (
+            {listing.beast && (
               <div className="flex justify-center">
-                <img
-                  src={listing.beast.image}
-                  alt={listing.beast.name}
-                  className="max-w-[200px] w-full rounded-lg"
-                />
+                <div className="w-[200px]">
+                  <BeastCard beast={listing.beast} />
+                </div>
               </div>
             )}
             <div>
