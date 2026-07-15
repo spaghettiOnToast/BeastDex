@@ -3,12 +3,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getChecksumAddress } from "starknet";
 import { CategoryType, StatusType } from "@cartridge/arcade";
 import { compareStarknetAddresses, padStarknetAddress } from "../utils/address";
+import { TORII_PRODUCTION_BASE } from "../services/shared/toriiEndpoint";
 
 const ARCADE_GRAPHQL_ENDPOINT = import.meta.env.VITE_ARCADE_TORII_BASE
   ? `${import.meta.env.VITE_ARCADE_TORII_BASE}/graphql`
   : import.meta.env.DEV
     ? "/arcade/graphql"
-    : "https://torii-production-7359.up.railway.app/graphql";
+    : `${TORII_PRODUCTION_BASE}/graphql`;
 
 // Minimal order shape compatible with existing hydrateOrders flow
 export type ArcadeOrderModelCompat = {

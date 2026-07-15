@@ -1349,7 +1349,6 @@ export default function MarketplacePage() {
                             <ListingCard
                               key={`${listing.listingId}-${listing.tokenId}`}
                               beast={listing.beast}
-                              tokenId={listing.tokenId}
                               priceLabel={formatPriceLabel(listing)}
                               subtitlePriceLabel={formatSubtitlePrice(listing)}
                               tokenLogoUrl={getTokenLogoUrl(listing)}
@@ -1579,7 +1578,6 @@ export default function MarketplacePage() {
                           <ListingCard
                             key={`recent-${listing.listingId}`}
                             beast={listing.beast}
-                            tokenId={listing.tokenId}
                             priceLabel={formatPriceLabel(listing)}
                             subtitlePriceLabel={formatSubtitlePrice(listing)}
                             tokenLogoUrl={getTokenLogoUrl(listing)}
@@ -2288,7 +2286,6 @@ export default function MarketplacePage() {
                           <ListingCard
                             key={`my-${listing.listingId}`}
                             beast={listing.beast}
-                            tokenId={listing.tokenId}
                             priceLabel={formatPriceLabel(listing)}
                             subtitlePriceLabel={formatSubtitlePrice(listing)}
                             tokenLogoUrl={getTokenLogoUrl(listing)}

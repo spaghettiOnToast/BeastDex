@@ -8,7 +8,6 @@ import BeastCard from "../beast/BeastCard";
 
 type Props = {
   beast?: Beast | null;
-  tokenId?: string;
   priceLabel?: string;
   subtitlePriceLabel?: string;
   tokenLogoUrl?: string | null;

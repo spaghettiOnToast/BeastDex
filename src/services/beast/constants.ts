@@ -1,9 +1,11 @@
+import { TORII_PRODUCTION_BASE } from "../shared/toriiEndpoint";
+
 export const CONTRACT_ADDRESS =
   "0x046da8955829adf2bda310099a0063451923f02e648cf25a1203aac6335cf0e4";
 
 const DEFAULT_TORII_SQL_ENDPOINT = import.meta.env.DEV
   ? "/torii/sql"
-  : "https://torii-production-7359.up.railway.app/sql";
+  : `${TORII_PRODUCTION_BASE}/sql`;
 
 export const TORII_SQL_ENDPOINT =
   (import.meta.env.VITE_TORII_SQL_ENDPOINT as string | undefined)?.trim() ||
@@ -11,7 +13,7 @@ export const TORII_SQL_ENDPOINT =
 
 export const TORII_GRAPHQL_ENDPOINT = import.meta.env.DEV
   ? "/torii/graphql"
-  : "https://torii-production-7359.up.railway.app/graphql";
+  : `${TORII_PRODUCTION_BASE}/graphql`;
 
 export const TOTAL_BEAST_SUPPLY = 93225;
 

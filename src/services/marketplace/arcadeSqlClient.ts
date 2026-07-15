@@ -6,12 +6,13 @@
  */
 
 import { createSqlClient } from "../shared/sqlClient";
+import { TORII_PRODUCTION_BASE } from "../shared/toriiEndpoint";
 
 const ARCADE_SQL_ENDPOINT =
   (import.meta.env.VITE_ARCADE_TORII_SQL as string | undefined)?.trim() ||
   (import.meta.env.DEV
     ? "/arcade/sql"
-    : "https://torii-production-7359.up.railway.app/sql");
+    : `${TORII_PRODUCTION_BASE}/sql`);
 
 export const runArcadeSql = createSqlClient({
   endpoint: ARCADE_SQL_ENDPOINT,
@@ -57,7 +58,7 @@ export async function batchCheckOrderStatuses(
       result.set(String(row.id), statusNum === 1);
     }
 
-    // Orders not found in arcade-main are assumed active (fail-open).
+    // Orders not found in torii-beastdex are assumed active (fail-open).
     // The contract check (Step 2) is the authoritative source.
     for (const id of orderIds) {
       if (!result.has(id)) {
