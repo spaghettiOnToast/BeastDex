@@ -321,8 +321,12 @@ export async function fetchBeastAttributeFilters(): Promise<BeastAttributeFilter
     Tier: uniqueTiers,
     Prefix: uniquePrefixes,
     Suffix: uniqueSuffixes,
-    Shiny: ["true", "false"],
-    Animated: ["true", "false"],
+    // Must match the actual stored attribute format (SDK's beastTraits()
+    // emits "1"/"0", not "true"/"false") — otherwise FiltersDrawer's
+    // boolean-toggle detection fails and "true"/"false" never matches any
+    // beast's real attribute value, so the filter silently returns nothing.
+    Shiny: ["1", "0"],
+    Animated: ["1", "0"],
   };
 }
 
