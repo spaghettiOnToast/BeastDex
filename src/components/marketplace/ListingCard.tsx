@@ -2,13 +2,12 @@ import { memo } from "react";
 import { Card, CardContent, CardFooter } from "../ui/card";
 import { Button } from "../ui/button";
 import type { Beast } from "../../services/beast";
-import { LazyImage } from "../ui/LazyImage";
 import type { ListingStatus } from "../../services/marketplace/types";
 import TokenIcon from "../ui/TokenIcon";
+import BeastCard from "../beast/BeastCard";
 
 type Props = {
   beast?: Beast | null;
-  tokenId?: string;
   priceLabel?: string;
   subtitlePriceLabel?: string;
   tokenLogoUrl?: string | null;
@@ -38,7 +37,6 @@ type Props = {
 
 function ListingCard({
   beast,
-  tokenId,
   priceLabel,
   subtitlePriceLabel,
   tokenLogoUrl,
@@ -68,8 +66,6 @@ function ListingCard({
   // For backwards compatibility, if onBuy is provided but not onBuyNow/onAddToCart, use onBuy as Buy Now
   const handleBuyNow = onBuyNow || onBuy;
   const handleAddToCart = onAddToCart;
-  const displayName = beast?.name ?? (tokenId ? `Beast #${tokenId}` : "Unknown Beast");
-  const imageSrc = beast?.image;
 
   const getStatusBadge = () => {
     if (!status || status === 'active') return null;
@@ -103,8 +99,7 @@ function ListingCard({
       <CardContent className="p-0">
         <div
           className={[
-            "relative bg-gradient-to-br from-gray-900/50 to-black/50 rounded-t-lg overflow-hidden",
-            compact ? "aspect-[4/5]" : "aspect-square",
+            "relative rounded-t-lg overflow-hidden",
             onCardClick ? "cursor-pointer hover:opacity-90 transition-opacity" : "",
           ].join(" ")}
           onClick={onCardClick}
@@ -112,20 +107,15 @@ function ListingCard({
           role={onCardClick ? "button" : undefined}
           tabIndex={onCardClick ? 0 : undefined}
         >
-          {imageSrc ? (
-            <LazyImage
-              src={imageSrc}
-              alt={displayName}
-              className="object-contain w-full h-full"
-            />
-          ) : !beast ? (
-            // Loading skeleton when beast data hasn't loaded yet
-            <div className="flex h-full w-full items-center justify-center bg-white/[0.06]/30 animate-pulse">
-              <div className="w-16 h-16 rounded-full bg-gray-700/50" />
-            </div>
+          {beast ? (
+            <BeastCard beast={beast} />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-muted-foreground text-sm">
-              No image
+            // Loading skeleton when beast data hasn't loaded yet
+            <div className={[
+              "flex items-center justify-center bg-gradient-to-br from-gray-900/50 to-black/50 animate-pulse",
+              compact ? "aspect-[4/5]" : "aspect-square",
+            ].join(" ")}>
+              <div className="w-16 h-16 rounded-full bg-gray-700/50" />
             </div>
           )}
           {offersCount > 0 && (

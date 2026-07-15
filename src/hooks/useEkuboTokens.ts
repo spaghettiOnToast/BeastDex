@@ -6,6 +6,7 @@ import { useMemo, useCallback, useEffect } from "react";
 import {
   fetchEkuboTokens,
   getTokenByAddress,
+  normalizeAddress,
   type Token,
 } from "../services/tokens/ekubo";
 
@@ -97,14 +98,14 @@ export function useTokenMap() {
   const tokenMap = useMemo(() => {
     const map = new Map<string, Token>();
     for (const token of tokens) {
-      map.set(token.address.toLowerCase(), token);
+      map.set(normalizeAddress(token.address), token);
     }
     return map;
   }, [tokens]);
 
   const getToken = useCallback(
     (address: string): Token | undefined => {
-      return tokenMap.get(address.toLowerCase());
+      return tokenMap.get(normalizeAddress(address));
     },
     [tokenMap]
   );
@@ -167,12 +168,13 @@ export function useTokenPrices(addresses: string[]) {
 
   const prices = useMemo(() => {
     const priceMap = new Map<string, number>();
-    const tokenMap = new Map(tokens.map((t) => [t.address.toLowerCase(), t]));
+    const tokenMap = new Map(tokens.map((t) => [normalizeAddress(t.address), t]));
 
     for (const address of addresses) {
-      const token = tokenMap.get(address.toLowerCase());
+      const normalized = normalizeAddress(address);
+      const token = tokenMap.get(normalized);
       if (token?.usdPrice != null) {
-        priceMap.set(address.toLowerCase(), token.usdPrice);
+        priceMap.set(normalized, token.usdPrice);
       }
     }
 
@@ -181,7 +183,7 @@ export function useTokenPrices(addresses: string[]) {
 
   const getPrice = useCallback(
     (address: string): number | null => {
-      return prices.get(address.toLowerCase()) ?? null;
+      return prices.get(normalizeAddress(address)) ?? null;
     },
     [prices]
   );

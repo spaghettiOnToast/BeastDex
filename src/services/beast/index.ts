@@ -277,7 +277,9 @@ export async function fetchBeastsByIds(
 
   if (numericIds.length === 0) return [];
 
-  const BATCH_SIZE = 100;
+  // The API rejects token_id_in arrays over 50 elements outright (400), so
+  // this must stay <= 50 — it's not just a page size.
+  const BATCH_SIZE = 50;
   const batches: number[][] = [];
   for (let i = 0; i < numericIds.length; i += BATCH_SIZE) {
     batches.push(numericIds.slice(i, i + BATCH_SIZE));
@@ -319,8 +321,12 @@ export async function fetchBeastAttributeFilters(): Promise<BeastAttributeFilter
     Tier: uniqueTiers,
     Prefix: uniquePrefixes,
     Suffix: uniqueSuffixes,
-    Shiny: ["true", "false"],
-    Animated: ["true", "false"],
+    // Must match the actual stored attribute format (SDK's beastTraits()
+    // emits "1"/"0", not "true"/"false") — otherwise FiltersDrawer's
+    // boolean-toggle detection fails and "true"/"false" never matches any
+    // beast's real attribute value, so the filter silently returns nothing.
+    Shiny: ["1", "0"],
+    Animated: ["1", "0"],
   };
 }
 

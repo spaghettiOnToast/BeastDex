@@ -7,6 +7,7 @@ import { useGlobalCart } from "../contexts/GlobalCartContext";
 import { useTermsOfService } from "../contexts/TermsOfServiceContext";
 import { Button } from "../components/ui/button";
 import ListingCard from "../components/marketplace/ListingCard";
+import BeastCard from "../components/beast/BeastCard";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { useOffersForToken, useOffersReceivedForListings, useUserOffers } from "../hooks/useArcadeOrders";
 import type { Listing } from "../services/marketplace/types";
@@ -1348,7 +1349,6 @@ export default function MarketplacePage() {
                             <ListingCard
                               key={`${listing.listingId}-${listing.tokenId}`}
                               beast={listing.beast}
-                              tokenId={listing.tokenId}
                               priceLabel={formatPriceLabel(listing)}
                               subtitlePriceLabel={formatSubtitlePrice(listing)}
                               tokenLogoUrl={getTokenLogoUrl(listing)}
@@ -1578,7 +1578,6 @@ export default function MarketplacePage() {
                           <ListingCard
                             key={`recent-${listing.listingId}`}
                             beast={listing.beast}
-                            tokenId={listing.tokenId}
                             priceLabel={formatPriceLabel(listing)}
                             subtitlePriceLabel={formatSubtitlePrice(listing)}
                             tokenLogoUrl={getTokenLogoUrl(listing)}
@@ -1777,20 +1776,21 @@ export default function MarketplacePage() {
                           key={`sale-${idx}`}
                           className="rounded-lg border border-white/[0.06] bg-gradient-to-r from-black/40 to-gray-900/20 p-3 flex items-center gap-4 hover:border-white/[0.08] transition-colors"
                         >
-                          {/* Beast Image */}
-                          <div className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gradient-to-br from-gray-900/50 to-black/50 border border-white/[0.06]">
-                            {beast?.image ? (
-                              <img
-                                src={beast.image}
-                                alt={beast.name || `Beast #${tokenId}`}
-                                className="w-full h-full object-contain"
-                              />
+                          {/* Beast Card */}
+                          <button
+                            type="button"
+                            onClick={() => beast && setDetailModalSaleBeast({ ...beast, owner: from })}
+                            disabled={!beast}
+                            className="flex-shrink-0 w-16 text-left"
+                          >
+                            {beast ? (
+                              <BeastCard beast={beast} />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center text-zinc-600 text-xs">
+                              <div className="w-full aspect-square rounded-lg overflow-hidden bg-gradient-to-br from-gray-900/50 to-black/50 border border-white/[0.06] flex items-center justify-center text-zinc-600 text-xs">
                                 No img
                               </div>
                             )}
-                          </div>
+                          </button>
                           {/* Sale Details */}
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-white truncate">{beast?.name || `Beast #${tokenId}`}</p>
@@ -1880,7 +1880,6 @@ export default function MarketplacePage() {
                       <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">Beast</th>
                       <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">Price</th>
                       <th className="px-3 py-2.5 text-left font-semibold text-zinc-300">From / Seller</th>
-                      <th className="px-3 py-2.5 text-right font-semibold text-zinc-300">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2011,15 +2010,11 @@ export default function MarketplacePage() {
                               className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
                               disabled={!activity.listing && !activity.beast}
                             >
-                              <div className="w-8 h-8 rounded overflow-hidden bg-white/[0.06] flex-shrink-0">
-                                {activity.beast?.image ? (
-                                  <img
-                                    src={activity.beast.image}
-                                    alt={activity.beast.name || "Beast"}
-                                    className="w-full h-full object-contain"
-                                  />
+                              <div className="w-16 flex-shrink-0">
+                                {activity.beast ? (
+                                  <BeastCard beast={activity.beast} />
                                 ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-zinc-600 text-[8px]">
+                                  <div className="w-full aspect-square rounded-lg overflow-hidden bg-white/[0.06] flex items-center justify-center text-zinc-600 text-[8px]">
                                     ?
                                   </div>
                                 )}
@@ -2048,66 +2043,6 @@ export default function MarketplacePage() {
                                   → {getUsername(activity.to) ||
                                     `${activity.to?.slice(0, 6)}...${activity.to?.slice(-4)}`}
                                 </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {activity.type === "listing" && activity.listing ? (
-                                address?.toLowerCase() === activity.listing.seller?.toLowerCase() ? (
-                                  <>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 px-2.5 text-[10px] font-semibold"
-                                      onClick={() => {
-                                        setEditingListing(activity.listing!);
-                                        setEditDialogOpen(true);
-                                      }}
-                                    >
-                                      Edit
-                                    </Button>
-                                    {activity.listing.active && (
-                                      <Button
-                                        variant="destructive"
-                                        size="sm"
-                                        className="h-7 px-2.5 text-[10px] font-semibold"
-                                        onClick={() => handleCancelListing(activity.listing!)}
-                                      >
-                                        Cancel
-                                      </Button>
-                                    )}
-                                  </>
-                                ) : (
-                                  <>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 px-2.5 text-[10px] font-semibold bg-gold/10 text-gold border-gold/50 hover:bg-gold/20"
-                                      onClick={() => {
-                                        setPurchasingListing(activity.listing!);
-                                        setPurchaseConfirmOpen(true);
-                                      }}
-                                      disabled={!activity.listing.active}
-                                    >
-                                      Buy
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 px-2.5 text-[10px] font-semibold"
-                                      onClick={() => {
-                                        setOfferBeast(activity.listing!.beast ?? null);
-                                        setOfferTokenId(activity.listing!.tokenId);
-                                        setMakeOfferOpen(true);
-                                      }}
-                                    >
-                                      Offer
-                                    </Button>
-                                  </>
-                                )
-                              ) : (
-                                <span className="text-zinc-500 text-[10px]">—</span>
                               )}
                             </div>
                           </td>
@@ -2203,26 +2138,39 @@ export default function MarketplacePage() {
                 </div>
                 <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                   {filtersHook.userBeastsToRender.map((beast) => {
-                    // Use pre-computed token ID from filters hook
                     const tokenId = filtersHook.normalizedBeastTokenIds.get(beast.id) || beast.id;
                     const isListed = filtersHook.alreadyListedTokenIds.has(tokenId);
                     const inCart = globalCart.isInListCart(beast.id);
 
                     return (
-                      <ListingCard
-                        key={beast.id}
-                        beast={beast}
-                        tokenId={tokenId}
-                        inCart={inCart}
-                        isAlreadyListed={isListed}
-                        showSelectionOverlay={!isListed}
-                        buyDisabled={marketplaceDisabled}
-                        onCardClick={() => !isListed && requireToS(() => globalCart.toggleListCart(beast))}
-                        onListSingle={() => requireToS(() => {
-                          setSingleBeastToList(beast);
-                          setListDialogOpen(true);
-                        })}
-                      />
+                      <div key={beast.id} className="relative group">
+                        <BeastCard
+                          beast={beast}
+                          onSelect={() => !isListed && requireToS(() => globalCart.toggleListCart(beast))}
+                        />
+                        {/* Already listed badge */}
+                        {isListed && (
+                          <div className="absolute top-1 left-1 rounded px-1.5 py-0.5 bg-gold/80 text-black text-[9px] font-bold uppercase tracking-wide pointer-events-none">
+                            Listed
+                          </div>
+                        )}
+                        {/* Selection overlay: ✓ when in cart, + on hover when not listed */}
+                        {!isListed && (
+                          inCart ? (
+                            <div className="absolute top-1 right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center shadow-lg pointer-events-none">
+                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            </div>
+                          ) : (
+                            <div className="absolute top-1 right-1 w-5 h-5 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity border-2 border-white pointer-events-none">
+                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                              </svg>
+                            </div>
+                          )
+                        )}
+                      </div>
                     );
                   })}
                 </div>
@@ -2338,7 +2286,6 @@ export default function MarketplacePage() {
                           <ListingCard
                             key={`my-${listing.listingId}`}
                             beast={listing.beast}
-                            tokenId={listing.tokenId}
                             priceLabel={formatPriceLabel(listing)}
                             subtitlePriceLabel={formatSubtitlePrice(listing)}
                             tokenLogoUrl={getTokenLogoUrl(listing)}

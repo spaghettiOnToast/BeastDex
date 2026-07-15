@@ -10,6 +10,7 @@ import {
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import type { Beast } from "../../services/beast";
+import BeastCard from "../beast/BeastCard";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import {
   DEFAULT_PAYMENT_TOKEN,
@@ -365,23 +366,13 @@ export default function CartListDialog({
                         : 'border-gray-800 bg-gray-900/50'
                     }`}
                   >
-                    {beast.image && (
-                      <div className="relative group/img flex-shrink-0">
-                        <img
-                          src={beast.image}
-                          alt={beast.name}
-                          className="w-16 h-20 rounded object-contain bg-gray-800/50"
-                        />
-                        {/* Hover expand preview */}
-                        <div className="absolute left-0 top-0 z-50 opacity-0 group-hover/img:opacity-100 pointer-events-none transition-opacity duration-200">
-                          <img
-                            src={beast.image}
-                            alt={beast.name}
-                            className="w-32 h-40 rounded-lg object-contain bg-gray-900 border border-gray-700 shadow-xl -translate-x-2 -translate-y-2"
-                          />
-                        </div>
+                    <div className="relative group/img flex-shrink-0 w-16">
+                      <BeastCard beast={beast} />
+                      {/* Hover expand preview */}
+                      <div className="absolute left-0 top-0 z-50 w-40 opacity-0 group-hover/img:opacity-100 pointer-events-none transition-opacity duration-200 -translate-x-2 -translate-y-2">
+                        <BeastCard beast={beast} />
                       </div>
-                    )}
+                    </div>
                     <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium truncate">{beast.name}</p>

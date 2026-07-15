@@ -49,11 +49,48 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
  * Normalize Starknet address to consistent format for comparison
  * Handles different hex representations (with/without leading zeros)
  */
-function normalizeAddress(address: string): string {
+export function normalizeAddress(address: string): string {
   // Remove 0x prefix, pad to 64 chars, lowercase
   const withoutPrefix = address.toLowerCase().replace(/^0x/, "");
   const padded = withoutPrefix.padStart(64, "0");
   return "0x" + padded;
+}
+
+/**
+ * Tokens missing from Ekubo's bulk /tokens list (a curated top-N list) but
+ * that the app still needs — SURVIVOR and LORDS aren't in the top 1000, but
+ * both DO exist in Ekubo's full index and are fetchable individually via
+ * `/tokens/{chainId}/{address}` (confirmed: real name/decimals/logo_url/
+ * usd_price, not a guess). Fetched via `/tokens/batch` below and merged in;
+ * live data from the bulk list still wins if an address ever appears there.
+ */
+const FALLBACK_TOKEN_ADDRESSES = [
+  "0x042dd777885ad2c116be96d4d634abc90a26a790ffb5871e037dd5ae7d2ec86b", // SURVIVOR
+  "0x0124aeb495b947201f5fac96fd1138e326ad86195b98df6dec9009158a533b49", // LORDS
+].map(normalizeAddress);
+
+async function fetchFallbackTokens(addresses: string[]): Promise<Token[]> {
+  if (addresses.length === 0) return [];
+  try {
+    const url = new URL(`${EKUBO_API_BASE}/tokens/batch`);
+    for (const addr of addresses) {
+      url.searchParams.append("id", `${STARKNET_MAINNET_CHAIN_ID}:${addr}`);
+    }
+    const response = await fetch(url.toString());
+    if (!response.ok) return [];
+    const data: EkuboToken[] = await response.json();
+    return data.map((token): Token => ({
+      address: normalizeAddress(token.address),
+      symbol: token.symbol,
+      name: token.name,
+      decimals: token.decimals,
+      logoUrl: token.logo_url,
+      usdPrice: token.usd_price,
+      sortOrder: token.sort_order,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -85,25 +122,35 @@ export async function fetchEkuboTokens(): Promise<Token[]> {
         logoUrl: token.logo_url,
         usdPrice: token.usd_price,
         sortOrder: token.sort_order,
-      }))
-      .sort((a, b) => a.sortOrder - b.sortOrder);
+      }));
+
+    // Merge in tokens missing from the bulk list (e.g. SURVIVOR, LORDS) via
+    // the single/batch lookup, which does have them. Live bulk-list data
+    // wins if an address ever appears there too.
+    const knownAddresses = new Set(starknetTokens.map((t) => t.address));
+    const missingAddresses = FALLBACK_TOKEN_ADDRESSES.filter((a) => !knownAddresses.has(a));
+    const fallbackTokens = await fetchFallbackTokens(missingAddresses);
+    const merged = [...starknetTokens, ...fallbackTokens].sort((a, b) => a.sortOrder - b.sortOrder);
 
     // Update cache
-    tokenCache = starknetTokens;
-    tokenMapCache = new Map(starknetTokens.map((t) => [t.address, t]));
+    tokenCache = merged;
+    tokenMapCache = new Map(merged.map((t) => [t.address, t]));
     lastFetchTime = now;
 
     if (import.meta.env.DEV) {
-      console.log(`[Ekubo] Fetched ${starknetTokens.length} Starknet tokens`);
+      console.log(`[Ekubo] Fetched ${merged.length} Starknet tokens`);
     }
-    return starknetTokens;
+    return merged;
   } catch (error) {
     console.error("[Ekubo] Failed to fetch tokens:", error);
     // Return cached data if available, even if stale
     if (tokenCache) {
       return tokenCache;
     }
-    throw error;
+    // The bulk list failed — try the fallback tokens on their own in case
+    // it's only that endpoint having trouble, rather than leaving the app
+    // with no payment options at all.
+    return fetchFallbackTokens(FALLBACK_TOKEN_ADDRESSES);
   }
 }
 
