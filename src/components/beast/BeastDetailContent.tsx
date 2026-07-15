@@ -150,7 +150,10 @@ export function BeastDetailContent({
         </div>
 
         {/* Right: Tabs + Content */}
-        <div className="w-[340px] sm:w-[360px] flex flex-col gap-2 flex-shrink-0 overflow-hidden">
+        {/* Fixed height (matches the 360px-wide, 250:350-ratio card at ~504px) so
+            switching tabs never resizes the panel — Summit's longer content
+            scrolls within it instead of growing the container. */}
+        <div className="w-[340px] sm:w-[360px] lg:h-[508px] flex flex-col gap-2 flex-shrink-0 overflow-hidden">
           {/* Tab Buttons - Compact */}
           <div className="flex rounded-lg border border-white/[0.06] bg-surface/60 p-0.5">
             <button
