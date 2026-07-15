@@ -1786,7 +1786,7 @@ export default function MarketplacePage() {
                             className="flex-shrink-0 w-16 text-left"
                           >
                             {beast ? (
-                              <BeastCard beast={beast} thumbnail />
+                              <BeastCard beast={beast} />
                             ) : (
                               <div className="w-full aspect-square rounded-lg overflow-hidden bg-gradient-to-br from-gray-900/50 to-black/50 border border-white/[0.06] flex items-center justify-center text-zinc-600 text-xs">
                                 No img
@@ -2014,7 +2014,7 @@ export default function MarketplacePage() {
                             >
                               <div className="w-16 flex-shrink-0">
                                 {activity.beast ? (
-                                  <BeastCard beast={activity.beast} thumbnail />
+                                  <BeastCard beast={activity.beast} />
                                 ) : (
                                   <div className="w-full aspect-square rounded-lg overflow-hidden bg-white/[0.06] flex items-center justify-center text-zinc-600 text-[8px]">
                                     ?

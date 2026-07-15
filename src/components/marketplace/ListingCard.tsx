@@ -38,7 +38,6 @@ type Props = {
 
 function ListingCard({
   beast,
-  tokenId,
   priceLabel,
   subtitlePriceLabel,
   tokenLogoUrl,
