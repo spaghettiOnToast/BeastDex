@@ -3,6 +3,15 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/spaghettiOnToast/BeastDex.git"
+  },
+  "homepage": "https://beast-dex.vercel.app/",
+  "bugs": {
+    "url": "https://github.com/spaghettiOnToast/BeastDex/issues"
+  },
   "scripts": {
     "dev": "BROWSER='Google Chrome' vite --open",
     "build": "tsc -b && vite build",
