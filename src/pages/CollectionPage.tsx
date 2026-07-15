@@ -29,6 +29,7 @@ import { Grid, Table } from "lucide-react";
 import {
   fetchBeastAttributeFilters,
   fetchBeasts,
+  fetchBeastsByIds,
   fetchOwnerBeastStats,
   fetchOwnerBeastHighlights,
   type Beast,
@@ -47,8 +48,6 @@ import { getUserFriendlyErrorMessage, isSqlEndpointError } from "../utils/error"
 import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
 import { Button } from "../components/ui/button";
 import { getBeastTemplate } from "../data/beastTemplates";
-import { runBeastSql } from "../services/beast/sqlClient";
-import { mapBeastRow } from "../services/beast/helpers";
 import { apiCache } from "../services/apiCache";
 import { fetchOwnerSummitRankFromApi, type OwnerSummitRank } from "../services/summitApi";
 import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
@@ -403,11 +402,6 @@ function CollectionPage() {
     setCollectionStats(EMPTY_BEAST_COLLECTION_STATS);
   }, [resolvedAddress]);
 
-  // Helper function to format beast ID as u256
-  const formatBeastId = useCallback((id: number): string => {
-    return `0x${id.toString(16).padStart(64, "0")}`;
-  }, []);
-
   // Function to get Genesis beast type key
   const getGenesisBeastTypeKey = useCallback((beast: Beast): string => {
     const attribute = beast.attributes.find(
@@ -418,27 +412,17 @@ function CollectionPage() {
       .toLowerCase();
   }, []);
 
-  // Load all Genesis beasts with a single SQL query
+  // Load all Genesis beasts (token ids 1-75) via the collectables SDK
   const loadAllGenesisBeasts = useCallback(async (): Promise<
     Map<string, Beast>
   > => {
     try {
-      // Generate all Genesis beast IDs (1-75) as u256 format
-      const genesisIds = Array.from({ length: 75 }, (_, i) =>
-        formatBeastId(i + 1)
-      );
-
-      // Build a simple SQL query to fetch all Genesis beasts at once
-      const escapedIds = genesisIds.map((id) => `"${id}"`).join(", ");
-
-      const query = `SELECT * FROM tokens WHERE contract_address = "0x046da8955829adf2bda310099a0063451923f02e648cf25a1203aac6335cf0e4" AND token_id IN (${escapedIds}) LIMIT 1000;`;
-
-      const rows = await runBeastSql(query, "loadAllGenesisBeasts");
-      const beasts = (rows as any[]).map(mapBeastRow);
+      const genesisIds = Array.from({ length: 75 }, (_, i) => i + 1);
+      const beasts = await fetchBeastsByIds(genesisIds);
 
       const genesisMap = new Map<string, Beast>();
 
-      beasts.forEach((beast: any) => {
+      beasts.forEach((beast) => {
         if (beast) {
           const typeKey = getGenesisBeastTypeKey(beast);
           if (typeKey && !genesisMap.has(typeKey)) {
@@ -452,7 +436,7 @@ function CollectionPage() {
       console.error("Failed to load Genesis beasts:", error);
       return new Map();
     }
-  }, [formatBeastId, getGenesisBeastTypeKey]);
+  }, [getGenesisBeastTypeKey]);
 
   useEffect(() => {
     let cancelled = false;

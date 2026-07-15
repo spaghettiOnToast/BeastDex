@@ -83,14 +83,6 @@ export type BeastHealthRank = {
   totalOwners: number;
 };
 
-export type LeaderboardEntry = {
-  rank: number;
-  owner: string;
-  username: string | null;
-  value: number;
-};
-
-export type PowerRankLeaderboard = LeaderboardEntry[];
 
 
 export type FetchLeaderboardOptions = {
