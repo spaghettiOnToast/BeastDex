@@ -57,55 +57,39 @@ export function normalizeAddress(address: string): string {
 }
 
 /**
- * Tokens that Ekubo's public /tokens API does not index but the app still
- * needs to support (SURVIVOR and LORDS aren't listed on Ekubo at all, even
- * though both are actively tradeable there). These are merged into the
- * Ekubo response and are automatically superseded if Ekubo ever starts
- * indexing the same address. usdPrice is filled in via the quoter API
- * below since Ekubo's metadata list has no price for them.
+ * Tokens missing from Ekubo's bulk /tokens list (a curated top-N list) but
+ * that the app still needs — SURVIVOR and LORDS aren't in the top 1000, but
+ * both DO exist in Ekubo's full index and are fetchable individually via
+ * `/tokens/{chainId}/{address}` (confirmed: real name/decimals/logo_url/
+ * usd_price, not a guess). Fetched via `/tokens/batch` below and merged in;
+ * live data from the bulk list still wins if an address ever appears there.
  */
-const STATIC_FALLBACK_TOKENS: Token[] = [
-  {
-    address: normalizeAddress(
-      "0x042dd777885ad2c116be96d4d634abc90a26a790ffb5871e037dd5ae7d2ec86b"
-    ),
-    symbol: "SURVIVOR",
-    name: "Survivor",
-    decimals: 18, // verified on-chain via decimals() call
-    logoUrl: null,
-    usdPrice: null,
-    sortOrder: 0,
-  },
-  {
-    address: normalizeAddress(
-      "0x0124aeb495b947201f5fac96fd1138e326ad86195b98df6dec9009158a533b49"
-    ),
-    symbol: "LORDS",
-    name: "Lords",
-    decimals: 18, // verified on-chain via decimals() call
-    logoUrl: null,
-    usdPrice: null,
-    sortOrder: 0,
-  },
-];
+const FALLBACK_TOKEN_ADDRESSES = [
+  "0x042dd777885ad2c116be96d4d634abc90a26a790ffb5871e037dd5ae7d2ec86b", // SURVIVOR
+  "0x0124aeb495b947201f5fac96fd1138e326ad86195b98df6dec9009158a533b49", // LORDS
+].map(normalizeAddress);
 
-// Ekubo quoter API — used only to price STATIC_FALLBACK_TOKENS, since
-// Ekubo's /tokens metadata list has no usd_price for them.
-const EKUBO_QUOTER_API_BASE = "https://prod-api-quoter.ekubo.org";
-const QUOTER_CHAIN_ID_DECIMAL = "23448594291968334";
-const QUOTER_STANDARD_AMOUNT = "1000000000000000000"; // 1 token at 18 decimals
-const QUOTER_USDC_ADDRESS = "0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8";
-
-async function fetchQuotedUsdPrice(tokenAddress: string): Promise<number | null> {
+async function fetchFallbackTokens(addresses: string[]): Promise<Token[]> {
+  if (addresses.length === 0) return [];
   try {
-    const url = `${EKUBO_QUOTER_API_BASE}/${QUOTER_CHAIN_ID_DECIMAL}/${QUOTER_STANDARD_AMOUNT}/${tokenAddress}/${QUOTER_USDC_ADDRESS}`;
-    const response = await fetch(url);
-    if (!response.ok) return null;
-    const data: { total_calculated?: string } = await response.json();
-    if (!data.total_calculated) return null;
-    return Number(data.total_calculated) / 1e6; // USDC has 6 decimals
+    const url = new URL(`${EKUBO_API_BASE}/tokens/batch`);
+    for (const addr of addresses) {
+      url.searchParams.append("id", `${STARKNET_MAINNET_CHAIN_ID}:${addr}`);
+    }
+    const response = await fetch(url.toString());
+    if (!response.ok) return [];
+    const data: EkuboToken[] = await response.json();
+    return data.map((token): Token => ({
+      address: normalizeAddress(token.address),
+      symbol: token.symbol,
+      name: token.name,
+      decimals: token.decimals,
+      logoUrl: token.logo_url,
+      usdPrice: token.usd_price,
+      sortOrder: token.sort_order,
+    }));
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -140,18 +124,13 @@ export async function fetchEkuboTokens(): Promise<Token[]> {
         sortOrder: token.sort_order,
       }));
 
-    // Merge in tokens Ekubo doesn't index (e.g. SURVIVOR, LORDS). Live Ekubo
-    // data wins if the address is ever indexed there too. Price them via the
-    // quoter API in parallel since they have no usd_price from /tokens.
+    // Merge in tokens missing from the bulk list (e.g. SURVIVOR, LORDS) via
+    // the single/batch lookup, which does have them. Live bulk-list data
+    // wins if an address ever appears there too.
     const knownAddresses = new Set(starknetTokens.map((t) => t.address));
-    const missingFallbacks = STATIC_FALLBACK_TOKENS.filter((t) => !knownAddresses.has(t.address));
-    const pricedFallbacks = await Promise.all(
-      missingFallbacks.map(async (t) => ({
-        ...t,
-        usdPrice: t.usdPrice ?? (await fetchQuotedUsdPrice(t.address)),
-      }))
-    );
-    const merged = [...starknetTokens, ...pricedFallbacks].sort((a, b) => a.sortOrder - b.sortOrder);
+    const missingAddresses = FALLBACK_TOKEN_ADDRESSES.filter((a) => !knownAddresses.has(a));
+    const fallbackTokens = await fetchFallbackTokens(missingAddresses);
+    const merged = [...starknetTokens, ...fallbackTokens].sort((a, b) => a.sortOrder - b.sortOrder);
 
     // Update cache
     tokenCache = merged;
@@ -168,9 +147,10 @@ export async function fetchEkuboTokens(): Promise<Token[]> {
     if (tokenCache) {
       return tokenCache;
     }
-    // Ekubo is unreachable — at least return the statically known tokens
-    // rather than leaving the app with no payment options at all.
-    return STATIC_FALLBACK_TOKENS;
+    // The bulk list failed — try the fallback tokens on their own in case
+    // it's only that endpoint having trouble, rather than leaving the app
+    // with no payment options at all.
+    return fetchFallbackTokens(FALLBACK_TOKEN_ADDRESSES);
   }
 }
 
