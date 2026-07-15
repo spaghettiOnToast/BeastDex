@@ -2148,7 +2148,6 @@ export default function MarketplacePage() {
                       <div key={beast.id} className="relative group">
                         <BeastCard
                           beast={beast}
-                          owned
                           onSelect={() => !isListed && requireToS(() => globalCart.toggleListCart(beast))}
                         />
                         {/* Already listed badge */}
