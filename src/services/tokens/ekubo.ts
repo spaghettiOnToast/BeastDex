@@ -57,6 +57,26 @@ function normalizeAddress(address: string): string {
 }
 
 /**
+ * Tokens that Ekubo's public /tokens API does not index but the app still
+ * needs to support (e.g. SURVIVOR is not listed on Ekubo at all). These are
+ * merged into the Ekubo response and are automatically superseded if Ekubo
+ * ever starts indexing the same address.
+ */
+const STATIC_FALLBACK_TOKENS: Token[] = [
+  {
+    address: normalizeAddress(
+      "0x042dd777885ad2c116be96d4d634abc90a26a790ffb5871e037dd5ae7d2ec86b"
+    ),
+    symbol: "SURVIVOR",
+    name: "Survivor",
+    decimals: 18, // verified on-chain via decimals() call
+    logoUrl: null,
+    usdPrice: null,
+    sortOrder: 0,
+  },
+];
+
+/**
  * Fetch all Starknet tokens from Ekubo API
  */
 export async function fetchEkuboTokens(): Promise<Token[]> {
@@ -85,25 +105,34 @@ export async function fetchEkuboTokens(): Promise<Token[]> {
         logoUrl: token.logo_url,
         usdPrice: token.usd_price,
         sortOrder: token.sort_order,
-      }))
-      .sort((a, b) => a.sortOrder - b.sortOrder);
+      }));
+
+    // Merge in tokens Ekubo doesn't index (e.g. SURVIVOR). Live Ekubo data
+    // wins if the address is ever indexed there too.
+    const knownAddresses = new Set(starknetTokens.map((t) => t.address));
+    const merged = [
+      ...starknetTokens,
+      ...STATIC_FALLBACK_TOKENS.filter((t) => !knownAddresses.has(t.address)),
+    ].sort((a, b) => a.sortOrder - b.sortOrder);
 
     // Update cache
-    tokenCache = starknetTokens;
-    tokenMapCache = new Map(starknetTokens.map((t) => [t.address, t]));
+    tokenCache = merged;
+    tokenMapCache = new Map(merged.map((t) => [t.address, t]));
     lastFetchTime = now;
 
     if (import.meta.env.DEV) {
-      console.log(`[Ekubo] Fetched ${starknetTokens.length} Starknet tokens`);
+      console.log(`[Ekubo] Fetched ${merged.length} Starknet tokens`);
     }
-    return starknetTokens;
+    return merged;
   } catch (error) {
     console.error("[Ekubo] Failed to fetch tokens:", error);
     // Return cached data if available, even if stale
     if (tokenCache) {
       return tokenCache;
     }
-    throw error;
+    // Ekubo is unreachable — at least return the statically known tokens
+    // rather than leaving the app with no payment options at all.
+    return STATIC_FALLBACK_TOKENS;
   }
 }
 
