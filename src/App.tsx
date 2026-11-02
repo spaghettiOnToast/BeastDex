@@ -28,7 +28,6 @@ const AccountPage = lazy(() => import("./pages/AccountPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const CollectionPage = lazy(() => import("./pages/CollectionPage"));
 const LeaderboardPage = lazy(() => import("./pages/LeaderboardPage"));
-const MarketplacePage = lazy(() => import("./pages/MarketplacePage"));
 const DungeonsPage = lazy(() => import("./pages/DungeonsPage"));
 const TiddyMunDetailPage = lazy(() => import("./pages/TiddyMunDetailPage"));
 
@@ -53,6 +52,24 @@ function MaintenancePage() {
         <h1 className="text-2xl font-bold text-white mb-3">Under Maintenance</h1>
         <p className="text-zinc-400 mb-6 leading-relaxed">
           BeastDex is currently undergoing maintenance while we upgrade our infrastructure. We'll be back shortly.
+        </p>
+        <div className="inline-flex items-center gap-2 text-sm text-zinc-500 border border-white/[0.06] rounded-lg px-4 py-2">
+          <span className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+          Work in progress
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MarketplaceMaintenancePage() {
+  return (
+    <div className="min-h-screen bg-[#09090b] flex items-center justify-center px-4">
+      <div className="text-center max-w-md">
+        <div className="text-6xl mb-6">⚔️</div>
+        <h1 className="text-2xl font-bold text-white mb-3">Marketplace Unavailable</h1>
+        <p className="text-zinc-400 mb-6 leading-relaxed">
+          The Marketplace is down for Beast V3 maintenance.
         </p>
         <div className="inline-flex items-center gap-2 text-sm text-zinc-500 border border-white/[0.06] rounded-lg px-4 py-2">
           <span className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
@@ -121,7 +138,7 @@ function App() {
                 <Route path="/collection/:identifier" element={<CollectionPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/statistics" element={<LeaderboardPage />} />
-                <Route path="/marketplace" element={<MarketplacePage />} />
+                <Route path="/marketplace" element={<MarketplaceMaintenancePage />} />
                 <Route path="/dungeons" element={<DungeonsPage />} />
                 <Route path="/dungeons/:tokenId" element={<TiddyMunDetailPage />} />
               </Routes>
