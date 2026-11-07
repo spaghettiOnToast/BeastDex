@@ -34,6 +34,7 @@ import {
   useExpirationDetails,
   DURATION_SELECT_OPTIONS,
 } from "../../hooks/useExpirationDetails";
+import { executeMarketplaceCalls } from "../../services/marketplace/safety";
 
 type Props = {
   open: boolean;
@@ -46,6 +47,8 @@ type Props = {
     offerPrice: string;
     currency: string;
   }) => void;
+  /** NFT collection of the token (defaults to Beasts; festival collections too) */
+  collection?: string;
 };
 
 export default function MakeOfferDialog({
@@ -54,6 +57,7 @@ export default function MakeOfferDialog({
   beast,
   tokenId,
   onOfferMade,
+  collection = BEASTS_COLLECTION_ADDRESS,
 }: Props) {
   const { account } = useAccount();
   const [price, setPrice] = useState("");
@@ -186,7 +190,7 @@ export default function MakeOfferDialog({
         contractAddress: MARKETPLACE_ADDRESS,
         entrypoint: "offer",
         calldata: [
-          BEASTS_COLLECTION_ADDRESS,
+          collection,
           ...tokenIdU256, // token_id as Uint256
           "0", // quantity: u128 = 0 for ERC721 (non-fungible)
           priceBigInt.toString(), // price: u128 (single felt, not u256!)
@@ -196,7 +200,7 @@ export default function MakeOfferDialog({
       });
 
       toast.loading("Making offer...", { id: toastId });
-      const result = await account.execute(calls);
+      const result = await executeMarketplaceCalls(account, calls);
 
       if (result?.transaction_hash) {
         const provider = getProvider(account);

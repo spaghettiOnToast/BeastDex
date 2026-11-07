@@ -2,9 +2,52 @@ import { RpcProvider } from 'starknet';
 
 export type TxFinalOutcome = 'success' | 'reverted' | 'rejected' | 'timeout' | 'unknown';
 
-function resolveRpcUrl(): string {
+/**
+ * RPC for reads and receipt polling. Defaults to Provable's public mainnet RPC
+ * (what lootsurvivor.io uses): the Cartridge endpoint answers "Unauthorized"
+ * to unauthenticated starknet_call / receipt requests.
+ */
+export const DEFAULT_RPC_URL = 'https://rpc.provable.games/rpc';
+
+export function resolveRpcUrl(): string {
   const envUrl = (import.meta as any)?.env?.VITE_RPC_URL as string | undefined;
-  return envUrl || 'https://api.cartridge.gg/x/starknet/mainnet';
+  return envUrl || DEFAULT_RPC_URL;
+}
+
+/** Configured RPC first, then the public default (deduplicated). */
+export function readRpcUrls(): string[] {
+  return Array.from(new Set([resolveRpcUrl(), DEFAULT_RPC_URL]));
+}
+
+const providerCache = new Map<string, RpcProvider>();
+const providerFor = (url: string) => {
+  let p = providerCache.get(url);
+  if (!p) providerCache.set(url, (p = new RpcProvider({ nodeUrl: url })));
+  return p;
+};
+
+/** An RPC that refuses unauthenticated reads (e.g. the Cartridge endpoint). */
+function isAccessError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? '');
+  return /unauthori[sz]ed|forbidden|\b401\b|\b403\b|Unexpected token 'U'/i.test(msg);
+}
+
+/**
+ * Run a read against the configured RPC, falling back to the public default
+ * when the configured one refuses access.
+ */
+export async function withReadProvider<T>(fn: (provider: RpcProvider) => Promise<T>): Promise<T> {
+  const urls = readRpcUrls();
+  let lastErr: unknown;
+  for (const url of urls) {
+    try {
+      return await fn(providerFor(url));
+    } catch (err) {
+      lastErr = err;
+      if (!isAccessError(err)) throw err;
+    }
+  }
+  throw lastErr;
 }
 
 export async function waitForTx(
@@ -14,12 +57,11 @@ export async function waitForTx(
     pollIntervalMs = 3_000,
   }: { timeoutMs?: number; pollIntervalMs?: number } = {}
 ): Promise<TxFinalOutcome> {
-  const provider = new RpcProvider({ nodeUrl: resolveRpcUrl() });
   const start = Date.now();
 
   while (Date.now() - start < timeoutMs) {
     try {
-      const receipt: any = await provider.getTransactionReceipt(txHash);
+      const receipt: any = await withReadProvider((provider) => provider.getTransactionReceipt(txHash));
       const finality = receipt?.finality_status || receipt?.status;
       const exec = receipt?.execution_status;
 

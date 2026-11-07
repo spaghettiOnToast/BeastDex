@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { AccountInterface, BigNumberish } from "starknet";
 import type { Listing } from "../../../services/marketplace/types";
-import type { OrderModel } from "@cartridge/arcade";
+import type { OrderModel } from "../../../services/marketplace/arcadeTypes";
 import {
   checkSufficientBalance,
   ensureCollectionApproval,
@@ -29,6 +29,7 @@ import { toBigIntSafe } from "../../../utils/bigint";
 import { isUserRejection } from "../../../utils/transaction";
 import { toUint256Hex } from "../../../utils/uint256";
 import { VOYAGER_BASE } from "../types";
+import { executeMarketplaceCalls } from "../../../services/marketplace/safety";
 
 const toBigInt = toBigIntSafe;
 
@@ -118,7 +119,7 @@ export function useMarketplaceActions({
         const orderValidity = await getOrderValidity(
           provider,
           listing.orderId ?? listing.listingId,
-          BEASTS_COLLECTION_ADDRESS,
+          (listing.collection ?? BEASTS_COLLECTION_ADDRESS),
           tokenIdBigInt
         );
 
@@ -135,7 +136,7 @@ export function useMarketplaceActions({
         // Additional ownership check as backup (catches transfers not yet reflected in order status)
         const isValidOwnership = await validateListingOwnership(
           provider,
-          BEASTS_COLLECTION_ADDRESS,
+          (listing.collection ?? BEASTS_COLLECTION_ADDRESS),
           tokenIdBigInt,
           listing.seller
         );
@@ -181,7 +182,7 @@ export function useMarketplaceActions({
         const result = await executePurchaseWithApproval(
           account,
           orderId,
-          BEASTS_COLLECTION_ADDRESS,
+          (listing.collection ?? BEASTS_COLLECTION_ADDRESS),
           tokenIdBigInt,
           0n, // quantity: 0 for ERC721 (non-fungible)
           ROYALTIES_ENABLED, // creator royalties (5%)
@@ -268,7 +269,7 @@ export function useMarketplaceActions({
         // Batch validate order status via contract
         const ordersToValidate = activeListings.map(listing => ({
           orderId: listing.orderId ?? listing.listingId,
-          collection: BEASTS_COLLECTION_ADDRESS,
+          collection: (listing.collection ?? BEASTS_COLLECTION_ADDRESS),
           tokenId: toBigInt(listing.tokenId),
         }));
 
@@ -290,7 +291,7 @@ export function useMarketplaceActions({
           const tokenIdBigInt = toBigInt(listing.tokenId);
           const isValidOwnership = await validateListingOwnership(
             provider,
-            BEASTS_COLLECTION_ADDRESS,
+            (listing.collection ?? BEASTS_COLLECTION_ADDRESS),
             tokenIdBigInt,
             listing.seller
           );
@@ -364,7 +365,7 @@ export function useMarketplaceActions({
             entrypoint: "execute",
             calldata: [
               listing.orderId?.toString() || "0",
-              BEASTS_COLLECTION_ADDRESS,
+              (listing.collection ?? BEASTS_COLLECTION_ADDRESS),
               tokenIdU256[0],
               tokenIdU256[1],
               tokenIdU256[0], // asset_id (same as token_id for ERC721)
@@ -390,7 +391,7 @@ export function useMarketplaceActions({
           ]);
         };
 
-        const result = await executeWithTimeout(account.execute(calls), 120000);
+        const result = await executeWithTimeout(executeMarketplaceCalls(account, calls), 120000);
         if (!result?.transaction_hash) {
           throw new Error("Transaction was not submitted");
         }
@@ -463,7 +464,7 @@ export function useMarketplaceActions({
         const offerValidity = await getOrderValidity(
           provider,
           order.id,
-          BEASTS_COLLECTION_ADDRESS,
+          (order.collection || BEASTS_COLLECTION_ADDRESS),
           tokenIdBigInt
         );
 
@@ -477,7 +478,7 @@ export function useMarketplaceActions({
         // Validate that the seller still owns the NFT
         const isOwner = await validateListingOwnership(
           provider,
-          BEASTS_COLLECTION_ADDRESS,
+          (order.collection || BEASTS_COLLECTION_ADDRESS),
           tokenIdBigInt,
           account.address
         );
@@ -490,14 +491,14 @@ export function useMarketplaceActions({
 
         // Ensure collection approval
         toast.loading("Approving NFT transfer...", { id: toastId });
-        await ensureCollectionApproval(account);
+        await ensureCollectionApproval(account, (order.collection || BEASTS_COLLECTION_ADDRESS));
 
         // Execute the offer
         toast.loading("Accepting offer...", { id: toastId });
 
         const executeCall = buildMarketplaceExecuteCall(
           orderId,
-          BEASTS_COLLECTION_ADDRESS,
+          (order.collection || BEASTS_COLLECTION_ADDRESS),
           tokenIdBigInt,
           0n, // quantity: 0 for ERC721 (non-fungible)
           ROYALTIES_ENABLED, // creator royalties (5%)
@@ -507,7 +508,7 @@ export function useMarketplaceActions({
           CLIENT_FEE_RECEIVER
         );
 
-        const result = await account.execute([executeCall]);
+        const result = await executeMarketplaceCalls(account, [executeCall]);
 
         if (result?.transaction_hash) {
           await provider.waitForTransaction(result.transaction_hash, {
@@ -580,7 +581,7 @@ export function useMarketplaceActions({
         ],
       };
 
-      const result = await snAccount.execute([call]);
+      const result = await executeMarketplaceCalls(snAccount, [call]);
 
       if (result?.transaction_hash) {
         const provider = getProvider(snAccount);
@@ -625,7 +626,7 @@ export function useMarketplaceActions({
         };
       });
 
-      const result = await snAccount.execute(calls);
+      const result = await executeMarketplaceCalls(snAccount, calls);
 
       if (result?.transaction_hash) {
         const provider = getProvider(snAccount);
@@ -674,7 +675,7 @@ export function useMarketplaceActions({
         ],
       };
 
-      const result = await snAccount.execute([call]);
+      const result = await executeMarketplaceCalls(snAccount, [call]);
 
       if (result?.transaction_hash) {
         const provider = getProvider(snAccount);
@@ -758,7 +759,7 @@ export function useMarketplaceActions({
         calls.push(feeTransferCall, listCall);
       }
 
-      const result = await snAccount.execute(calls);
+      const result = await executeMarketplaceCalls(snAccount, calls);
 
       if (result?.transaction_hash) {
         const provider = getProvider(snAccount);
@@ -817,7 +818,7 @@ export function useMarketplaceActions({
       };
 
       // Execute both in a single transaction
-      const result = await snAccount.execute([cancelCall, listCall]);
+      const result = await executeMarketplaceCalls(snAccount, [cancelCall, listCall]);
 
       if (result?.transaction_hash) {
         const provider = getProvider(snAccount);

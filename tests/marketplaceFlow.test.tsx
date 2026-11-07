@@ -1,201 +1,114 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import ListDialog from "../src/components/marketplace/ListDialog";
-import {
-  editListingFlow,
-  cancelListingFlow,
-} from "../src/services/marketplace/flows";
-import {
-  BEASTS_COLLECTION_ADDRESS,
-  DEFAULT_PAYMENT_TOKEN,
-} from "../src/services/marketplace/constants";
+import { editListingFlow, cancelListingFlow } from "../src/services/marketplace/flows";
 
-const mockAccount: any = {
-  address: "0xabc",
-  estimateInvokeFee: vi.fn(),
-};
+// v3-sized (251-bit) token id: must survive the flows without precision loss.
+const V3_TOKEN_ID = (1n << 250n) + 123456789n;
 
-const mockProvider = {
-  manifest: {},
-};
+// ---- Mocks for the safety guard: chain class hash + indexer book config ----
+const chain = { classHash: "", book: null as null | { paused: boolean; fee_num: number } };
 
-const listMock = vi.fn();
-const buildListCallsMock = vi.fn();
-const cancelMock = vi.fn();
-
-vi.mock("@starknet-react/core", () => ({
-  useAccount: () => ({ account: mockAccount }),
+vi.mock("../src/services/tx", () => ({
+  withReadProvider: (fn: (p: unknown) => Promise<unknown>) =>
+    fn({ getClassHashAt: async () => chain.classHash, getBlockNumber: async () => 0 }),
+  resolveRpcUrl: () => "http://localhost",
 }));
+vi.mock("../src/hooks/useArcadeBookConfig", () => ({ fetchBookConfig: async () => chain.book }));
+vi.mock("../src/services/marketplace/arcadeSqlClient", () => ({ runArcadeSql: async () => [] }));
 
-vi.mock("@cartridge/marketplace", () => {
-  const mockConfigs = {
-    ["0x534e5f4d41494e"]: {
-      manifest: {
-        contracts: [
-          {
-            tag: "MARKETPLACE-Marketplace",
-            address: "0xmarketplace",
-          },
-        ],
-        world: {
-          address: "0xworld",
-        },
-      },
-      toriiUrl: "http://localhost:1234",
-      rpcUrl: "http://localhost:5050",
-    },
-  };
+import {
+  checkMarketplaceSafety,
+  executeMarketplaceCalls,
+  MarketplaceSafetyError,
+  PINNED_MARKETPLACE_CLASS_HASH,
+  MAX_PROTOCOL_FEE_BPS,
+} from "../src/services/marketplace/safety";
+import { MARKETPLACE_ADDRESS } from "../src/services/marketplace/constants";
 
-  return {
-    NAMESPACE: "MARKETPLACE",
-    configs: mockConfigs,
-    useMarketplace: () => ({ provider: mockProvider }),
-    useMarketplaceActions: () => ({
-      list: listMock,
-      buildListCalls: buildListCallsMock,
-      cancel: cancelMock,
-    }),
-  };
-});
-
-const parsedCall = {
-  contractAddress: "0xmarketplace",
-  entrypoint: "list",
-  calldata: ["encoded"],
-};
-
-vi.mock("@dojoengine/core", () => ({
-  parseDojoCall: vi.fn(() => parsedCall),
-}));
+const mockAccount = { address: "0xabc", execute: vi.fn().mockResolvedValue({ transaction_hash: "0x1" }) };
 
 describe("Marketplace flows", () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-    listMock.mockResolvedValue(undefined);
-    buildListCallsMock.mockReturnValue([
-      {
-        contractAddress: BEASTS_COLLECTION_ADDRESS,
-        entrypoint: "set_approval_for_all",
-        calldata: ["0xmarketplace", "0x1"],
-      },
-      {
-        contractName: "Marketplace",
-        entrypoint: "list",
-        calldata: ["encoded"],
-      },
-    ]);
-    mockAccount.estimateInvokeFee.mockResolvedValue({ suggestedMaxFee: 1000n });
-  });
-
-  it("lists a beast with converted parameters", async () => {
-    const onOpenChange = vi.fn();
-    const onListed = vi.fn();
-
-    render(
-      <ListDialog
-        open
-        onOpenChange={onOpenChange}
-        beast={{
-          id: "123",
-          name: "Test Beast",
-          power: 10,
-          attributes: [],
-          image: "",
-          numericId: 123,
-          owner: "0xowner",
-        }}
-        onListed={onListed}
-      />
-    );
-
-    await userEvent.type(screen.getByPlaceholderText("Enter price"), "1000");
-
-    await waitFor(() =>
-      expect(mockAccount.estimateInvokeFee).toHaveBeenCalled()
-    );
-
-    const submitButton = screen.getByRole("button", { name: "List" });
-    expect(submitButton).toBeEnabled();
-
-    await userEvent.click(screen.getByRole("button", { name: "List" }));
-
-    await waitFor(() => expect(listMock).toHaveBeenCalled());
-    expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(onListed).toHaveBeenCalled();
-    const [
-      accountArg,
-      collectionArg,
-      tokenIdArg,
-      quantityArg,
-      priceArg,
-      currencyArg,
-      expirationArg,
-    ] = listMock.mock.calls[0];
-
-    expect(accountArg).toBe(mockAccount);
-    expect(collectionArg).toBe(BEASTS_COLLECTION_ADDRESS);
-    expect(tokenIdArg).toBe(123n);
-    expect(quantityArg).toBe(1n);
-    expect(priceArg).toBe(1000n);
-    expect(currencyArg).toBe(DEFAULT_PAYMENT_TOKEN.address);
-    expect(typeof expirationArg).toBe("bigint");
-  });
-
-  it("performs edit listing flow in order", async () => {
+  it("performs edit listing flow in order (cancel, then list)", async () => {
     const cancelSpy = vi.fn().mockResolvedValue(undefined);
     const listSpy = vi.fn().mockResolvedValue(undefined);
-
     const expiration = 999n;
     await editListingFlow(
       { cancel: cancelSpy, list: listSpy },
       {
-        account: mockAccount,
+        account: mockAccount as never,
         collectionAddress: "0xcollection",
-        tokenId: "42",
+        tokenId: V3_TOKEN_ID.toString(),
         orderId: 7,
         newPrice: "1337",
         currencyAddress: "0xcurrency",
         expiration,
-      }
+      },
     );
-
-    expect(cancelSpy).toHaveBeenCalledWith(
-      mockAccount,
-      7n,
-      "0xcollection",
-      42n
-    );
-    expect(listSpy).toHaveBeenCalledWith(
-      mockAccount,
-      "0xcollection",
-      42n,
-      1n,
-      1337n,
-      "0xcurrency",
-      expiration
-    );
-    expect(
-      cancelSpy.mock.invocationCallOrder[0]
-    ).toBeLessThan(listSpy.mock.invocationCallOrder[0]);
+    expect(cancelSpy).toHaveBeenCalledWith(mockAccount, 7n, "0xcollection", V3_TOKEN_ID);
+    expect(listSpy).toHaveBeenCalledWith(mockAccount, "0xcollection", V3_TOKEN_ID, 1n, 1337n, "0xcurrency", expiration);
+    expect(cancelSpy.mock.invocationCallOrder[0]).toBeLessThan(listSpy.mock.invocationCallOrder[0]);
   });
 
   it("performs cancel listing flow", async () => {
     const cancelSpy = vi.fn().mockResolvedValue(undefined);
     await cancelListingFlow(
       { cancel: cancelSpy },
-      {
-        account: mockAccount,
-        collectionAddress: "0xcollection",
-        tokenId: "77",
-        orderId: "88",
-      }
+      { account: mockAccount as never, collectionAddress: "0xcollection", tokenId: "77", orderId: "88" },
     );
-    expect(cancelSpy).toHaveBeenCalledWith(
-      mockAccount,
-      88n,
-      "0xcollection",
-      77n
-    );
+    expect(cancelSpy).toHaveBeenCalledWith(mockAccount, 88n, "0xcollection", 77n);
+  });
+});
+
+describe("Marketplace safety guard", () => {
+  const listCall = { contractAddress: MARKETPLACE_ADDRESS, entrypoint: "list", calldata: ["0x1"] };
+
+  beforeEach(() => {
+    mockAccount.execute.mockClear();
+    chain.classHash = PINNED_MARKETPLACE_CLASS_HASH;
+    chain.book = { paused: false, fee_num: 0 };
+  });
+
+  it("allows trading when the contract and book are as reviewed", async () => {
+    await executeMarketplaceCalls(mockAccount, [listCall]);
+    expect(mockAccount.execute).toHaveBeenCalledWith([listCall]);
+  });
+
+  it("blocks when the contract was upgraded (class hash changed)", async () => {
+    chain.classHash = "0xdeadbeef";
+    await checkMarketplaceSafety(true);
+    await expect(executeMarketplaceCalls(mockAccount, [listCall])).rejects.toBeInstanceOf(MarketplaceSafetyError);
+    expect(mockAccount.execute).not.toHaveBeenCalled();
+  });
+
+  it("blocks when the book is paused or the fee exceeds the cap", async () => {
+    chain.book = { paused: true, fee_num: 0 };
+    await checkMarketplaceSafety(true);
+    await expect(executeMarketplaceCalls(mockAccount, listCall)).rejects.toThrow(/paused/);
+
+    chain.book = { paused: false, fee_num: MAX_PROTOCOL_FEE_BPS + 1 };
+    await checkMarketplaceSafety(true);
+    await expect(executeMarketplaceCalls(mockAccount, listCall)).rejects.toThrow(/fee/);
+  });
+
+  it("guards approvals granted to the marketplace too", async () => {
+    chain.classHash = "0xdeadbeef";
+    await checkMarketplaceSafety(true);
+    const approve = { contractAddress: "0xbeasts", entrypoint: "set_approval_for_all", calldata: [MARKETPLACE_ADDRESS, "0x1"] };
+    await expect(executeMarketplaceCalls(mockAccount, [approve])).rejects.toBeInstanceOf(MarketplaceSafetyError);
+  });
+
+  it("always allows revoking the marketplace's approval", async () => {
+    chain.classHash = "0xdeadbeef";
+    await checkMarketplaceSafety(true);
+    const revoke = { contractAddress: "0xbeasts", entrypoint: "set_approval_for_all", calldata: [MARKETPLACE_ADDRESS, "0x0"] };
+    await executeMarketplaceCalls(mockAccount, [revoke]);
+    expect(mockAccount.execute).toHaveBeenCalledWith([revoke]);
+  });
+
+  it("doesn't check unrelated calls", async () => {
+    chain.classHash = "0xdeadbeef";
+    await checkMarketplaceSafety(true);
+    const send = { contractAddress: "0xbeasts", entrypoint: "transfer_from", calldata: ["0xa", "0xb", "0x1", "0x0"] };
+    await executeMarketplaceCalls(mockAccount, [send]);
+    expect(mockAccount.execute).toHaveBeenCalled();
   });
 });

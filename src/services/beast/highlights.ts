@@ -1,6 +1,7 @@
-import { BEAST_NAMES } from "@provable-games/collectables";
 import { collectablesClient } from "./collectablesClient";
 import { BEAST_STATS_CACHE_TTL_MS } from "./constants";
+import { VISUAL_TO_EFFECTS } from "./helpers";
+import { fetchBeastSpecies } from "./species";
 import type { BeastHighlights } from "./types";
 
 let highlightsCache: { data: BeastHighlights; expiresAt: number } | null = null;
@@ -13,11 +14,13 @@ export async function fetchBeastHighlights(forceRefresh = false): Promise<BeastH
     return highlightsCache.data;
   }
 
+  // v3 encodes shiny/animated in visualEffects (the SDK's `animated` flag is
+  // always true on v3), so count by preset.
   const [animatedShiny, shinyOnly, animatedOnly, standard] = await Promise.all([
-    collectablesClient.beasts.list({ shiny: true, animated: true, limit: 1 }),
-    collectablesClient.beasts.list({ shiny: true, animated: false, limit: 1 }),
-    collectablesClient.beasts.list({ shiny: false, animated: true, limit: 1 }),
-    collectablesClient.beasts.list({ shiny: false, animated: false, limit: 1 }),
+    collectablesClient.beasts.list({ visualEffects: VISUAL_TO_EFFECTS["Shiny Animated"], limit: 1 }),
+    collectablesClient.beasts.list({ visualEffects: VISUAL_TO_EFFECTS.Shiny, limit: 1 }),
+    collectablesClient.beasts.list({ visualEffects: VISUAL_TO_EFFECTS.Animated, limit: 1 }),
+    collectablesClient.beasts.list({ visualEffects: VISUAL_TO_EFFECTS.Regular, limit: 1 }),
   ]);
 
   const data: BeastHighlights = {
@@ -48,24 +51,30 @@ export async function fetchBeastCollectedByName(): Promise<BeastNameCount[]> {
     return beastNameCountCache.data;
   }
 
-  const allNames = Array.from(new Set(Object.values(BEAST_NAMES))).sort();
-  const counts: BeastNameCount[] = [];
-  const BATCH = 5;
-
-  for (let i = 0; i < allNames.length; i += BATCH) {
-    const batch = allNames.slice(i, i + BATCH);
-    const results = await Promise.all(
-      batch.map((name) => collectablesClient.beasts.list({ nameIn: [name], limit: 1 }))
-    );
-    results.forEach((result, idx) => {
-      counts.push({ name: batch[idx], collected: result.total });
+  // One grouped query (paged) instead of one request per species.
+  const collected = new Map<string, number>();
+  let cursor: string | undefined;
+  do {
+    const page = await collectablesClient.beasts.groups({
+      groupBy: "beast_id",
+      limit: 100,
+      ...(cursor ? { cursor } : {}),
     });
-    if (i + BATCH < allNames.length) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 150));
+    for (const g of page.items) {
+      collected.set(g.label, (collected.get(g.label) ?? 0) + g.count);
     }
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor);
+
+  // Include registered species with nothing collected yet.
+  const species = await fetchBeastSpecies();
+  for (const s of species) {
+    if (!collected.has(s.name)) collected.set(s.name, 0);
   }
 
-  const sorted = counts.sort((a, b) => b.collected - a.collected || a.name.localeCompare(b.name));
+  const sorted = Array.from(collected, ([name, count]) => ({ name, collected: count })).sort(
+    (a, b) => b.collected - a.collected || a.name.localeCompare(b.name)
+  );
   beastNameCountCache = { data: sorted, expiresAt: now + 30 * 60 * 1000 };
   return sorted;
 }

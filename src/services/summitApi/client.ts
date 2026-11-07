@@ -4,7 +4,7 @@
  * Fetch wrapper with retry logic, exponential backoff, and timeouts.
  */
 
-import { SUMMIT_API_URL } from "./constants";
+import { SUMMIT_API_URL, SUMMIT_ENABLED } from "./constants";
 
 type FetchOptions = {
   retries?: number;
@@ -26,6 +26,7 @@ export async function summitApiFetch<T>(
   path: string,
   options?: FetchOptions,
 ): Promise<T> {
+  if (!SUMMIT_ENABLED) throw new Error("Summit API is not configured (VITE_SUMMIT_API_URL)");
   const { retries, baseDelayMs, timeoutMs } = { ...DEFAULT_OPTIONS, ...options };
   const url = `${SUMMIT_API_URL}${path}`;
 

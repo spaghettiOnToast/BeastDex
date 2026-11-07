@@ -11,6 +11,7 @@ import { normaliseStarknetAddress } from "../../utils/address";
 import BeastCard from "./BeastCard";
 import { CONTRACT_ADDRESS } from "../../services/beast/constants";
 import type { Beast } from "../../services/beast";
+import { toTokenIdString } from "../../utils/tokenId";
 
 type SendBeastsDialogProps = {
   open: boolean;
@@ -127,8 +128,9 @@ export function SendBeastsDialog({
     try {
       // Build multicall with one transfer_from per beast
       const calls = beasts.map((beast) => {
-        const rawId = beast.numericId ?? beast.id.split(":").pop() ?? beast.id;
-        const tokenIdBigInt = BigInt(rawId);
+        const tokenIdStr = toTokenIdString(beast.tokenId) ?? toTokenIdString(beast.id);
+        if (!tokenIdStr) throw new Error(`Invalid token id for ${beast.name}`);
+        const tokenIdBigInt = BigInt(tokenIdStr);
         const low = tokenIdBigInt & BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
         const high = tokenIdBigInt >> BigInt(128);
 

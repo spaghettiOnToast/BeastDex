@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { TOTAL_BEAST_SUPPLY, MAX_BEASTS_PER_TIER, type BeastHighlights, type TierCollectionStats } from "../../services/beast";
+import { type BeastHighlights, type TierCollectionStats } from "../../services/beast";
 import { Alert, AlertDescription } from "../ui/alert";
 
 const TIER_COLORS: Record<number, { text: string; gradient: string; border: string }> = {
@@ -56,8 +56,10 @@ export const StatsPanel = memo(function StatsPanel({
   globalError,
 }: StatsPanelProps) {
   const consolidatedError = globalError || mintedError || highlightsError;
-  const remaining = Math.max(TOTAL_BEAST_SUPPLY - mintedCount, 0);
-  const progress = TOTAL_BEAST_SUPPLY > 0 ? (mintedCount / TOTAL_BEAST_SUPPLY) * 100 : 0;
+  // v3 supply is open-ended: derive it from the registered species (per-tier max supply).
+  const totalSupply = tierStats.reduce((sum, t) => sum + t.maxSupply, 0);
+  const remaining = Math.max(totalSupply - mintedCount, 0);
+  const progress = totalSupply > 0 ? (mintedCount / totalSupply) * 100 : 0;
 
   const summaryTiles = [
     {
@@ -97,7 +99,7 @@ export const StatsPanel = memo(function StatsPanel({
           </span>
           <span className="text-xs sm:text-sm text-zinc-500">/</span>
           <span className="text-xs sm:text-sm text-zinc-400">
-            {TOTAL_BEAST_SUPPLY.toLocaleString()}
+            {totalSupply.toLocaleString()}
           </span>
           <span className="text-xs sm:text-sm text-zinc-500 ml-1">Beasts Collected</span>
         </div>
@@ -151,8 +153,8 @@ export const StatsPanel = memo(function StatsPanel({
             </div>
           ) : (
             tierStats.map((tier) => {
-              const tierRemaining = MAX_BEASTS_PER_TIER - tier.collected;
-              const tierProgress = (tier.collected / MAX_BEASTS_PER_TIER) * 100;
+              const tierRemaining = Math.max(tier.maxSupply - tier.collected, 0);
+              const tierProgress = tier.maxSupply > 0 ? Math.min((tier.collected / tier.maxSupply) * 100, 100) : 0;
               const colors = TIER_COLORS[tier.tier] ?? TIER_COLORS[5];
               return (
                 <div

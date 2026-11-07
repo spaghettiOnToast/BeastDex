@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Listing } from "../../../services/marketplace/types";
 import { fetchListingsWithMetadataSingleQuery } from "../../../services/beast/marketplaceQuery";
 import { useSoldListings } from "../../../contexts/SoldListingsContext";
+import { BEASTS_COLLECTION_ADDRESS } from "../../../services/marketplace/constants";
 
 export interface UseMarketplaceListingsResult {
   listings: Listing[];
@@ -25,7 +26,9 @@ export interface UseMarketplaceListingsResult {
  *
  * One query to rule them all!
  */
-export function useMarketplaceListings(): UseMarketplaceListingsResult {
+export function useMarketplaceListings(
+  collectionAddress: string = BEASTS_COLLECTION_ADDRESS,
+): UseMarketplaceListingsResult {
   const queryClient = useQueryClient();
   const { markAsSold, clearStaleIds, isSold } = useSoldListings();
 
@@ -37,9 +40,9 @@ export function useMarketplaceListings(): UseMarketplaceListingsResult {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["marketplaceListingsSingleQuery"],
+    queryKey: ["marketplaceListingsSingleQuery", collectionAddress],
     queryFn: async () => {
-      const result = await fetchListingsWithMetadataSingleQuery();
+      const result = await fetchListingsWithMetadataSingleQuery(collectionAddress);
       // Clear stale sold IDs when we get fresh data
       clearStaleIds(result.map((l) => l.listingId));
       return result;

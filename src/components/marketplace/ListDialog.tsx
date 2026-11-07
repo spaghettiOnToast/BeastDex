@@ -34,6 +34,7 @@ import {
   DURATION_SELECT_OPTIONS,
 } from "../../hooks/useExpirationDetails";
 import { AlertTriangle } from "lucide-react";
+import { executeMarketplaceCalls } from "../../services/marketplace/safety";
 
 type Props = {
   open: boolean;
@@ -42,9 +43,18 @@ type Props = {
   onListed?: () => void;
   /** Existing active listings for this beast (to warn about duplicates) */
   existingListings?: Listing[];
+  /** NFT collection to list from (defaults to Beasts; festival collections too) */
+  collection?: string;
 };
 
-export default function ListDialog({ open, onOpenChange, beast, onListed, existingListings = [] }: Props) {
+export default function ListDialog({
+  open,
+  onOpenChange,
+  beast,
+  onListed,
+  existingListings = [],
+  collection = BEASTS_COLLECTION_ADDRESS,
+}: Props) {
   const { account } = useAccount();
   const [price, setPrice] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -155,7 +165,7 @@ export default function ListDialog({ open, onOpenChange, beast, onListed, existi
         contractAddress: MARKETPLACE_ADDRESS,
         entrypoint: "list",
         calldata: [
-          BEASTS_COLLECTION_ADDRESS,
+          collection,
           ...tokenIdU256, // token_id as Uint256
           "0", // quantity: u128 = 0 for ERC721 (non-fungible)
           priceBigInt.toString(), // price: u128 (single felt, not u256!)
@@ -167,14 +177,14 @@ export default function ListDialog({ open, onOpenChange, beast, onListed, existi
 
       // Build multicall with approval (if needed) + list
       toast.loading("Checking NFT approval...", { id: toastId });
-      const approvalCall = await getCollectionApprovalCallIfNeeded(account);
+      const approvalCall = await getCollectionApprovalCallIfNeeded(account, collection);
 
       const calls = approvalCall ? [approvalCall, listCall] : [listCall];
 
       toast.loading(approvalCall ? "Approving & listing..." : "Submitting listing...", { id: toastId });
 
       // Execute in single transaction (approval + list combined if needed)
-      const result = await account.execute(calls);
+      const result = await executeMarketplaceCalls(account, calls);
 
       if (result?.transaction_hash) {
         const provider = getProvider(account);

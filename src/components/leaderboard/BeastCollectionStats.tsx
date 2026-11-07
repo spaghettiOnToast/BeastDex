@@ -3,11 +3,10 @@ import {
   fetchBeastCollectedByName,
   fetchTierCollectionStats,
   MAX_BEASTS_PER_TYPE,
-  MAX_BEASTS_PER_TIER,
   type BeastNameCount,
   type TierCollectionStats,
 } from "../../services/beast";
-import { useBeastHighlights } from "../../hooks/useBeastQueries";
+import { useBeastHighlights, useSpeciesCount } from "../../hooks/useBeastQueries";
 
 const TIER_COLORS: Record<number, { text: string; gradient: string; border: string }> = {
   1: { text: "text-orange-400", gradient: "from-orange-500 to-orange-400", border: "border-orange-500/30" },
@@ -20,6 +19,7 @@ const TIER_COLORS: Record<number, { text: string; gradient: string; border: stri
 type LoadState = "loading" | "error" | "idle";
 
 export function BeastCollectionStats() {
+  const totalSpecies = useSpeciesCount();
   const [beastCounts, setBeastCounts] = useState<BeastNameCount[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [ascending, setAscending] = useState(false);
@@ -97,8 +97,8 @@ export function BeastCollectionStats() {
             </div>
           ) : (
             [...tierStats].sort((a, b) => a.tier - b.tier).map((tier) => {
-              const remaining = MAX_BEASTS_PER_TIER - tier.collected;
-              const progress = Math.min((tier.collected / MAX_BEASTS_PER_TIER) * 100, 100);
+              const remaining = Math.max(tier.maxSupply - tier.collected, 0);
+              const progress = tier.maxSupply > 0 ? Math.min((tier.collected / tier.maxSupply) * 100, 100) : 0;
               const colors = TIER_COLORS[tier.tier] ?? TIER_COLORS[5];
               return (
                 <div key={tier.tier} className={`relative overflow-hidden rounded-lg border ${colors.border} bg-white/[0.04] p-3`}>
@@ -125,7 +125,7 @@ export function BeastCollectionStats() {
       {/* Per-beast remaining table */}
       <div className="bg-surface-raised border border-white/[0.06] rounded-xl p-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
-          <div className="text-xs uppercase tracking-[0.35em] text-zinc-500">Remaining to Collect — All 75 Beasts</div>
+          <div className="text-xs uppercase tracking-[0.35em] text-zinc-500">Remaining to Collect — All {totalSpecies} Beasts</div>
           <div className="flex items-center gap-2">
             <input
               type="text"
@@ -155,7 +155,7 @@ export function BeastCollectionStats() {
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-accent border-t-transparent" />
               <p className="text-zinc-400 text-sm">Loading beast data from SDK…</p>
-              <p className="text-zinc-600 text-xs">Fetching counts for all 75 beasts</p>
+              <p className="text-zinc-600 text-xs">Fetching counts for all {totalSpecies} beasts</p>
             </div>
           ) : loadState === "error" ? (
             <div className="py-10 text-center text-red-400 text-sm">Failed to load beast data</div>

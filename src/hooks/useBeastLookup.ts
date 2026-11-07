@@ -13,9 +13,9 @@ const FIRST_PAGE_SIZE = 50;
 /** Index fetched beasts into a map with multiple key formats for reliable lookup. */
 function indexBeasts(beasts: Beast[], into: Map<string, Beast>) {
   for (const beast of beasts) {
-    // Store by numericId (most reliable for sales lookups)
-    if (typeof beast.numericId === "number" && Number.isFinite(beast.numericId)) {
-      into.set(String(beast.numericId), beast);
+    // Store by canonical decimal token id (most reliable for sales lookups)
+    if (beast.tokenId) {
+      into.set(beast.tokenId, beast);
     }
 
     // Extract token ID from beast.id (format: "beasts_nft:0x123...")

@@ -32,7 +32,7 @@ import { config } from "../config";
 import { useListedTokens } from "../hooks/useListedTokens";
 import { useGlobalCart } from "../contexts/GlobalCartContext";
 import { formatPrice } from "../utils/price";
-import { getPaymentTokenByAddress, BEASTS_COLLECTION_ADDRESS, CLIENT_FEE_BP, CLIENT_FEE_RECEIVER, ROYALTIES_ENABLED } from "../services/marketplace/constants";
+import { getPaymentTokenByAddress, MARKETPLACE_ENABLED, BEASTS_COLLECTION_ADDRESS, CLIENT_FEE_BP, CLIENT_FEE_RECEIVER, ROYALTIES_ENABLED } from "../services/marketplace/constants";
 import { useTokenMap, tokenAmountToUsd } from "../hooks/useEkuboTokens";
 import { toBigIntSafe } from "../utils/bigint";
 import type { Listing } from "../services/marketplace/types";
@@ -359,8 +359,8 @@ function HomePage() {
 
   // Find listing for selected beast (if any) - uses lightweight lookup (no beast hydration)
   const selectedBeastListing = useMemo(() => {
-    if (!selectedBeast) return null;
-    const tokenId = selectedBeast.numericId?.toString() || selectedBeast.id.split(":").pop() || "";
+    if (!MARKETPLACE_ENABLED || !selectedBeast) return null;
+    const tokenId = selectedBeast.tokenId;
     return getListingForToken(tokenId);
   }, [selectedBeast, getListingForToken]);
 
@@ -449,7 +449,8 @@ function HomePage() {
 
   // Custom action slot for BeastModal - shows actions for both listed and unlisted beasts
   const beastModalActionSlot = useMemo(() => {
-    if (!selectedBeast) return undefined;
+    // Marketplace off: no Buy / Cart / Make Offer actions
+    if (!MARKETPLACE_ENABLED || !selectedBeast) return undefined;
 
     const listing = selectedBeastListing;
     const isOwner = listing && address?.toLowerCase() === listing.seller?.toLowerCase();
@@ -608,7 +609,7 @@ function HomePage() {
             if (!open) setOfferBeast(null);
           }}
           beast={offerBeast}
-          tokenId={offerBeast?.numericId?.toString() || offerBeast?.id.split(":").pop() || ""}
+          tokenId={offerBeast?.tokenId ?? ""}
           onOfferMade={() => {
             // Notify other pages that an offer was made (for refreshing offer lists)
             notifyOfferMade();

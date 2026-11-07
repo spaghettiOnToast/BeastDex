@@ -15,6 +15,7 @@ import { ScrollArea } from "../ui/scroll-area";
 import { ChevronLeft, ChevronRight, Send, Clock } from "lucide-react";
 import { normaliseStarknetAddress } from "../../utils/address";
 import { SendBeastDialog } from "./SendBeastDialog";
+import { toSafeTokenNumber } from "../../utils/tokenId";
 
 type BeastModalProps = {
   beast: Beast | null;
@@ -57,8 +58,14 @@ export const BeastModal = memo(function BeastModal({
       }
 
       try {
+        // Summit is keyed by legacy numeric beast ids; v3 beasts have no Summit data.
+        const summitId = toSafeTokenNumber(beast.tokenId);
+        if (summitId === null) {
+          setSummitData(null);
+          return;
+        }
         setSummitLoading(true);
-        const data = await fetchSummitBeastData(beast.numericId);
+        const data = await fetchSummitBeastData(summitId);
         if (cancelled) return;
         setSummitData(data);
       } catch (err) {
@@ -86,8 +93,8 @@ export const BeastModal = memo(function BeastModal({
     ? ownerUsernames[normalizedOwner] ?? null
     : null;
 
-  const detailPath = Number.isFinite(beast.numericId) && beast.numericId > 0
-    ? `/beasts/${beast.numericId}`
+  const detailPath = beast.tokenId
+    ? `/beasts/${beast.tokenId}`
     : `/beasts/${encodeURIComponent(beast.id)}`;
 
   const hasDuplicates = duplicates.length > 1;
@@ -217,7 +224,7 @@ export const BeastModal = memo(function BeastModal({
       <SendBeastDialog
         open={showSendDialog}
         onClose={() => setShowSendDialog(false)}
-        beastId={beast.numericId || beast.id}
+        beastId={beast.tokenId || beast.id}
         beastName={beast.name}
       />
     </Dialog>

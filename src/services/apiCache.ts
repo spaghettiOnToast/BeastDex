@@ -16,6 +16,8 @@ class ApiCache {
     // Set default cache configurations for different API endpoints
     // Longer TTLs reduce load on the indexer while still providing reasonably fresh data
     this.cacheConfigs.set("beast-filters", { ttl: 30 * 60 * 1000 }); // 30 minutes (static data)
+    this.cacheConfigs.set("beast-species", { ttl: 30 * 60 * 1000 }); // 30 minutes (registry changes rarely)
+    this.cacheConfigs.set("genesis-beasts", { ttl: 30 * 60 * 1000 }); // 30 minutes
     this.cacheConfigs.set("beast-by-id", { ttl: 2 * 60 * 1000 }); // 2 minutes
     this.cacheConfigs.set("beast-query", { ttl: 2 * 60 * 1000 }); // 2 minutes
     this.cacheConfigs.set("top-beasts", { ttl: 30 * 60 * 1000 }); // 30 minutes (top beasts rarely change)
@@ -26,6 +28,7 @@ class ApiCache {
     this.cacheConfigs.set("power-rank-leaderboard", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("owner-beast-stats", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("owner-beast-highlights", { ttl: 5 * 60 * 1000 }); // 5 minutes
+    this.cacheConfigs.set("festival-tokens", { ttl: 30 * 1000 }); // 30s: owners change on trades
   }
 
   private getCacheKey(endpoint: string, params: any): string {

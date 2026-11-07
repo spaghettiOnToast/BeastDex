@@ -11,16 +11,15 @@ import {
   toUint256Hex,
   fromUint256Raw,
 } from "../../utils/uint256";
+import { resolveRpcUrl, withReadProvider } from "../tx";
+import { executeMarketplaceCalls } from "./safety";
 
 /** Singleton read-only RPC provider (no wallet needed). */
 let _publicProvider: RpcProvider | null = null;
 
 export function getPublicProvider(): RpcProvider {
   if (!_publicProvider) {
-    const nodeUrl =
-      (import.meta as any)?.env?.VITE_RPC_URL ||
-      "https://api.cartridge.gg/x/starknet/mainnet";
-    _publicProvider = new RpcProvider({ nodeUrl });
+    _publicProvider = new RpcProvider({ nodeUrl: resolveRpcUrl() });
   }
   return _publicProvider;
 }
@@ -72,11 +71,12 @@ async function callAllowance(
 async function callIsApprovedForAll(
   provider: ProviderInterface,
   owner: string,
-  operator: string
+  operator: string,
+  collection: string = BEASTS_COLLECTION_ADDRESS,
 ): Promise<boolean> {
   const response = await provider.callContract(
     {
-      contractAddress: BEASTS_COLLECTION_ADDRESS,
+      contractAddress: collection,
       entrypoint: "is_approved_for_all",
       calldata: [owner, operator],
     },
@@ -157,7 +157,10 @@ export async function getRoyaltyPercentage(
   }
 }
 
-export async function ensureCollectionApproval(account: AccountInterface) {
+export async function ensureCollectionApproval(
+  account: AccountInterface,
+  collection: string = BEASTS_COLLECTION_ADDRESS,
+) {
   if (!account.address) {
     throw new Error("Wallet address not available");
   }
@@ -165,16 +168,17 @@ export async function ensureCollectionApproval(account: AccountInterface) {
   const alreadyApproved = await callIsApprovedForAll(
     provider,
     account.address,
-    MARKETPLACE_ADDRESS
+    MARKETPLACE_ADDRESS,
+    collection,
   );
   if (alreadyApproved) {
     return;
   }
 
   // Execute approval transaction
-  const result = await account.execute([
+  const result = await executeMarketplaceCalls(account, [
     {
-      contractAddress: BEASTS_COLLECTION_ADDRESS,
+      contractAddress: collection,
       entrypoint: "set_approval_for_all",
       calldata: [MARKETPLACE_ADDRESS, "0x1"],
     },
@@ -193,7 +197,8 @@ export async function ensureCollectionApproval(account: AccountInterface) {
  * Returns null if already approved, otherwise returns the approval call
  */
 export async function getCollectionApprovalCallIfNeeded(
-  account: AccountInterface
+  account: AccountInterface,
+  collection: string = BEASTS_COLLECTION_ADDRESS,
 ): Promise<Call | null> {
   if (!account.address) {
     throw new Error("Wallet address not available");
@@ -202,14 +207,15 @@ export async function getCollectionApprovalCallIfNeeded(
   const alreadyApproved = await callIsApprovedForAll(
     provider,
     account.address,
-    MARKETPLACE_ADDRESS
+    MARKETPLACE_ADDRESS,
+    collection,
   );
   if (alreadyApproved) {
     return null;
   }
 
   return {
-    contractAddress: BEASTS_COLLECTION_ADDRESS,
+    contractAddress: collection,
     entrypoint: "set_approval_for_all",
     calldata: [MARKETPLACE_ADDRESS, "0x1"],
   };
@@ -240,7 +246,7 @@ export async function ensureErc20Allowance(
   const calldata = toUint256Hex(needed);
 
   // Execute approval transaction
-  const result = await account.execute([
+  const result = await executeMarketplaceCalls(account, [
     {
       contractAddress: tokenAddress,
       entrypoint: "approve",
@@ -678,7 +684,7 @@ export async function executePurchaseWithApproval(
   };
 
   // Execute all calls in one transaction (2 minute timeout)
-  const result = await executeWithTimeout(account.execute(calls), 120000);
+  const result = await executeWithTimeout(executeMarketplaceCalls(account, calls), 120000);
 
   if (!result?.transaction_hash) {
     throw new Error("Transaction was not submitted");
@@ -695,3 +701,24 @@ export async function executePurchaseWithApproval(
   };
 }
 
+
+/**
+ * Whether `owner` has granted the marketplace blanket approval
+ * (`set_approval_for_all`) on `collection`. Arcade requires this to list, so
+ * it can move any token of that collection the owner holds — users can revoke
+ * it when they aren't listing (see `revokeMarketplaceApprovalCall`).
+ */
+export async function isMarketplaceApprovedForAll(collection: string, owner: string): Promise<boolean> {
+  const res = await withReadProvider((p) =>
+    p.callContract(
+      { contractAddress: collection, entrypoint: "is_approved_for_all", calldata: [owner, MARKETPLACE_ADDRESS] },
+      "latest",
+    ),
+  );
+  return BigInt(res[0] ?? "0x0") === 1n;
+}
+
+/** Withdraw the marketplace's blanket approval on `collection` (cancels nothing on-chain, but listings become unfillable). */
+export function revokeMarketplaceApprovalCall(collection: string): Call {
+  return { contractAddress: collection, entrypoint: "set_approval_for_all", calldata: [MARKETPLACE_ADDRESS, "0x0"] };
+}

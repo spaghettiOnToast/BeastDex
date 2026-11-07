@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { TxEntry } from "../types";
 import type { Listing } from "../../../services/marketplace/types";
-import { CategoryType } from "@cartridge/arcade";
+import { CategoryType } from "../../../services/marketplace/arcadeTypes";
 import { BEASTS_COLLECTION_ADDRESS } from "../../../services/marketplace/constants";
 import { compareStarknetAddresses, normaliseStarknetAddress } from "../../../utils/address";
 import { useUserOffers, useUserSales, type ArcadeOrderModelCompat } from "../../../hooks/useArcadeOrders";
@@ -18,21 +18,23 @@ function getOfferStatus(offer: ArcadeOrderModelCompat): "active" | "expired" {
 interface UseUserTransactionsProps {
   address: string | undefined;
   listings: Listing[];
+  /** collection to show activity for (defaults to Beasts) */
+  collection?: string;
 }
 
 /**
  * Hook for fetching user transaction history from the marketplace
  * Combines listings data, Arcade GraphQL offers, and Arcade GraphQL sales
  */
-export function useUserTransactions({ address, listings }: UseUserTransactionsProps) {
+export function useUserTransactions({ address, listings, collection = BEASTS_COLLECTION_ADDRESS }: UseUserTransactionsProps) {
   const { data: userOffers, isLoading: offersLoading, refetch: refetchOffers } = useUserOffers(
     address,
-    BEASTS_COLLECTION_ADDRESS
+    collection
   );
 
   const { data: userSales, isLoading: salesLoading, refetch: refetchSales, invalidateAndRefetch: invalidateSales } = useUserSales(
     address,
-    BEASTS_COLLECTION_ADDRESS
+    collection
   );
 
   // Collect all token IDs from sales and offers for beast lookup

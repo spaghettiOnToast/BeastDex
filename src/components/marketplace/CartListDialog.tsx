@@ -33,6 +33,8 @@ import {
   useExpirationDetails,
   DURATION_SELECT_OPTIONS,
 } from "../../hooks/useExpirationDetails";
+import { shortTokenId } from "../../utils/tokenId";
+import { executeMarketplaceCalls } from "../../services/marketplace/safety";
 
 type ListingResult = {
   tokenId: string;
@@ -255,7 +257,7 @@ export default function CartListDialog({
         try {
           const hasApproval = approvalCall !== null;
           toast.loading(hasApproval ? "Approving & listing..." : "Submitting listings...", { id: toastId });
-          const result = await account.execute(allCalls);
+          const result = await executeMarketplaceCalls(account, allCalls);
 
           // Extract transaction hash
           const txHash = result?.transaction_hash;
@@ -382,7 +384,7 @@ export default function CartListDialog({
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500">ID: {beast.numericId}</p>
+                      <p className="text-xs text-gray-500"><span title={beast.tokenId}>ID: {shortTokenId(beast.tokenId)}</span></p>
                       {!isAlreadyListed && beastPrices.get(beast.id) && (() => {
                         const priceStr = beastPrices.get(beast.id) || "";
                         const priceNum = Number.parseFloat(priceStr);

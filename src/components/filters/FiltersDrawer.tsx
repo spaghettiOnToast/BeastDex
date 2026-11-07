@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { BeastAttributeFilters } from "../../services/beast";
+import { CARD_GRADE_MIN, CARD_GRADE_MAX, type BeastAttributeFilters } from "../../services/beast";
 
 type FiltersDrawerProps = {
   open: boolean;
@@ -48,10 +48,11 @@ const MULTI_SELECT_TRAITS = new Set([
   "beast",
   "prefix",
   "suffix",
+  "visual",
 ]);
 
 // Traits rendered as boolean toggles (Yes/No/Any)
-const BOOLEAN_FILTER_TRAITS = new Set(["shiny", "animated"]);
+const BOOLEAN_FILTER_TRAITS = new Set(["shiny", "animated", "soulbound", "genesis", "mega", "midi"]);
 
 // Traits rendered as free-text search
 const SEARCH_FIELD_TRAITS = new Set([
@@ -70,13 +71,18 @@ const REMOVED_TRAITS = new Set([
   "lastkilledby", "last killed by",
   "tier", "type",
   "health", "level", "adventurers killed",
-  "genesis",
+  "card grade",
 ]);
 
 // Sort priority for filter sections
 const FILTER_SORT_ORDER = [
+  "visual",
   "shiny",
   "animated",
+  "genesis",
+  "mega",
+  "midi",
+  "soulbound",
   "beast",
   "prefix",
   "suffix",
@@ -147,6 +153,18 @@ export function FiltersDrawer({
     }
     return ranges;
   }, [attributeFilters]);
+
+  // Card Grade range (v3). Stored as attributeFilters["Card Grade"] = [min, max]
+  // via onMultiFilterChange; services/beast maps it to cardGradeGte/Lte.
+  const gradeValues = attributeFilters["Card Grade"];
+  const gradeMin = gradeValues?.length === 2 ? Number(gradeValues[0]) : CARD_GRADE_MIN;
+  const gradeMax = gradeValues?.length === 2 ? Number(gradeValues[1]) : CARD_GRADE_MAX;
+  const gradeFilterActive = gradeValues?.length === 2;
+  const setGradeRange = (min: number, max: number) => {
+    if (!onMultiFilterChange) return;
+    if (min <= CARD_GRADE_MIN && max >= CARD_GRADE_MAX) onMultiFilterChange("Card Grade", []);
+    else onMultiFilterChange("Card Grade", [String(min), String(max)]);
+  };
 
   // Health range state (static max)
   const [healthMin, setHealthMin] = useState(HEALTH_MIN);
@@ -390,6 +408,53 @@ export function FiltersDrawer({
                 </div>
               )}
 
+              {/* Card Grade (v3) */}
+              {onMultiFilterChange && availableFilters["Card Grade"] && (
+                <div className="flex flex-col gap-2 text-xs text-zinc-300">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-zinc-200">Card Grade</span>
+                    {gradeFilterActive && (
+                      <button
+                        type="button"
+                        onClick={() => setGradeRange(CARD_GRADE_MIN, CARD_GRADE_MAX)}
+                        className="text-[10px] text-zinc-500 hover:text-zinc-300"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <label className="text-[10px] text-zinc-500 mb-1 block">Min</label>
+                      <select
+                        value={gradeMin}
+                        onChange={(e) => setGradeRange(Number(e.target.value), Math.max(gradeMax, Number(e.target.value)))}
+                        className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-zinc-200"
+                      >
+                        {availableFilters["Card Grade"].map((g) => (
+                          <option key={g} value={g}>{g}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[10px] text-zinc-500 mb-1 block">Max</label>
+                      <select
+                        value={gradeMax}
+                        onChange={(e) => setGradeRange(Math.min(gradeMin, Number(e.target.value)), Number(e.target.value))}
+                        className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-zinc-200"
+                      >
+                        {availableFilters["Card Grade"].map((g) => (
+                          <option key={g} value={g}>{g}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="text-center text-[10px] text-zinc-500">
+                    {gradeFilterActive ? `Grade ${gradeMin} – ${gradeMax}` : "All grades"}
+                  </div>
+                </div>
+              )}
+
               {(Object.entries(availableFilters || {}) as Array<[string, string[]]>)
                 .sort(([a], [b]) => {
                   const aIndex = FILTER_SORT_ORDER.indexOf(a.toLowerCase());
@@ -502,6 +567,8 @@ export function FiltersDrawer({
                           {safeValues
                             .slice()
                             .sort((a, b) => {
+                              // Visual presets keep their rarity order
+                              if (normalisedTrait === "visual") return 0;
                               // Sort numerically if both are numbers
                               const aNum = Number(a);
                               const bNum = Number(b);

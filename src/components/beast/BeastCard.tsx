@@ -1,7 +1,44 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchBeastCardImgSrc, type BeastCardInput } from "@provable-games/collectables";
+import {
+  beastImageUrl,
+  fetchBeastCardImgSrc,
+  fetchBeastTokenMedia,
+  hasBundledBeastImage,
+  type BeastCardInput,
+} from "@provable-games/collectables";
 import type { Beast, BeastAttribute } from "../../services/beast";
+import { CONTRACT_ADDRESS } from "../../services/beast/constants";
+import { readRpcUrls } from "../../services/tx";
+import { fetchV3CardImgSrc, spriteSpeciesName } from "../../services/beast/cardImage";
+
+// On-chain card images for beasts without a bundled sprite (v3 species past the
+// bundled set), keyed by token id. Shared across cards to avoid repeat RPC reads.
+const onchainImageCache = new Map<string, Promise<string | null>>();
+
+function fetchOnchainCardImage(tokenId: string): Promise<string | null> {
+  let pending = onchainImageCache.get(tokenId);
+  if (!pending) {
+    pending = (async () => {
+      // Configured RPC first, then the public default (some refuse anonymous reads).
+      let lastErr: unknown;
+      for (const rpcUrl of readRpcUrls()) {
+        try {
+          return (await fetchBeastTokenMedia({ rpcUrl, address: CONTRACT_ADDRESS, tokenId })).image;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr;
+    })()
+      .catch(() => {
+        onchainImageCache.delete(tokenId);
+        return null;
+      });
+    onchainImageCache.set(tokenId, pending);
+  }
+  return pending;
+}
 
 type Props = {
   beast: Beast;
@@ -79,11 +116,36 @@ const BeastCard = memo(function BeastCard({
   useEffect(() => {
     let alive = true;
     setCardImageSrc(null);
-    fetchBeastCardImgSrc({ ...cardInput, image: image || undefined }).then((src) => {
-      if (alive) setCardImageSrc(src);
-    });
+    // v3 beasts: render the real v3 card (grade/condition, rainbow chrome)
+    // locally from the token id, as lootsurvivor.io does. If that fails (no
+    // bundled sprite for the species), use the on-chain token_uri image.
+    // Legacy beasts keep the legacy card renderer.
+    const isV3 = beast.visualEffects !== undefined && Boolean(beast.tokenId);
+    const src = isV3
+      ? fetchV3CardImgSrc({
+          tokenId: beast.tokenId,
+          speciesName: cardInput.name,
+          prefixName: cardInput.prefixName,
+          suffixName: cardInput.suffixName,
+          rank: cardInput.rank,
+        }).catch(() => fetchOnchainCardImage(beast.tokenId))
+      : (() => {
+          // Placeholder/legacy cards may have no image (e.g. "Need to hunt"
+          // slots): use the species' bundled sprite when there is one.
+          const sprite = { name: spriteSpeciesName(cardInput.name), shiny: cardInput.shiny, animated: true };
+          const art = image || (hasBundledBeastImage(sprite) ? beastImageUrl(sprite, { baseUrl: "/collectables" }) : "");
+          return art ? fetchBeastCardImgSrc({ ...cardInput, image: art }) : Promise.resolve(null);
+        })();
+    src
+      .then((s) => {
+        if (alive) setCardImageSrc(s);
+      })
+      .catch(() => {
+        // No art available: leave the card blank rather than throwing.
+        if (alive) setCardImageSrc(null);
+      });
     return () => { alive = false; };
-  }, [cardInput, image]);
+  }, [cardInput, image, beast.visualEffects, beast.tokenId]);
 
   const renderOwner = () => {
     if (missing || !owned || !owner) return null;
@@ -132,6 +194,31 @@ const BeastCard = memo(function BeastCard({
             style={{ width: "100%", height: "100%", display: "block" }}
           />
         )}
+        {/* Grade badge: gold for 10, dark for 1-9, red when the beast has no
+            grade at all (legacy beast or missing data) so it stands out.
+            Placeholder cards (no token id) and "missing" slots get none. */}
+        {!missing && beast.tokenId && (() => {
+          const graded = beast.cardGrade != null && beast.cardGrade > 0;
+          const perfect = beast.cardGrade === 10;
+          return (
+            <div
+              title={graded ? `Card Grade ${beast.cardGrade} / 10` : "No card grade"}
+              style={{
+                // Top-left corner, on a solid (opaque) plate so the card's
+                // logo and name underneath never show through the text.
+                position: "absolute", top: 5, left: 5, zIndex: 20, lineHeight: 1,
+                background: !graded ? "#dc2626" : perfect ? "#c4a44a" : "#0b0b0d",
+                color: perfect ? "#000" : "#fff",
+                border: `1px solid ${!graded ? "#fca5a5" : perfect ? "#f3dc8a" : "rgba(255,255,255,0.25)"}`,
+                borderRadius: 4,
+                boxShadow: "0 1px 4px rgba(0,0,0,0.6)",
+                padding: "3px 5px", fontSize: 9, fontWeight: "bold", letterSpacing: 0.5,
+              }}
+            >
+              {graded ? `GRADE ${beast.cardGrade}` : "NO GRADE"}
+            </div>
+          );
+        })()}
         {missing && (
           <div style={{
             position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",

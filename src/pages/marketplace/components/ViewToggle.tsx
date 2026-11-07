@@ -4,17 +4,16 @@ import type { MarketplaceView } from "../types";
 interface ViewToggleProps {
   value: MarketplaceView;
   onChange: (value: MarketplaceView) => void;
+  /** Relabel "My Beasts" (e.g. "My Items" on festival collections) */
+  myBeastsLabel?: string;
 }
 
 /**
  * Toggle component for switching between Explore and My Activity views
  */
-export function ViewToggle({ value, onChange }: ViewToggleProps) {
-  const options: Array<{
-    value: MarketplaceView;
-    label: string;
-    description: string;
-  }> = [
+export function ViewToggle({ value, onChange, myBeastsLabel }: ViewToggleProps) {
+  type Option = { value: MarketplaceView; label: string; description: string };
+  const allOptions: Option[] = [
     {
       value: "explore",
       label: "Explore Listings",
@@ -31,6 +30,11 @@ export function ViewToggle({ value, onChange }: ViewToggleProps) {
       description: "Manage your listings and offers.",
     },
   ];
+  const options = allOptions.map((o) =>
+    o.value === "my-beasts" && myBeastsLabel
+      ? { ...o, label: myBeastsLabel, description: "View and list your items for sale." }
+      : o,
+  );
 
   return (
     <div className="inline-flex flex-row gap-1 rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-1">

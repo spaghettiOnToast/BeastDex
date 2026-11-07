@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
+import { TORII_PRODUCTION_BASE } from "../services/shared/toriiEndpoint";
 
-const ARCADE_TORII_GRAPHQL = import.meta.env.VITE_ARCADE_TORII_BASE
-  ? `${import.meta.env.VITE_ARCADE_TORII_BASE}/graphql`
-  : "https://api.cartridge.gg/x/arcade-main/torii/graphql";
+// Cartridge's arcade-main Slot is discontinued; default to our own Torii.
+const ARCADE_TORII_GRAPHQL = `${
+  (import.meta.env.VITE_ARCADE_TORII_BASE as string | undefined)?.trim() || TORII_PRODUCTION_BASE
+}/graphql`;
 
 export interface BookConfig {
   id: number;
@@ -41,12 +43,14 @@ const BOOK_QUERY = `{
   }
 }`;
 
-async function fetchBookConfig(): Promise<BookConfig | null> {
+export async function fetchBookConfig(): Promise<BookConfig | null> {
   try {
     const response = await fetch(ARCADE_TORII_GRAPHQL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query: BOOK_QUERY }),
+      // The marketplace safety check awaits this before every trade: never hang.
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!response.ok) {

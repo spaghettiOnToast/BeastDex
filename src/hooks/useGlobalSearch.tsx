@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { normaliseStarknetAddress } from "../utils/address";
 import { lookupControllerAddresses } from "../services/controller";
 import { config } from "../config";
+import { toTokenIdString } from "../utils/tokenId";
 
 function isValidHexAddress(value: string): boolean {
   if (!value.startsWith("0x") || value.length < 3) {
@@ -39,11 +40,14 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
     try {
       // Clear search value after successful search like normal search bars
       setSearchValue("");
-      // Check if it's a numeric ID (beast search)
-      const numericId = Number.parseInt(searchQuery, 10);
-      if (!Number.isNaN(numericId) && searchQuery === String(numericId)) {
-        navigate(`/beasts/${numericId}`);
-        return;
+      // Decimal token id (beast search). v3 ids are 251-bit, so match digits
+      // rather than parsing into a JS number. Hex input is treated as an address.
+      if (/^\d+$/.test(searchQuery)) {
+        const tokenId = toTokenIdString(searchQuery);
+        if (tokenId) {
+          navigate(`/beasts/${tokenId}`);
+          return;
+        }
       }
 
       // Check if it's a valid Starknet address (must be hex after 0x)

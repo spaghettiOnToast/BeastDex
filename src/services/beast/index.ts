@@ -1,17 +1,24 @@
-import { mapSdkBeast, hasCompleteMetadata } from "./helpers";
-export { hasCompleteMetadata };
+import {
+  mapSdkBeast,
+  hasCompleteMetadata,
+  beastVisual,
+  beastRarityScore,
+  VISUAL_TO_EFFECTS,
+} from "./helpers";
+export { hasCompleteMetadata, beastVisual, beastRarityScore };
 import { collectablesClient } from "./collectablesClient";
 import {
-  BEAST_NAMES,
   ITEM_NAME_PREFIXES,
   ITEM_NAME_SUFFIXES,
-  beastType,
-  beastTier,
+  beastsV3,
   normalizeAddress,
 } from "@provable-games/collectables";
 import type { BeastQuery } from "@provable-games/collectables";
 import { normaliseStarknetAddress } from "../../utils/address";
-import { EXCLUDED_OWNER_ADDRESS } from "./constants";
+import { toTokenIdString, toTokenIdHex, toTokenIdHexPadded } from "../../utils/tokenId";
+import { EXCLUDED_OWNER_ADDRESS, CARD_GRADE_MIN, CARD_GRADE_MAX } from "./constants";
+import { fetchBeastSpecies } from "./species";
+import type { BeastVisual } from "./types";
 
 // ─── Cursor cache for SDK page emulation ────────────────────────────────────
 // Maps stable query key → Map<page, nextCursor from that page>
@@ -57,6 +64,11 @@ function _mapSort(sort: string): { sort: BeastQuery["sort"]; order: "asc" | "des
 
 type AttributeFiltersInput = Record<string, Array<string | number>>;
 
+/** Boolean filter values are stored as "1"/"0" (see fetchBeastAttributeFilters). */
+function _boolFilter(values: Array<string | number>): boolean {
+  return values.some((v) => v === "true" || v === "1" || v === 1);
+}
+
 function _mapAttributeFilters(filters: AttributeFiltersInput): Partial<BeastQuery> {
   const q: Partial<BeastQuery> = {};
   for (const [trait, values] of Object.entries(filters)) {
@@ -72,12 +84,26 @@ function _mapAttributeFilters(filters: AttributeFiltersInput): Partial<BeastQuer
       q.prefixNameIn = values.map(String);
     } else if (key === "suffix") {
       q.suffixNameIn = values.map(String);
-    } else if (key === "shiny") {
-      if (values.some((v) => v === "true" || v === "1" || v === 1)) q.shiny = true;
-      else q.shiny = false;
-    } else if (key === "animated") {
-      if (values.some((v) => v === "true" || v === "1" || v === 1)) q.animated = true;
-      else q.animated = false;
+    } else if (key === "visual") {
+      const effects = values
+        .map((v) => VISUAL_TO_EFFECTS[String(v) as BeastVisual])
+        .filter((n): n is number => typeof n === "number");
+      if (effects.length > 0) q.visualEffectsIn = effects;
+    } else if (key === "card grade") {
+      // [min, max] range, or a single value meaning "at least".
+      const lo = Number(values[0]);
+      const hi = values.length >= 2 ? Number(values[1]) : CARD_GRADE_MAX;
+      if (Number.isFinite(lo) && lo > CARD_GRADE_MIN) q.cardGradeGte = lo;
+      if (Number.isFinite(hi) && hi < CARD_GRADE_MAX) q.cardGradeLte = hi;
+    } else if (key === "soulbound") {
+      if (_boolFilter(values)) q.transferLockHours = beastsV3.SOULBOUND_TRANSFER_LOCK;
+      else q.transferLockHoursLte = beastsV3.SOULBOUND_TRANSFER_LOCK - 1;
+    } else if (key === "genesis") {
+      q.genesis = _boolFilter(values);
+    } else if (key === "mega") {
+      q.mega = _boolFilter(values);
+    } else if (key === "midi") {
+      q.midi = _boolFilter(values);
     } else if (key === "health" && values.length >= 2) {
       q.healthGte = Number(values[0]);
       q.healthLte = Number(values[1]);
@@ -98,16 +124,6 @@ function _mapAttributeFilters(filters: AttributeFiltersInput): Partial<BeastQuer
   return q;
 }
 
-function _parseTokenId(id: string | number): number | null {
-  const s = String(id).trim().toLowerCase();
-  if (/^\d+$/.test(s)) return parseInt(s, 10);
-  if (/^0x[0-9a-f]+$/.test(s)) return parseInt(s, 16);
-  if (s.includes(":")) {
-    const tail = s.slice(s.lastIndexOf(":") + 1);
-    if (/^0x[0-9a-f]+$/.test(tail)) return parseInt(tail, 16);
-  }
-  return null;
-}
 import type {
   Beast,
   BeastAttributeFilters,
@@ -120,7 +136,10 @@ import { fetchBeastHighlights, fetchBeastCollectedByName } from "./highlights";
 export type { BeastNameCount } from "./highlights";
 import { apiCache } from "../apiCache";
 
-export { TOTAL_BEAST_SUPPLY, MAX_BEASTS_PER_TYPE, MAX_BEASTS_PER_TIER } from "./constants";
+import { MAX_BEASTS_PER_TYPE } from "./constants";
+export { MAX_BEASTS_PER_TYPE, CARD_GRADE_MIN, CARD_GRADE_MAX } from "./constants";
+export { fetchBeastSpecies, fetchBeastSupply } from "./species";
+export type { BeastSupply } from "./species";
 export { fetchBeastStats, fetchBeastHighlights, fetchBeastCollectedByName };
 export type {
   AttributeFilterInput,
@@ -132,6 +151,7 @@ export type {
   BeastMetadata,
   BeastSortField,
   BeastStats,
+  BeastVisual,
   FetchLeaderboardOptions,
   BeastSlayerEntry,
 } from "./types";
@@ -208,51 +228,18 @@ export async function fetchTopBeasts(limit: number = 10): Promise<Beast[]> {
  * to handle different storage formats in the database.
  */
 export function deriveTokenHex(identifier: string): string[] {
-  const trimmed = identifier.trim();
-  if (trimmed.length === 0) {
-    return [];
-  }
-
-  const numericMatch = /^\d+$/.test(trimmed);
-  if (numericMatch) {
-    try {
-      const hex = BigInt(trimmed).toString(16);
-      const unpadded = `0x${hex}`;
-      const padded = `0x${hex.padStart(64, "0")}`;
-      // Return both formats to handle different database storage
-      return [unpadded, padded];
-    } catch (error) {
-      console.warn(
-        "⚠️ Failed to derive token hex from numeric id",
-        error,
-        trimmed
-      );
-      return [];
-    }
-  }
-
-  if (trimmed.includes(":")) {
-    const tail = trimmed.slice(trimmed.lastIndexOf(":") + 1);
-    if (/^0x[0-9a-f]+$/i.test(tail)) {
-      const hex = tail.toLowerCase().startsWith("0x")
-        ? tail.toLowerCase()
-        : `0x${tail.toLowerCase()}`;
-      return [hex];
-    }
-  }
-
-  if (/^0x[0-9a-f]+$/i.test(trimmed)) {
-    return [trimmed.toLowerCase()];
-  }
-
-  return [];
+  const unpadded = toTokenIdHex(identifier);
+  const padded = toTokenIdHexPadded(identifier);
+  if (!unpadded || !padded) return [];
+  // Return both formats to handle different database storage
+  return unpadded === padded ? [unpadded] : [unpadded, padded];
 }
 
 export async function fetchBeastById(
   id: string | number
 ): Promise<Beast | null> {
-  const tokenId = _parseTokenId(id);
-  if (tokenId === null || tokenId <= 0) return null;
+  const tokenId = toTokenIdString(id);
+  if (tokenId === null) return null;
 
   return apiCache.get("beast-by-id", { id: tokenId }, async () => {
     try {
@@ -267,22 +254,22 @@ export async function fetchBeastById(
 export async function fetchBeastsByIds(
   ids: Array<string | number>
 ): Promise<Beast[]> {
-  const numericIds = Array.from(
+  const tokenIds = Array.from(
     new Set(
       ids
-        .map(_parseTokenId)
-        .filter((id): id is number => id !== null && id > 0)
+        .map((id) => toTokenIdString(id))
+        .filter((id): id is string => id !== null)
     )
   );
 
-  if (numericIds.length === 0) return [];
+  if (tokenIds.length === 0) return [];
 
   // The API rejects token_id_in arrays over 50 elements outright (400), so
   // this must stay <= 50 — it's not just a page size.
   const BATCH_SIZE = 50;
-  const batches: number[][] = [];
-  for (let i = 0; i < numericIds.length; i += BATCH_SIZE) {
-    batches.push(numericIds.slice(i, i + BATCH_SIZE));
+  const batches: string[][] = [];
+  for (let i = 0; i < tokenIds.length; i += BATCH_SIZE) {
+    batches.push(tokenIds.slice(i, i + BATCH_SIZE));
   }
 
   const results = await Promise.all(
@@ -296,24 +283,44 @@ export async function fetchBeastsByIds(
   return results.flat();
 }
 
-export async function fetchBeastAttributeFilters(): Promise<BeastAttributeFilters> {
-  // Static filters derived from SDK constants — no network call needed.
-  const beastIdNums = Array.from(
-    new Set(Object.keys(BEAST_NAMES).map(Number))
-  ).sort((a, b) => a - b);
+/**
+ * All Genesis beasts (one per species). Legacy genesis were token ids 1-75;
+ * v3 genesis is prefix 0 + suffix 0 with packed ids, so query the flag.
+ */
+export async function fetchGenesisBeasts(): Promise<Beast[]> {
+  return apiCache.get("genesis-beasts", {}, async () => {
+    const out: Beast[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await collectablesClient.beasts.list({
+        genesis: true,
+        limit: 100,
+        includeOwner: true,
+        ...(cursor ? { cursor } : {}),
+      });
+      out.push(...page.items.map(mapSdkBeast));
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    return out;
+  });
+}
 
-  const uniqueNames = Array.from(new Set(Object.values(BEAST_NAMES))).sort();
-  const uniqueTypes = Array.from(
-    new Set(beastIdNums.map((id) => beastType(id)))
-  ).sort();
-  const uniqueTiers = Array.from(
-    new Set(beastIdNums.map((id) => beastTier(id)))
-  )
+export async function fetchBeastAttributeFilters(): Promise<BeastAttributeFilters> {
+  // Species come from the v3 registry (open-ended, may exceed the original 75);
+  // prefixes/suffixes are fixed SDK constants.
+  const species = await fetchBeastSpecies();
+
+  const uniqueNames = Array.from(new Set(species.map((s) => s.name))).sort();
+  const uniqueTypes = Array.from(new Set(species.map((s) => s.type))).sort();
+  const uniqueTiers = Array.from(new Set(species.map((s) => s.tier)))
     .sort((a, b) => a - b)
     .map(String);
 
   const uniquePrefixes = Array.from(new Set(Object.values(ITEM_NAME_PREFIXES))).sort();
   const uniqueSuffixes = Array.from(new Set(Object.values(ITEM_NAME_SUFFIXES))).sort();
+
+  const grades: string[] = [];
+  for (let g = CARD_GRADE_MIN; g <= CARD_GRADE_MAX; g++) grades.push(String(g));
 
   return {
     Beast: uniqueNames,
@@ -321,12 +328,14 @@ export async function fetchBeastAttributeFilters(): Promise<BeastAttributeFilter
     Tier: uniqueTiers,
     Prefix: uniquePrefixes,
     Suffix: uniqueSuffixes,
-    // Must match the actual stored attribute format (SDK's beastTraits()
-    // emits "1"/"0", not "true"/"false") — otherwise FiltersDrawer's
-    // boolean-toggle detection fails and "true"/"false" never matches any
-    // beast's real attribute value, so the filter silently returns nothing.
-    Shiny: ["1", "0"],
-    Animated: ["1", "0"],
+    Visual: Object.keys(VISUAL_TO_EFFECTS),
+    "Card Grade": grades,
+    // Boolean toggles must use "1"/"0" — FiltersDrawer's boolean-toggle
+    // detection and _boolFilter both key off that format.
+    Soulbound: ["1", "0"],
+    Genesis: ["1", "0"],
+    Mega: ["1", "0"],
+    MIDI: ["1", "0"],
   };
 }
 
@@ -358,12 +367,11 @@ export async function fetchBeastOfTheDayLeaderboard({
 
     const sorted = result.items
       .map((item) => {
-        const isShiny = Boolean(item.shiny);
-        const isAnimated = Boolean(item.animated);
+        const beast = mapSdkBeast(item);
         return {
-          beast: mapSdkBeast(item),
+          beast,
           owner: item.owner ?? "",
-          rarity_score: isShiny && isAnimated ? 3 : isShiny || isAnimated ? 2 : 1,
+          rarity_score: beastRarityScore(beast),
           power: item.power ?? 0,
           beast_rank: item.rank ?? 999999,
           last_death: item.lastDeathTimestamp ?? 0,
@@ -403,7 +411,7 @@ export async function fetchBeastSlayerLeaderboard({
       .filter((item) => !item.owner || normalizeAddress(item.owner) !== excludedAddr)
       .map((item, idx) => ({
         rank: idx + 1,
-        beastId: String(item.tokenId),
+        beastId: toTokenIdString(item.tokenId) ?? String(item.tokenId),
         beastName: mapSdkBeast(item).name,
         beastRank: item.rank ?? 0,
         owner: item.owner ?? null,
@@ -445,14 +453,18 @@ export async function fetchOwnerBeastStats(
 export type TierCollectionStats = {
   tier: number;
   collected: number;
+  /** max supply for the tier: species in tier × MAX_BEASTS_PER_TYPE */
+  maxSupply: number;
 };
 
 export async function fetchTierCollectionStats(): Promise<TierCollectionStats[]> {
   return apiCache.get("tier-collection-stats", {}, async () => {
+    const species = await fetchBeastSpecies();
     const results = await Promise.all(
       [1, 2, 3, 4, 5].map(async (tier) => {
         const page = await collectablesClient.beasts.list({ tier, limit: 1 });
-        return { tier, collected: page.total };
+        const speciesInTier = species.filter((s) => s.tier === tier).length;
+        return { tier, collected: page.total, maxSupply: speciesInTier * MAX_BEASTS_PER_TYPE };
       })
     );
     return results.sort((a, b) => b.tier - a.tier);
@@ -488,9 +500,9 @@ export async function fetchOwnerBeastHighlights(
 
     const [animatedShiny, shinyOnly, animatedOnly, highestRanked, lastCollected] =
       await Promise.all([
-        collectablesClient.beasts.byOwner(addr, { shiny: true, animated: true, sort: "power", order: "desc", limit: 1 }),
-        collectablesClient.beasts.byOwner(addr, { shiny: true, animated: false, sort: "power", order: "desc", limit: 1 }),
-        collectablesClient.beasts.byOwner(addr, { shiny: false, animated: true, sort: "power", order: "desc", limit: 1 }),
+        collectablesClient.beasts.byOwner(addr, { visualEffects: VISUAL_TO_EFFECTS["Shiny Animated"], sort: "power", order: "desc", limit: 1 }),
+        collectablesClient.beasts.byOwner(addr, { visualEffects: VISUAL_TO_EFFECTS.Shiny, sort: "power", order: "desc", limit: 1 }),
+        collectablesClient.beasts.byOwner(addr, { visualEffects: VISUAL_TO_EFFECTS.Animated, sort: "power", order: "desc", limit: 1 }),
         collectablesClient.beasts.byOwner(addr, { sort: "rank", order: "asc", limit: 1 }),
         collectablesClient.beasts.byOwner(addr, { sort: "last_death_timestamp", order: "desc", limit: 1 }),
       ]);

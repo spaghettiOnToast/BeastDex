@@ -68,11 +68,6 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/arcade/, ""),
       },
-      "/summit-torii": {
-        target: "https://api.cartridge.gg/x/pg-mainnet-10/torii",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/summit-torii/, ""),
-      },
       "/summit-api": {
         target: "https://summit-api-production.up.railway.app",
         changeOrigin: true,

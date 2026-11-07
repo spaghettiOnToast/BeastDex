@@ -1,6 +1,13 @@
 @import url("https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700;800;900&family=Cinzel:wght@400;700&display=swap");
 
 @import "tailwindcss";
+/* Tailwind v4 ignores tailwind.config.js unless it is loaded explicitly; without
+   this the custom colors (gold, surface, accent, lsGold, …) generate nothing. */
+@config "../tailwind.config.js";
+@theme {
+  /* camelCase key from tailwind.config.js that the v4 config shim drops */
+  --color-lsGold: rgb(208, 201, 141);
+}
 
 body {
   font-family: "Exo 2", system-ui, sans-serif;

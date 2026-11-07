@@ -17,6 +17,7 @@ import { toBigIntSafe } from "../../utils/bigint";
 import { toUint256Hex } from "../../utils/uint256";
 import { isUserRejection } from "../../utils/transaction";
 import type { Listing } from "../../services/marketplace/types";
+import { executeMarketplaceCalls } from "../../services/marketplace/safety";
 
 const CartListDialog = lazy(() => import("./CartListDialog"));
 const PurchaseCartDialog = lazy(() => import("./PurchaseCartDialog"));
@@ -110,7 +111,7 @@ export function GlobalCartDialogs() {
             entrypoint: "execute",
             calldata: [
               listing.orderId?.toString() || "0",
-              BEASTS_COLLECTION_ADDRESS,
+              listing.collection ?? BEASTS_COLLECTION_ADDRESS,
               tokenIdU256[0],
               tokenIdU256[1],
               tokenIdU256[0], // asset_id (same as token_id for ERC721)
@@ -133,7 +134,7 @@ export function GlobalCartDialogs() {
           ]);
         };
 
-        const result = await executeWithTimeout(account.execute(calls), 120000); // 2 minute timeout
+        const result = await executeWithTimeout(executeMarketplaceCalls(account, calls), 120000); // 2 minute timeout
         if (!result?.transaction_hash) {
           throw new Error("Transaction was not submitted");
         }

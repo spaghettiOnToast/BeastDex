@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, BarChart3, Home, Package, type LucideIcon } from "lucide-react";
+import { Menu, X, BarChart3, Home, Package, Store, Sword, type LucideIcon } from "lucide-react";
 import { useAccount } from "@starknet-react/core";
 import { Button } from "../ui/button";
+import { MARKETPLACE_ENABLED } from "../../services/marketplace/constants";
 
 type NavItem = {
   to: string;
@@ -30,9 +31,9 @@ export function MobileNav({ onNavigate }: Props) {
   const navItems: NavItem[] = [
     { to: "/", label: "Explore", icon: Home },
     { to: collectionPath, label: "Collection", icon: Package },
-    // { to: "/marketplace", label: "Marketplace", icon: Store }, // hidden during Beast V3 maintenance
+    ...(MARKETPLACE_ENABLED ? [{ to: "/marketplace", label: "Marketplace", icon: Store }] : []),
     { to: "/statistics", label: "Stats", icon: BarChart3 },
-    // { to: "/dungeons", label: "Dungeons", icon: Sword },
+    { to: "/dungeons", label: "Dungeons", icon: Sword },
   ];
 
   const mobileMenu = isOpen ? (

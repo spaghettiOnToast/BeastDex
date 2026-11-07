@@ -8,6 +8,7 @@ import { getUserFriendlyErrorMessage } from "../utils/error";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import { normaliseStarknetAddress } from "../utils/address";
+import { toSafeTokenNumber } from "../utils/tokenId";
 
 function BeastDetailPage() {
   const params = useParams<{ tokenId: string }>();
@@ -71,8 +72,14 @@ function BeastDetailPage() {
       }
 
       try {
+        // Summit is keyed by legacy numeric beast ids; v3 beasts have no Summit data.
+        const summitId = toSafeTokenNumber(beast.tokenId);
+        if (summitId === null) {
+          setSummitData(null);
+          return;
+        }
         setSummitLoading(true);
-        const data = await fetchSummitBeastData(beast.numericId);
+        const data = await fetchSummitBeastData(summitId);
         if (cancelled) return;
         setSummitData(data);
       } catch (err) {
