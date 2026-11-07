@@ -1,5 +1,5 @@
 import {
-  RpcProvider,
+  type RpcProvider,
   type AccountInterface,
   type ProviderInterface,
   type Call,
@@ -11,17 +11,12 @@ import {
   toUint256Hex,
   fromUint256Raw,
 } from "../../utils/uint256";
-import { resolveRpcUrl, withReadProvider } from "../tx";
+import { getReadProvider, withReadProvider } from "../tx";
 import { executeMarketplaceCalls } from "./safety";
 
-/** Singleton read-only RPC provider (no wallet needed). */
-let _publicProvider: RpcProvider | null = null;
-
+/** Read-only RPC provider (no wallet needed), with public-RPC fallback. */
 export function getPublicProvider(): RpcProvider {
-  if (!_publicProvider) {
-    _publicProvider = new RpcProvider({ nodeUrl: resolveRpcUrl() });
-  }
-  return _publicProvider;
+  return getReadProvider();
 }
 
 export function getProvider(account: AccountInterface): ProviderInterface {

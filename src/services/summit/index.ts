@@ -1,25 +1,17 @@
-import { RpcProvider } from "starknet";
 import {
   fetchSummitBeastFromApi,
   mapApiToSummitBeastData,
   createDefaultSummitBeastData,
 } from "../summitApi";
 import type { SummitBeastData } from "./types";
-import { resolveRpcUrl } from "../tx";
+import { getReadProvider } from "../tx";
 
 export type { SummitBeastData, SummitLiveStats } from "./types";
 
 const SKULL_CONTRACT_ADDRESS =
   "0x01c3c8284d7eed443b42f47e764032a56eaf50a9079d67993b633930e3689814";
 
-/** Cached RPC provider singleton (stateless — safe to reuse across calls). */
-let _rpcProvider: RpcProvider | null = null;
-function getRpcProvider(): RpcProvider {
-  if (!_rpcProvider) {
-    _rpcProvider = new RpcProvider({ nodeUrl: resolveRpcUrl() });
-  }
-  return _rpcProvider;
-}
+const getRpcProvider = getReadProvider;
 
 /**
  * Fetch the number of skulls already claimed for a beast from the Skull contract on-chain.

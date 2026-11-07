@@ -109,7 +109,10 @@ export async function fetchIndexerStatus(): Promise<IndexerStatus | null> {
   try {
     const [rows, chainBlock] = await Promise.all([
       runArcadeSql<Array<{ head: number; last_block_timestamp: number | null }>>(
-        "SELECT head, last_block_timestamp FROM contracts ORDER BY head DESC LIMIT 1",
+        // The marketplace is a system of the indexed Dojo world, so the world's
+        // head is the order book's progress; ignore any other indexed contracts.
+        // Slowest world wins if there were ever several.
+        "SELECT head, last_block_timestamp FROM contracts WHERE contract_type = 'WORLD' ORDER BY head ASC LIMIT 1",
         "fetchIndexerStatus",
       ),
       withReadProvider((p) => p.getBlockNumber()),
