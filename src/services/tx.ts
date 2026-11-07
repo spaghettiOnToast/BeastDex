@@ -50,6 +50,31 @@ export async function withReadProvider<T>(fn: (provider: RpcProvider) => Promise
   throw lastErr;
 }
 
+/**
+ * RpcProvider whose `callContract` falls back to the public default RPC when
+ * the configured one refuses unauthenticated reads. For code that needs a
+ * provider object (e.g. passes it into helpers) rather than `withReadProvider`.
+ */
+class FallbackReadProvider extends RpcProvider {
+  override async callContract(...args: Parameters<RpcProvider['callContract']>) {
+    try {
+      return await super.callContract(...args);
+    } catch (err) {
+      const fallback = readRpcUrls().find((url) => url !== resolveRpcUrl());
+      if (!fallback || !isAccessError(err)) throw err;
+      return providerFor(fallback).callContract(...args);
+    }
+  }
+}
+
+let readProvider: FallbackReadProvider | null = null;
+
+/** Shared read-only provider (configured RPC, public fallback on access errors). */
+export function getReadProvider(): RpcProvider {
+  if (!readProvider) readProvider = new FallbackReadProvider({ nodeUrl: resolveRpcUrl() });
+  return readProvider;
+}
+
 export async function waitForTx(
   txHash: string,
   {

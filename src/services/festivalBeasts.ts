@@ -122,20 +122,40 @@ export async function fetchFestivalOwner(c: FestivalCollection, tokenId: number)
   }
 }
 
-/** Every token with its metadata and owner (cached; supplies are tiny). */
+/** Extra ids probed past the expected range before giving up on missing tokens. */
+const FESTIVAL_SCAN_SLACK = 50;
+
+async function fetchFestivalToken(c: FestivalCollection, tokenId: number): Promise<FestivalToken> {
+  const [meta, owner] = await Promise.all([
+    fetchFestivalMeta(c, tokenId).catch(() => null),
+    fetchFestivalOwner(c, tokenId),
+  ]);
+  return { tokenId, meta, owner };
+}
+
+/**
+ * Every token with its metadata and owner (cached; supplies are tiny).
+ *
+ * The contracts aren't enumerable (no `token_by_index`), so ids are scanned
+ * from 1. Ids that don't exist (burned) answer neither `owner_of` nor
+ * `token_uri` and are skipped; scanning continues past `total_supply` until
+ * that many live tokens are found or the slack runs out.
+ */
 export function fetchFestivalTokens(c: FestivalCollection): Promise<FestivalToken[]> {
   return apiCache.get("festival-tokens", { address: c.address }, async () => {
     const supply = await fetchFestivalSupply(c);
-    return Promise.all(
-      Array.from({ length: supply }, async (_, i) => {
-        const tokenId = i + 1;
-        const [meta, owner] = await Promise.all([
-          fetchFestivalMeta(c, tokenId).catch(() => null),
-          fetchFestivalOwner(c, tokenId),
-        ]);
-        return { tokenId, meta, owner };
-      }),
-    );
+    const maxId = supply + FESTIVAL_SCAN_SLACK;
+    const found: FestivalToken[] = [];
+    let nextId = 1;
+    while (found.length < supply && nextId <= maxId) {
+      const batchSize = Math.min(supply - found.length, maxId - nextId + 1);
+      const batch = await Promise.all(
+        Array.from({ length: batchSize }, (_, i) => fetchFestivalToken(c, nextId + i)),
+      );
+      nextId += batchSize;
+      found.push(...batch.filter((t) => t.owner !== null || t.meta !== null));
+    }
+    return found;
   });
 }
 
