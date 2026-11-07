@@ -7,9 +7,8 @@
 
 import { runBeastSql } from "./sqlClient";
 import type { Listing } from "../marketplace/types";
-import { BEASTS_COLLECTION_ADDRESS } from "../marketplace/constants";
-
-const CONTRACT_ADDRESS = BEASTS_COLLECTION_ADDRESS.toLowerCase();
+import { BEASTS_COLLECTION_ADDRESS, paddedAddress } from "../marketplace/constants";
+import { toTokenIdString } from "../../utils/tokenId";
 
 type ListingRow = {
   order_id: string;
@@ -24,7 +23,12 @@ type ListingRow = {
   listing_time: string | null;
 };
 
-export async function fetchListingsWithMetadataSingleQuery(): Promise<Listing[]> {
+/** Active listings (Sell orders) for one collection; defaults to Beasts. */
+export async function fetchListingsWithMetadataSingleQuery(
+  collectionAddress: string = BEASTS_COLLECTION_ADDRESS,
+): Promise<Listing[]> {
+  // Torii stores felts as lowercase 0x + 64 hex; BigInt-normalise to avoid SQL injection too.
+  const collection = paddedAddress(collectionAddress);
   const query = `
     SELECT
       o.id as order_id,
@@ -39,7 +43,7 @@ export async function fetchListingsWithMetadataSingleQuery(): Promise<Listing[]>
       l.time as listing_time
     FROM "ARCADE-Order" o
     LEFT JOIN "ARCADE-Listing" l ON l.order_id = o.id
-    WHERE o.collection = '${CONTRACT_ADDRESS}'
+    WHERE o.collection = '${collection}'
       AND o.status = 1
       AND o.category = 2
     ORDER BY o.id DESC
@@ -57,10 +61,9 @@ export async function fetchListingsWithMetadataSingleQuery(): Promise<Listing[]>
     const listings: Listing[] = [];
 
     for (const row of rows) {
-      const tokenIdNum = row.token_id.startsWith("0x")
-        ? parseInt(row.token_id, 16)
-        : parseInt(row.token_id, 10);
-      const tokenId = String(tokenIdNum);
+      // BigInt-safe: v3 token ids are 251-bit.
+      const tokenId = toTokenIdString(row.token_id);
+      if (!tokenId) continue;
 
       const expiration = row.expiration.startsWith("0x")
         ? parseInt(row.expiration, 16)
@@ -93,6 +96,7 @@ export async function fetchListingsWithMetadataSingleQuery(): Promise<Listing[]>
         status: isExpired ? "expired" : "active",
         createdAt,
         beast: null,
+        collection,
       });
     }
 

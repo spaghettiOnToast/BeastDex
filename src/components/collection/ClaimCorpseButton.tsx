@@ -5,6 +5,7 @@ import { useAccount } from "@starknet-react/core";
 import {
   fetchDeadAdventurers,
   buildClaimCalls,
+  CORPSE_CLAIMING_AVAILABLE,
   BATCH_LIMIT,
   type DeadAdventurer,
 } from "../../services/corpse";
@@ -31,6 +32,7 @@ export function ClaimCorpseButton({ ownerAddress }: ClaimCorpseButtonProps) {
 
   // Only show on own collection
   const isOwn =
+    CORPSE_CLAIMING_AVAILABLE &&
     !!connectedAddress &&
     !!ownerAddress &&
     compareStarknetAddresses(connectedAddress, ownerAddress);

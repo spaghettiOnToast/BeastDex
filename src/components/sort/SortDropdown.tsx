@@ -10,6 +10,7 @@ import {
 } from "../ui/dropdown-menu";
 import { Button } from "../ui/button";
 import type { BeastSortField } from "../../services/beast/types";
+import { SUMMIT_ENABLED } from "../../services/summitApi/constants";
 
 export type SortOption =
   | "default"
@@ -70,7 +71,7 @@ export const ALL_SORT_OPTIONS: Array<{ label: string; value: SortOption }> = [
   { label: "Rank (∞ → 1)", value: "rank-desc" },
   { label: "Last Death (Recent)", value: "last-death-desc" },
   { label: "Last Death (Oldest)", value: "last-death-asc" },
-  { label: "Unclaimed Skulls (High → Low)", value: "skulls-desc" },
+  ...(SUMMIT_ENABLED ? [{ label: "Unclaimed Skulls (High → Low)", value: "skulls-desc" as const }] : []),
 ];
 
 /** Sort options organized into groups with paired direction toggles */
@@ -100,7 +101,7 @@ const SORT_GROUPS: SortGroup[] = [
       { type: "paired", label: "Tier", asc: "tier-asc", desc: "tier-desc" },
       { type: "paired", label: "Health", asc: "health-asc", desc: "health-desc" },
       { type: "paired", label: "Rank", asc: "rank-asc", desc: "rank-desc" },
-      { type: "single", label: "Unclaimed Skulls", value: "skulls-desc" },
+      ...(SUMMIT_ENABLED ? [{ type: "single" as const, label: "Unclaimed Skulls", value: "skulls-desc" as const }] : []),
     ],
   },
   {

@@ -15,4 +15,17 @@ export type Listing = {
   expiration?: number;
   beast?: Beast | null;
   orderId: number;
+  /** NFT collection the order is for (Beasts or a festival collection) */
+  collection?: string;
+  /** festival collections: token metadata (no Beast record exists for these) */
+  festival?: FestivalListingToken | null;
+};
+
+/** A festival-collection token shown in the marketplace (Tiddy Mun, Black Shuck). */
+export type FestivalListingToken = {
+  slug: string;
+  collectionName: string;
+  tokenId: number;
+  name: string;
+  image: string;
 };

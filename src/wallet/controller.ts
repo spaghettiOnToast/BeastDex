@@ -6,6 +6,9 @@ export const controllerConnector = new ControllerConnector({
   chains: [{ rpcUrl: mainnet.rpcUrls.cartridge.http[0] }],
   defaultChainId: "0x534e5f4d41494e",
   slot: "pg-mainnet-10",
+  // Sign-in methods offered inside Controller. The EVM wallets (MetaMask,
+  // Rabby, WalletConnect) sign in to a Starknet Controller account.
+  signupOptions: ["webauthn", "google", "discord", "password", "metamask", "rabby", "walletconnect"],
 });
 
 // The current @starknet-react release expects additional methods.
@@ -32,4 +35,7 @@ if (typeof withCompat.request !== "function") {
   };
 }
 
-export const connectors: Connector[] = [withCompat as unknown as Connector];
+export const controllerCompatConnector = withCompat as unknown as Connector;
+
+/** @deprecated use `useWalletConnectors()` (Controller + injected wallets). */
+export const connectors: Connector[] = [controllerCompatConnector];

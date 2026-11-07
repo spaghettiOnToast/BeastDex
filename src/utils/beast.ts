@@ -100,6 +100,36 @@ export function hasAttributeValue(
   return values.some((v) => v.toLowerCase() === target);
 }
 
+const isYes = (values: string[]) => values.some((v) => v === "1" || v === "true");
+
+/**
+ * Beasts v3 filters that map to typed Beast fields rather than attribute
+ * strings (mirrors services/beast `_mapAttributeFilters`). Returns null when the
+ * trait isn't a v3 filter.
+ */
+function matchV3Filter(beast: Beast, trait: string, values: string[]): boolean | null {
+  switch (trait.toLowerCase()) {
+    case "visual":
+      return beast.visual != null && values.includes(beast.visual);
+    case "card grade": {
+      // [min, max] range, or a single value meaning "at least".
+      if (beast.cardGrade == null) return false;
+      const max = values.length >= 2 ? Number(values[1]) : Infinity;
+      return beast.cardGrade >= Number(values[0]) && beast.cardGrade <= max;
+    }
+    case "soulbound":
+      return Boolean(beast.soulbound) === isYes(values);
+    case "genesis":
+      return Boolean(beast.genesis) === isYes(values);
+    case "mega":
+      return Boolean(beast.mega) === isYes(values);
+    case "midi":
+      return Boolean(beast.midi) === isYes(values);
+    default:
+      return null;
+  }
+}
+
 /**
  * Check if a beast matches the given attribute filters
  * @param beast - The beast to check
@@ -122,6 +152,9 @@ export function matchesBeastFilters(
     if (!Array.isArray(values) || values.length === 0) {
       return true;
     }
+
+    const v3Match = matchV3Filter(beast, trait, values);
+    if (v3Match !== null) return v3Match;
 
     const beastValues = getAttributeValues(beast, trait);
     if (beastValues.length === 0) {

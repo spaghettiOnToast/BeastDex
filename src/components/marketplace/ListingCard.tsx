@@ -2,12 +2,14 @@ import { memo } from "react";
 import { Card, CardContent, CardFooter } from "../ui/card";
 import { Button } from "../ui/button";
 import type { Beast } from "../../services/beast";
-import type { ListingStatus } from "../../services/marketplace/types";
+import type { FestivalListingToken, ListingStatus } from "../../services/marketplace/types";
 import TokenIcon from "../ui/TokenIcon";
 import BeastCard from "../beast/BeastCard";
 
 type Props = {
   beast?: Beast | null;
+  /** festival-collection token (Tiddy Mun, Black Shuck) instead of a beast */
+  festival?: FestivalListingToken | null;
   priceLabel?: string;
   subtitlePriceLabel?: string;
   tokenLogoUrl?: string | null;
@@ -37,6 +39,7 @@ type Props = {
 
 function ListingCard({
   beast,
+  festival,
   priceLabel,
   subtitlePriceLabel,
   tokenLogoUrl,
@@ -109,6 +112,22 @@ function ListingCard({
         >
           {beast ? (
             <BeastCard beast={beast} />
+          ) : festival ? (
+            <div className="relative bg-black" title={festival.name}>
+              {festival.image ? (
+                <img
+                  src={festival.image}
+                  alt={festival.name}
+                  className="block w-full"
+                  style={{ imageRendering: "pixelated" }}
+                />
+              ) : (
+                <div className={compact ? "aspect-[4/5]" : "aspect-square"} />
+              )}
+              <span className="absolute left-1.5 top-1.5 rounded bg-black/80 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                {festival.collectionName} #{festival.tokenId}
+              </span>
+            </div>
           ) : (
             // Loading skeleton when beast data hasn't loaded yet
             <div className={[

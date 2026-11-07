@@ -81,7 +81,7 @@ export default function PurchaseCartDialog({
       // Batch validate via on-chain contract (1 RPC call per chunk)
       const orders = listings.map((listing) => ({
         orderId: listing.orderId ?? listing.listingId,
-        collection: BEASTS_COLLECTION_ADDRESS,
+        collection: listing.collection ?? BEASTS_COLLECTION_ADDRESS,
         tokenId: BigInt(listing.tokenId),
       }));
 

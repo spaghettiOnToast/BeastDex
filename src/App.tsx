@@ -1,12 +1,12 @@
 import { lazy, Suspense } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import {
   jsonRpcProvider,
   StarknetConfig,
   voyager,
 } from "@starknet-react/core";
 import { mainnet, type Chain } from "@starknet-react/chains";
-import { connectors } from "./wallet/controller";
+import { useWalletConnectors } from "./wallet/connectors";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import { GlobalSearchProvider } from "./hooks/useGlobalSearch";
 import { GlobalCartProvider } from "./contexts/GlobalCartContext";
@@ -17,6 +17,8 @@ import { GlobalCartDialogs } from "./components/marketplace/GlobalCartDialogs";
 import { TermsOfServiceDialog } from "./components/legal/TermsOfServiceDialog";
 import { Toaster } from "sonner";
 import { Analytics } from "@vercel/analytics/react";
+import { resolveRpcUrl } from "./services/tx";
+import { MARKETPLACE_ENABLED } from "./services/marketplace/constants";
 
 // Set to true to show maintenance page
 const MAINTENANCE_MODE = false;
@@ -29,15 +31,22 @@ const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const CollectionPage = lazy(() => import("./pages/CollectionPage"));
 const LeaderboardPage = lazy(() => import("./pages/LeaderboardPage"));
 const DungeonsPage = lazy(() => import("./pages/DungeonsPage"));
-const TiddyMunDetailPage = lazy(() => import("./pages/TiddyMunDetailPage"));
+const MarketplacePage = lazy(() => import("./pages/MarketplacePage"));
+const FestivalBeastDetailPage = lazy(() => import("./pages/FestivalBeastDetailPage"));
+
+/** Old Tiddy Mun links were /dungeons/:tokenId. */
+function LegacyTiddyMunRedirect() {
+  const { tokenId } = useParams<{ tokenId: string }>();
+  return <Navigate to={`/festival/tiddy-mun/${tokenId ?? ""}`} replace />;
+}
 
 const provider = jsonRpcProvider({
   rpc: (chain: Chain) => {
     switch (chain) {
       case mainnet:
-        return {
-          nodeUrl: mainnet.rpcUrls.cartridge.http[0],
-        };
+        // Reads only (wallets send through their own RPC). VITE_RPC_URL or
+        // Provable's public RPC; Cartridge's refuses anonymous reads.
+        return { nodeUrl: resolveRpcUrl() };
       default:
         throw new Error(`Unsupported chain: ${chain.network}`);
     }
@@ -62,25 +71,9 @@ function MaintenancePage() {
   );
 }
 
-function MarketplaceMaintenancePage() {
-  return (
-    <div className="min-h-screen bg-[#09090b] flex items-center justify-center px-4">
-      <div className="text-center max-w-md">
-        <div className="text-6xl mb-6">⚔️</div>
-        <h1 className="text-2xl font-bold text-white mb-3">Marketplace Unavailable</h1>
-        <p className="text-zinc-400 mb-6 leading-relaxed">
-          The Marketplace is down for Beast V3 maintenance.
-        </p>
-        <div className="inline-flex items-center gap-2 text-sm text-zinc-500 border border-white/[0.06] rounded-lg px-4 py-2">
-          <span className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
-          Work in progress
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function App() {
+  const walletConnectors = useWalletConnectors();
+
   if (MAINTENANCE_MODE) {
     return (
       <>
@@ -94,7 +87,7 @@ function App() {
     <StarknetConfig
       chains={[mainnet]}
       provider={provider}
-      connectors={connectors}
+      connectors={walletConnectors}
       explorer={voyager}
       autoConnect
     >
@@ -138,13 +131,23 @@ function App() {
                 <Route path="/collection/:identifier" element={<CollectionPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/statistics" element={<LeaderboardPage />} />
-                <Route path="/marketplace" element={<MarketplaceMaintenancePage />} />
+                {/* Marketplace is hidden (route included) until VITE_MARKETPLACE_ENABLED=true */}
+                <Route
+                  path="/marketplace"
+                  element={MARKETPLACE_ENABLED ? <MarketplacePage /> : <Navigate to="/" replace />}
+                />
                 <Route path="/dungeons" element={<DungeonsPage />} />
-                <Route path="/dungeons/:tokenId" element={<TiddyMunDetailPage />} />
+                <Route path="/festival/:slug/:tokenId" element={<FestivalBeastDetailPage />} />
+                {/* legacy Tiddy Mun links */}
+                <Route path="/dungeons/:tokenId" element={<LegacyTiddyMunRedirect />} />
               </Routes>
               {/* Global floating carts and dialogs */}
-              <FloatingCarts />
-              <GlobalCartDialogs />
+              {MARKETPLACE_ENABLED && (
+                <>
+                  <FloatingCarts />
+                  <GlobalCartDialogs />
+                </>
+              )}
             </Suspense>
             {/* Terms of Service dialog */}
             <TermsOfServiceDialog />

@@ -7,12 +7,13 @@ import {
   DialogDescription,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
-import type { OrderModel } from "@cartridge/arcade";
-import { CategoryType, StatusType } from "@cartridge/arcade";
+import type { OrderModel } from "../../services/marketplace/arcadeTypes";
+import { CategoryType, StatusType } from "../../services/marketplace/arcadeTypes";
 import { formatPrice } from "../../utils/price";
 import { toBigIntSafe } from "../../utils/bigint";
 import { getPaymentTokenByAddress } from "../../services/marketplace/constants";
 import { useEkuboTokens, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
+import { shortTokenId } from "../../utils/tokenId";
 
 type Props = {
   open: boolean;
@@ -111,7 +112,7 @@ export default function OffersDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-surface-overlay border border-white/[0.06] max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Offers on Beast #{tokenId}</DialogTitle>
+          <DialogTitle title={String(tokenId ?? "")}>Offers on Beast #{shortTokenId(tokenId)}</DialogTitle>
           <DialogDescription>
             {isLoading
               ? "Loading offers..."

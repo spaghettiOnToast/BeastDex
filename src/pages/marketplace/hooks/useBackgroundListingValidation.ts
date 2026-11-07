@@ -102,7 +102,7 @@ export function useBackgroundListingValidation({
         try {
           const ordersToValidate = stillActiveListings.map((listing) => ({
             orderId: listing.orderId ?? listing.listingId,
-            collection: BEASTS_COLLECTION_ADDRESS,
+            collection: listing.collection ?? BEASTS_COLLECTION_ADDRESS,
             tokenId: BigInt(listing.tokenId),
           }));
 

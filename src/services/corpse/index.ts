@@ -18,12 +18,19 @@ const DUNGEON_ADDRESS =
 const NAMESPACE = "relayer_0_0_1";
 const BATCH_LIMIT = 250;
 
-const TORII_SQL_ENDPOINT = import.meta.env.DEV
-  ? "/summit-torii/sql"
-  : "https://api.cartridge.gg/x/pg-mainnet-10/torii/sql";
+/**
+ * Torii SQL for the legacy `relayer_0_0_1` world. Cartridge's pg-mainnet-10
+ * Slot used to serve it but is discontinued ("slot is discontinued"), and the
+ * Denshokan API doesn't index that dungeon. Corpse claiming is therefore off
+ * unless a self-hosted Torii for that world is configured here.
+ */
+const TORII_SQL_ENDPOINT = (import.meta.env.VITE_CORPSE_TORII_SQL as string | undefined)?.trim() || null;
+
+/** Whether corpse claiming can work (an indexer for the legacy world is configured). */
+export const CORPSE_CLAIMING_AVAILABLE = TORII_SQL_ENDPOINT !== null;
 
 const runCorpseSql = createSqlClient({
-  endpoint: TORII_SQL_ENDPOINT,
+  endpoint: TORII_SQL_ENDPOINT ?? "",
   label: "Corpse",
   defaultOptions: { retries: 2, baseDelayMs: 1000, timeoutMs: 30_000 },
 });
@@ -46,6 +53,7 @@ interface AdventurerRow {
 export async function fetchDeadAdventurers(
   owner: string,
 ): Promise<DeadAdventurer[]> {
+  if (!CORPSE_CLAIMING_AVAILABLE) return [];
   const paddedOwner = addAddressPadding(owner.toLowerCase());
   const paddedDungeon = addAddressPadding(DUNGEON_ADDRESS);
 

@@ -1,6 +1,11 @@
 import type { Beast } from "../services/beast";
+import { compareTokenIdStrings } from "./tokenId";
 
-export const TOTAL_BEAST_VARIETIES = 75;
+/**
+ * The original Beasts catalog size. v3 species are open-ended — use
+ * `useSpeciesCount()` for the live count; this is only its loading fallback.
+ */
+export const ORIGINAL_SPECIES_COUNT = 75;
 
 export type BeastCollectionStats = {
   animatedShinyCount: number;
@@ -234,11 +239,8 @@ export function computeBeastCollectionStats(beasts: Beast[]): BeastCollectionSta
       }
     }
 
-    if (Number.isFinite(beast.numericId)) {
-      if (
-        !lowestNumericId ||
-        (beast.numericId ?? Number.POSITIVE_INFINITY) < (lowestNumericId.numericId ?? Number.POSITIVE_INFINITY)
-      ) {
+    if (beast.tokenId) {
+      if (!lowestNumericId || compareTokenIdStrings(beast.tokenId, lowestNumericId.tokenId) < 0) {
         lowestNumericId = beast;
       }
     }

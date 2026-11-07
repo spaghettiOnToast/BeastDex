@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { BarChart3, Package, Sword } from "lucide-react";
+import { BarChart3, Package, Store, Sword } from "lucide-react";
 import { useAccount } from "@starknet-react/core";
 import Logo from "../common/Logo";
 import SearchBar from "../common/SearchBar";
@@ -8,6 +8,7 @@ import WalletButton from "../wallet/WalletButton";
 import MobileNav from "../layout/MobileNav";
 import { Button } from "../ui/button";
 import { useGlobalSearch } from "../../hooks/useGlobalSearch";
+import { MARKETPLACE_ENABLED } from "../../services/marketplace/constants";
 
 type Props = {
   filtersControl?: ReactNode;
@@ -34,7 +35,17 @@ export default function TopBar({ filtersControl, onLogoClick }: Props) {
 
       {/* Desktop Navigation */}
       <div className="hidden md:flex items-center gap-2 lg:gap-4 flex-shrink-0">
-        {/* Marketplace tab hidden during Beast V3 maintenance — see /marketplace route in App.tsx */}
+        {MARKETPLACE_ENABLED && (
+          <Button
+            asChild
+            className="bg-[#0ef] text-black text-xs font-semibold uppercase tracking-wide hover:bg-[#0df] hover:text-black h-9 px-3 lg:px-4 lg:min-w-[130px]"
+          >
+            <Link to="/marketplace">
+              <Store className="h-4 w-4" />
+              <span className="hidden lg:inline">Marketplace</span>
+            </Link>
+          </Button>
+        )}
         <Button
           asChild
           className="bg-[#a855f7] text-white text-xs font-semibold uppercase tracking-wide hover:bg-[#9333ea] hover:text-white h-9 px-3 lg:px-4 lg:min-w-[130px]"
@@ -54,11 +65,13 @@ export default function TopBar({ filtersControl, onLogoClick }: Props) {
           </Link>
         </Button>
         <Button
-          disabled
-          className="bg-amber-700/40 text-white/40 text-xs font-semibold uppercase tracking-wide h-9 px-3 lg:px-4 lg:min-w-[130px] cursor-not-allowed"
+          asChild
+          className="bg-amber-600 text-white text-xs font-semibold uppercase tracking-wide hover:bg-amber-500 hover:text-white h-9 px-3 lg:px-4 lg:min-w-[130px]"
         >
-          <Sword className="h-4 w-4" />
-          <span className="hidden lg:inline">Dungeons</span>
+          <Link to="/dungeons">
+            <Sword className="h-4 w-4" />
+            <span className="hidden lg:inline">Dungeons</span>
+          </Link>
         </Button>
         <WalletButton />
       </div>

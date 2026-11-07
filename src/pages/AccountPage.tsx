@@ -37,7 +37,7 @@ import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLay
 import { Grid, Table } from "lucide-react";
 import { Button } from "../components/ui/button";
 import type { OverviewCard } from "@/components/account/OverviewCards";
-import { TOTAL_BEAST_VARIETIES } from "../utils/beastCollection";
+import { useSpeciesCount } from "../hooks/useBeastQueries";
 import { normaliseStarknetAddress } from "../utils/address";
 import { fetchOwnerSummitRankFromApi, type OwnerSummitRank } from "../services/summitApi";
 
@@ -52,6 +52,7 @@ function isValidHexAddress(value: string): boolean {
 const PAGE_SIZE = 54;
 
 function AccountPage() {
+  const totalSpecies = useSpeciesCount();
   const { identifier = "" } = useParams<{ identifier: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -550,23 +551,23 @@ function AccountPage() {
                 </h1>
 
                 <div className="flex items-center gap-1.5 sm:gap-2 ml-2 sm:ml-4 text-xs sm:text-sm">
-                  <span className={`text-sm sm:text-lg${displayStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES ? " animate-bounce" : ""}`}>
-                    {displayStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES ? "🎉" : "🏆"}
+                  <span className={`text-sm sm:text-lg${displayStats.uniqueBeastTypes === totalSpecies ? " animate-bounce" : ""}`}>
+                    {displayStats.uniqueBeastTypes === totalSpecies ? "🎉" : "🏆"}
                   </span>
                   <span className="uppercase tracking-wider text-zinc-500 font-medium text-[10px] sm:text-sm">
                     Total
                   </span>
                   <span className={`font-bold ${
-                    displayStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES
+                    displayStats.uniqueBeastTypes === totalSpecies
                       ? "text-[#39ff14] drop-shadow-[0_0_8px_rgba(57,255,20,0.6)]"
                       : "text-white"
                   }`}>
                     {displayStats.uniqueBeastTypes}
                   </span>
                   <span className="text-zinc-500 text-xs sm:text-base">
-                    / {TOTAL_BEAST_VARIETIES}
+                    / {totalSpecies}
                   </span>
-                  {displayStats.uniqueBeastTypes === TOTAL_BEAST_VARIETIES && (
+                  {displayStats.uniqueBeastTypes === totalSpecies && (
                     <span className="text-[#39ff14] font-bold text-[10px] sm:text-sm drop-shadow-[0_0_8px_rgba(57,255,20,0.6)]">
                       COMPLETE!
                     </span>

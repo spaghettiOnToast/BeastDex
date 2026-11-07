@@ -1,6 +1,16 @@
 import { normaliseStarknetAddresses } from "../utils/address";
 
-const LOOKUP_ENDPOINT = "https://api.cartridge.gg/accounts/lookup";
+/**
+ * Cartridge's Controller username API. Cartridge is winding down, so this is
+ * best-effort: lookups time out quickly and, after a failure, are skipped for a
+ * while (callers then show addresses instead of usernames).
+ */
+const LOOKUP_ENDPOINT =
+  (import.meta.env.VITE_ACCOUNTS_LOOKUP_URL as string | undefined)?.trim() ||
+  "https://api.cartridge.gg/accounts/lookup";
+const LOOKUP_TIMEOUT_MS = 5_000;
+const LOOKUP_BACKOFF_MS = 5 * 60_000;
+let lookupDownUntil = 0;
 
 type LookupRequest = {
   usernames?: string[];
@@ -29,20 +39,26 @@ async function executeLookup(request: LookupRequest) {
     return;
   }
 
-  const response = await fetch(LOOKUP_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(request),
-  });
+  if (Date.now() < lookupDownUntil) return;
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Username lookup failed: ${response.status} ${text}`);
+  let payload: LookupResponse;
+  try {
+    const response = await fetch(LOOKUP_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+      signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    payload = (await response.json()) as LookupResponse;
+  } catch (err) {
+    // Degrade to addresses; don't hammer a dead/slow endpoint.
+    lookupDownUntil = Date.now() + LOOKUP_BACKOFF_MS;
+    console.warn("[usernames] lookup unavailable, showing addresses for now:", err);
+    return;
   }
-
-  const payload = (await response.json()) as LookupResponse;
 
   payload?.results?.forEach((result) => {
     const username = typeof result?.username === "string" ? result.username : null;

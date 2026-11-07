@@ -7,11 +7,15 @@ import { matchesAttributeFilters, matchesBeastFilters, sortListings, sortBeasts,
 import { getNumericAttribute } from "../../../utils/beast";
 import { fetchUnclaimedSkullsBatch } from "../../../services/summit";
 import type { MarketplaceView } from "../types";
+import { toSafeTokenNumber } from "../../../utils/tokenId";
+import { SUMMIT_ENABLED } from "../../../services/summitApi/constants";
 
-/** Parse a numeric token ID from a beast's hex/composite id string. */
+/**
+ * Legacy numeric beast id (Summit/skull data is keyed by it), or NaN for v3
+ * 251-bit ids, which have no skull data.
+ */
 function parseBeastTokenId(beastId: string): number {
-  const raw = beastId.split(":").pop() || beastId;
-  return raw.startsWith("0x") ? Number(BigInt(raw)) : Number(raw);
+  return toSafeTokenNumber(beastId) ?? NaN;
 }
 
 /**
@@ -22,7 +26,9 @@ function hasConfirmedUnclaimedSkulls(
   tokenId: string | number,
   unclaimedMap: Map<number, number>,
 ): boolean {
-  const numericId = typeof tokenId === "string" ? Number(tokenId) : tokenId;
+  // Skull data is keyed by legacy numeric ids; v3 ids never match.
+  const numericId = toSafeTokenNumber(tokenId);
+  if (numericId === null) return false;
   const unclaimed = unclaimedMap.get(numericId);
   if (unclaimed === undefined) return false; // no data yet — don't show
   return unclaimed > 0;
@@ -119,7 +125,7 @@ export function useMarketplaceFilters({
    * Uses a ref (skullsFetchedIdsRef) to track already-fetched token IDs so we
    * never re-fetch the same token, even when listings change reference.
    */
-  const needsSkullsData = unclaimedSkullsFilter || sortOption === "skulls-desc";
+  const needsSkullsData = SUMMIT_ENABLED && (unclaimedSkullsFilter || sortOption === "skulls-desc");
   useEffect(() => {
     if (!needsSkullsData) return;
 
@@ -132,8 +138,8 @@ export function useMarketplaceFilters({
       if (!listing.beast) continue;
       const kills = getNumericAttribute(listing.beast, "Adventurers Killed");
       if (kills && kills > 0) {
-        const id = Number(listing.tokenId);
-        if (!isNaN(id) && !fetchedIds.has(id)) {
+        const id = toSafeTokenNumber(listing.tokenId);
+        if (id !== null && !fetchedIds.has(id)) {
           tokensToFetch.set(id, kills);
         }
       }
@@ -198,9 +204,10 @@ export function useMarketplaceFilters({
       // Only apply attribute filters if beast data is loaded
       if (listing.beast && !matchesAttributeFilters(listing as Listing & { beast: Beast }, attributeFilters)) continue;
 
-      // Hide listings without beast data
-      // (they couldn't be matched to beast metadata, so we can't verify ownership)
-      if (!listing.beast) {
+      // Hide listings without beast data (or festival token data, for festival
+      // collections, which have no Beast records)
+      // (they couldn't be matched to metadata, so we can't verify ownership)
+      if (!listing.beast && !listing.festival) {
         if (import.meta.env.DEV) {
           console.log(`[Filter] Hiding listing ${listing.listingId} - no beast data`);
         }
@@ -217,10 +224,12 @@ export function useMarketplaceFilters({
         // First listing for this tokenId
         listingsByTokenId.set(tokenId, listing as Listing & { beast: Beast | null });
       } else {
-        // Prefer listing with beast data over one without
-        if (!existing.beast && listing.beast) {
+        // Prefer listing with beast/festival data over one without
+        const existingHasData = Boolean(existing.beast || existing.festival);
+        const listingHasData = Boolean(listing.beast || listing.festival);
+        if (!existingHasData && listingHasData) {
           listingsByTokenId.set(tokenId, listing as Listing & { beast: Beast | null });
-        } else if (existing.beast && listing.beast) {
+        } else if (existingHasData && listingHasData) {
           // Both have beast data - keep the one with most recent createdAt
           // Fall back to orderId if createdAt is missing (higher = more recent)
           const existingTime = existing.createdAt && existing.createdAt > 0 ? existing.createdAt : 0;

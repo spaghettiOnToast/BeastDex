@@ -9,6 +9,7 @@ import { Send, Loader2, CheckCircle2 } from "lucide-react";
 import { lookupControllerAddresses } from "../../services/controller";
 import { normaliseStarknetAddress } from "../../utils/address";
 import { CONTRACT_ADDRESS } from "../../services/beast/constants";
+import { toTokenIdString } from "../../utils/tokenId";
 
 type SendBeastDialogProps = {
   open: boolean;
@@ -124,7 +125,9 @@ export function SendBeastDialog({
     try {
 
       // Format token ID as u256 - convert to two separate felts (low, high)
-      const tokenIdBigInt = BigInt(beastId);
+      const tokenIdStr = toTokenIdString(beastId);
+      if (!tokenIdStr) throw new Error("Invalid beast token id");
+      const tokenIdBigInt = BigInt(tokenIdStr);
       const low = tokenIdBigInt & BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
       const high = tokenIdBigInt >> BigInt(128);
 

@@ -1,5 +1,6 @@
 import type { Beast } from "../../services/beast";
 import { useState } from "react";
+import { useBeastSpecies } from "../../hooks/useBeastQueries";
 
 type BeastCounts = {
   standard: number;
@@ -173,14 +174,21 @@ const TYPE_TOTAL_COLORS = {
 
 export function BeastTableView({ beasts }: BeastTableViewProps) {
   const [showDuplicates, setShowDuplicates] = useState(false);
-  // Build complete beast catalog from static mapping - instant loading!
+  const { data: species } = useBeastSpecies();
+  // Build complete beast catalog: the live species registry (v3 adds species
+  // past the original 75), falling back to the static original-75 mapping.
   const allPossibleBeasts: Record<string, { type: string; tier: number }> = {};
 
-  // Initialize all 75 beasts from the static mapping
-  Object.values(BEAST_NAMES).forEach((beastName) => {
-    const { type, tier } = getBeastInfo(beastName);
-    allPossibleBeasts[beastName] = { type, tier };
-  });
+  if (species && species.length > 0) {
+    species.forEach((s) => {
+      allPossibleBeasts[s.name] = { type: s.type, tier: s.tier };
+    });
+  } else {
+    Object.values(BEAST_NAMES).forEach((beastName) => {
+      const { type, tier } = getBeastInfo(beastName);
+      allPossibleBeasts[beastName] = { type, tier };
+    });
+  }
 
   // Initialize allBeastInfo with all possible beasts from catalog
   const allBeastInfo: Record<

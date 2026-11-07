@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef, lazy, Suspense } from "react";
 import { normaliseStarknetAddress } from "../utils/address";
 import { useAccount } from "@starknet-react/core";
+import { useSearchParams } from "react-router-dom";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import { useGlobalCart } from "../contexts/GlobalCartContext";
@@ -10,10 +11,11 @@ import ListingCard from "../components/marketplace/ListingCard";
 import BeastCard from "../components/beast/BeastCard";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { useOffersForToken, useOffersReceivedForListings, useUserOffers } from "../hooks/useArcadeOrders";
-import type { Listing } from "../services/marketplace/types";
+import type { FestivalListingToken, Listing } from "../services/marketplace/types";
 import {
   getPaymentTokenByAddress,
-  BEASTS_COLLECTION_ADDRESS,
+  MARKETPLACE_COLLECTIONS,
+  getMarketplaceCollection,
   CREATOR_ROYALTY_BP,
   MARKETPLACE_ADDRESS,
 } from "../services/marketplace/constants";
@@ -27,7 +29,7 @@ import {
   type OrderModel,
   CategoryType,
   StatusType,
-} from "@cartridge/arcade";
+} from "../services/marketplace/arcadeTypes";
 import type { Beast } from "../services/beast";
 import FiltersButton from "../components/filters/FiltersButton";
 import { FiltersDrawer } from "../components/filters/FiltersDrawer";
@@ -71,6 +73,12 @@ import { useSoldListings } from "../contexts/SoldListingsContext";
 import { useBackgroundListingValidation } from "./marketplace/hooks/useBackgroundListingValidation";
 import { ViewToggle } from "./marketplace/components/ViewToggle";
 import type { ExploreSubTab, MyActivitySubTab } from "./marketplace/types";
+import { shortTokenId } from "../utils/tokenId";
+import { executeMarketplaceCalls } from "../services/marketplace/safety";
+import { IndexerStatusBanner } from "../components/marketplace/IndexerStatusBanner";
+import { SUMMIT_ENABLED } from "../services/summitApi/constants";
+import { FestivalHoldingsPanel } from "../components/marketplace/FestivalHoldingsPanel";
+import { festivalPlaceholderBeast, ownedFestivalTokenIds } from "../services/festivalBeasts";
 
 // Storage keys for hidden offers
 const HIDDEN_OFFERS_KEY = "beastdex-hidden-offers";
@@ -263,8 +271,31 @@ export default function MarketplacePage() {
     });
   }, []);
 
+  // Active collection (Beasts or a festival collection), from ?collection=
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeCollection =
+    getMarketplaceCollection(searchParams.get("collection")) ?? MARKETPLACE_COLLECTIONS[0];
+  const isFestivalCollection = activeCollection.kind === "festival";
+  const selectCollection = useCallback(
+    (id: string) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (id === "beasts") next.delete("collection");
+        else next.set("collection", id);
+        return next;
+      });
+    },
+    [setSearchParams],
+  );
+
   // Data fetching hook
-  const dataHook = useMarketplaceData(address);
+  const dataHook = useMarketplaceData(address, activeCollection.address);
+
+  /** MakeOfferDialog takes a Beast; festival tokens get a minimal Beast-shaped record. */
+  const offerBeastFor = useCallback((listing: Listing): Beast | null => {
+    if (listing.beast) return listing.beast;
+    return listing.festival ? festivalPlaceholderBeast(listing.festival, listing.seller) : null;
+  }, []);
 
   // Derive token price map for cross-currency price sorting
   const tokenPriceMap = useMemo(() => {
@@ -311,6 +342,7 @@ export default function MarketplacePage() {
   const { transactions: userTransactions, refetchOffers, invalidateSales } = useUserTransactions({
     address,
     listings: dataHook.listings,
+    collection: activeCollection.address,
   });
 
   // Recent sales hook (from indexer)
@@ -319,6 +351,7 @@ export default function MarketplacePage() {
     limit: 500,
     page: soldPage,
     pageSize: 100,
+    collection: activeCollection.address,
   });
 
   // Combined invalidation function for all sales data
@@ -371,7 +404,7 @@ export default function MarketplacePage() {
 
   // Fetch offers for selected token when offers dialog is open
   const { data: arcadeOffers, isLoading: offersLoading } = useOffersForToken(
-    BEASTS_COLLECTION_ADDRESS,
+    selectedListingForOffers?.collection ?? activeCollection.address,
     selectedListingForOffers?.tokenId,
     offersDialogOpen
   );
@@ -400,6 +433,17 @@ export default function MarketplacePage() {
   const userOwnedTokenIds = useMemo(() => {
     const tokenIds = new Set<string>();
 
+    // Festival collections: owned ids come from the festival tokens, not Beasts
+    if (isFestivalCollection) {
+      for (const id of ownedFestivalTokenIds(dataHook.festivalTokens ?? [], address)) {
+        tokenIds.add(String(id));
+      }
+      for (const listing of filtersHook.myActiveListings) {
+        tokenIds.add(listing.tokenId);
+      }
+      return Array.from(tokenIds);
+    }
+
     // Add token IDs from owned beasts
     for (const beast of dataHook.userBeasts) {
       const rawTokenId = beast.id.split(":").pop() || beast.id;
@@ -416,12 +460,12 @@ export default function MarketplacePage() {
     }
 
     return Array.from(tokenIds);
-  }, [dataHook.userBeasts, filtersHook.myActiveListings]);
+  }, [dataHook.userBeasts, dataHook.festivalTokens, filtersHook.myActiveListings, isFestivalCollection, address]);
 
   // Fetch offers received on user's owned beasts (not just listed ones)
   // Always enabled when user has tokens - this allows the badge to show count regardless of active tab
   const { data: offersReceived, isLoading: offersReceivedLoading, refetch: refetchOffersReceived } = useOffersReceivedForListings(
-    BEASTS_COLLECTION_ADDRESS,
+    activeCollection.address,
     userOwnedTokenIds,
     !!address && userOwnedTokenIds.length > 0
   );
@@ -429,7 +473,7 @@ export default function MarketplacePage() {
   // Fetch user's made offers for display in Offers tab
   const { data: userMadeOffers, isLoading: userMadeOffersLoading, refetch: refetchUserMadeOffers } = useUserOffers(
     address,
-    BEASTS_COLLECTION_ADDRESS
+    activeCollection.address
   );
 
   // Subscribe to global purchase and offer events (from other pages like HomePage)
@@ -498,7 +542,7 @@ export default function MarketplacePage() {
         ],
       };
 
-      const result = await account.execute([cancelCall]);
+      const result = await executeMarketplaceCalls(account, [cancelCall]);
 
       if (result?.transaction_hash) {
         const provider = getProvider(account);
@@ -881,15 +925,24 @@ export default function MarketplacePage() {
   const filterControls = useMemo(
     () => (
       <div className="flex items-center gap-3">
-        <FiltersButton
-          attributeFilters={filtersHook.attributeFilters}
-          onClick={() => setFiltersOpen(true)}
-        />
+        {/* Beast attribute filters don't apply to festival collections */}
+        {!isFestivalCollection && (
+          <FiltersButton
+            attributeFilters={filtersHook.attributeFilters}
+            onClick={() => setFiltersOpen(true)}
+          />
+        )}
         <SortDropdown value={filtersHook.sortOption} onChange={filtersHook.setSortOption} />
       </div>
     ),
-    [filtersHook.attributeFilters, filtersHook.sortOption]
+    [filtersHook.attributeFilters, filtersHook.sortOption, isFestivalCollection]
   );
+
+  // Beast filters can't match festival tokens: clear them when switching there.
+  const resetFilters = filtersHook.handleResetFilters;
+  useEffect(() => {
+    if (isFestivalCollection) resetFilters();
+  }, [isFestivalCollection, resetFilters]);
 
   /**
    * Handle cancel listing
@@ -905,7 +958,7 @@ export default function MarketplacePage() {
           { cancel: actionsHook.cancel },
           {
             account: account as any,
-            collectionAddress: BEASTS_COLLECTION_ADDRESS,
+            collectionAddress: listing.collection ?? activeCollection.address,
             tokenId: listing.tokenId,
             orderId: listing.orderId ?? 0,
           }
@@ -976,7 +1029,7 @@ export default function MarketplacePage() {
           account as any,
           cartsHook.cancelCart.map((listing) => ({
             orderId: listing.orderId ?? 0,
-            collection: BEASTS_COLLECTION_ADDRESS,
+            collection: listing.collection ?? activeCollection.address,
             tokenId: listing.tokenId,
           }))
         );
@@ -1087,7 +1140,7 @@ export default function MarketplacePage() {
           size="default"
           onClick={() => {
             handleCloseDetailModal();
-            setOfferBeast(listing.beast ?? null);
+            setOfferBeast(offerBeastFor(listing));
             setOfferTokenId(listing.tokenId);
             setMakeOfferOpen(true);
           }}
@@ -1101,7 +1154,27 @@ export default function MarketplacePage() {
 
   return (
     <AppLayout topBar={<TopBar />}>
+      <IndexerStatusBanner />
       <div className="space-y-4">
+        {/* Collection switcher */}
+        <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Collection">
+          {MARKETPLACE_COLLECTIONS.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              role="tab"
+              aria-selected={c.id === activeCollection.id}
+              onClick={() => selectCollection(c.id)}
+              className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                c.id === activeCollection.id
+                  ? "border-gold bg-gold/15 text-gold"
+                  : "border-white/10 text-zinc-400 hover:border-white/25 hover:text-zinc-200"
+              }`}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
           {/* Stats cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
           {heroStats.map((stat) => (
@@ -1143,7 +1216,11 @@ export default function MarketplacePage() {
 
         {/* View toggle and controls */}
         <div className="flex flex-col gap-2 sm:gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <ViewToggle value={filtersHook.activeTab} onChange={filtersHook.setActiveTab} />
+          <ViewToggle
+            value={filtersHook.activeTab}
+            onChange={filtersHook.setActiveTab}
+            myBeastsLabel={isFestivalCollection ? "My Items" : undefined}
+          />
           <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
             {filterControls}
             {/* Refresh button - always in same position */}
@@ -1265,7 +1342,7 @@ export default function MarketplacePage() {
               </div>
               </div>
               {/* Sweep Control - on same row as sub-tabs, right side */}
-              {exploreSubTab === "browse" && (
+              {exploreSubTab === "browse" && !isFestivalCollection && (
                 <SweepControl
                   listings={(exploreSubTab === "browse" ? filtersHook.sortedListings : filtersHook.namedRecentListings).filter(l => address?.toLowerCase() !== l.seller?.toLowerCase())}
                   onSweep={(listings) => requireToS(() => handleSweep(listings))}
@@ -1349,11 +1426,12 @@ export default function MarketplacePage() {
                             <ListingCard
                               key={`${listing.listingId}-${listing.tokenId}`}
                               beast={listing.beast}
+                              festival={listing.festival}
                               priceLabel={formatPriceLabel(listing)}
                               subtitlePriceLabel={formatSubtitlePrice(listing)}
                               tokenLogoUrl={getTokenLogoUrl(listing)}
                               status={listing.status}
-                              buyDisabled={!listing.active || !address || marketplaceDisabled || !listing.beast}
+                              buyDisabled={!listing.active || !address || marketplaceDisabled || !(listing.beast || listing.festival)}
                               inCart={globalCart.isInPurchaseCart(listing.listingId)}
                               inSweepSelection={sweepSelectionIds.has(listing.listingId)}
                               onRemoveFromSweep={() => {
@@ -1367,7 +1445,7 @@ export default function MarketplacePage() {
                               })}
                               onAddToCart={() => requireToS(() => globalCart.togglePurchaseCart(listing))}
                               onMakeOffer={() => requireToS(() => {
-                                setOfferBeast(listing.beast ?? null);
+                                setOfferBeast(offerBeastFor(listing));
                                 setOfferTokenId(listing.tokenId);
                                 setMakeOfferOpen(true);
                               })}
@@ -1503,7 +1581,7 @@ export default function MarketplacePage() {
                                               size="sm"
                                               className="h-7 px-2.5 text-[10px] font-semibold"
                                               onClick={() => requireToS(() => {
-                                                setOfferBeast(listing.beast ?? null);
+                                                setOfferBeast(offerBeastFor(listing));
                                                 setOfferTokenId(listing.tokenId);
                                                 setMakeOfferOpen(true);
                                               })}
@@ -1582,7 +1660,7 @@ export default function MarketplacePage() {
                             subtitlePriceLabel={formatSubtitlePrice(listing)}
                             tokenLogoUrl={getTokenLogoUrl(listing)}
                             status={listing.status}
-                            buyDisabled={!listing.active || !address || marketplaceDisabled || !listing.beast}
+                            buyDisabled={!listing.active || !address || marketplaceDisabled || !(listing.beast || listing.festival)}
                             inCart={globalCart.isInPurchaseCart(listing.listingId)}
                             inSweepSelection={sweepSelectionIds.has(listing.listingId)}
                             onRemoveFromSweep={() => {
@@ -1596,7 +1674,7 @@ export default function MarketplacePage() {
                             })}
                             onAddToCart={() => requireToS(() => globalCart.togglePurchaseCart(listing))}
                             onMakeOffer={() => requireToS(() => {
-                              setOfferBeast(listing.beast ?? null);
+                              setOfferBeast(offerBeastFor(listing));
                               setOfferTokenId(listing.tokenId);
                               setMakeOfferOpen(true);
                             })}
@@ -1723,7 +1801,7 @@ export default function MarketplacePage() {
                                             size="sm"
                                             className="h-7 px-2.5 text-[10px] font-semibold"
                                             onClick={() => {
-                                              setOfferBeast(listing.beast ?? null);
+                                              setOfferBeast(offerBeastFor(listing));
                                               setOfferTokenId(listing.tokenId);
                                               setMakeOfferOpen(true);
                                             }}
@@ -1755,7 +1833,7 @@ export default function MarketplacePage() {
                     {(() => {
                       const startIdx = (soldPage - 1) * 100;
                       return namedRecentSales.slice(startIdx, startIdx + 100);
-                    })().map(({ sale, beast, tokenId, price, from, to, time }, idx) => {
+                    })().map(({ sale, beast, festival, tokenId, price, from, to, time }, idx) => {
                       const tokenAddress = sale.order?.currency;
                       const token = tokenAddress ? getPaymentTokenByAddress(tokenAddress) : null;
                       const tokenInfo = tokenAddress ? getToken(tokenAddress) : null;
@@ -1785,6 +1863,14 @@ export default function MarketplacePage() {
                           >
                             {beast ? (
                               <BeastCard beast={beast} />
+                            ) : festival?.image ? (
+                              <img
+                                src={festival.image}
+                                alt={festival.name}
+                                title={festival.name}
+                                className="w-full rounded-lg"
+                                style={{ imageRendering: "pixelated" }}
+                              />
                             ) : (
                               <div className="w-full aspect-square rounded-lg overflow-hidden bg-gradient-to-br from-gray-900/50 to-black/50 border border-white/[0.06] flex items-center justify-center text-zinc-600 text-xs">
                                 No img
@@ -1898,6 +1984,7 @@ export default function MarketplacePage() {
                         to?: string;
                         listing?: typeof filtersHook.namedRecentListings[0];
                         sale?: typeof namedRecentSales[0];
+                        festival?: FestivalListingToken | null;
                       };
 
                       const activities: ActivityEntry[] = [];
@@ -1909,6 +1996,7 @@ export default function MarketplacePage() {
                           type: "listing",
                           timestamp: listing.createdAt || 0,
                           beast: listing.beast,
+                          festival: listing.festival,
                           tokenId: listing.tokenId,
                           price: formatPriceLabel(listing),
                           symbol: token?.symbol ?? "STRK",
@@ -1942,6 +2030,7 @@ export default function MarketplacePage() {
                           type: "sale",
                           timestamp: saleData.time,
                           beast: saleData.beast,
+                          festival: saleData.festival,
                           tokenId: saleData.tokenId,
                           price: formatPrice(saleData.price, paymentToken?.symbol ?? "STRK"),
                           symbol: paymentToken?.symbol ?? "STRK",
@@ -2013,6 +2102,13 @@ export default function MarketplacePage() {
                               <div className="w-16 flex-shrink-0">
                                 {activity.beast ? (
                                   <BeastCard beast={activity.beast} />
+                                ) : activity.festival?.image ? (
+                                  <img
+                                    src={activity.festival.image}
+                                    alt={activity.festival.name}
+                                    className="w-full rounded-lg"
+                                    style={{ imageRendering: "pixelated" }}
+                                  />
                                 ) : (
                                   <div className="w-full aspect-square rounded-lg overflow-hidden bg-white/[0.06] flex items-center justify-center text-zinc-600 text-[8px]">
                                     ?
@@ -2020,7 +2116,7 @@ export default function MarketplacePage() {
                                 )}
                               </div>
                               <span className="text-white font-medium truncate max-w-[120px]">
-                                {activity.beast?.name || `Beast #${activity.tokenId}`}
+                                {activity.beast?.name || activity.festival?.name || `Beast #${activity.tokenId}`}
                               </span>
                             </button>
                           </td>
@@ -2082,7 +2178,18 @@ export default function MarketplacePage() {
           </section>
         )}
 
-        {filtersHook.activeTab === "my-beasts" && (
+        {filtersHook.activeTab === "my-beasts" && isFestivalCollection && activeCollection.festivalSlug && (
+          <section className="space-y-4">
+            <FestivalHoldingsPanel
+              slug={activeCollection.festivalSlug}
+              address={address}
+              listings={dataHook.listings}
+              onListed={() => dataHook.refetchOrders()}
+            />
+          </section>
+        )}
+
+        {filtersHook.activeTab === "my-beasts" && !isFestivalCollection && (
           <section className="space-y-4">
             {dataHook.userBeastsLoading && filtersHook.sortedUserBeasts.length === 0 ? (
               // Show skeleton cards while initially loading
@@ -2292,7 +2399,7 @@ export default function MarketplacePage() {
                             status={listing.status}
                             ownedByUser={true}
                             inCart={inCancelCart}
-                            buyDisabled={marketplaceDisabled || !listing.beast}
+                            buyDisabled={marketplaceDisabled || !(listing.beast || listing.festival)}
                             onCardClick={() => handleCardClick(listing)}
                             onEdit={() => requireToS(() => {
                               setEditingListing(listing);
@@ -2561,7 +2668,7 @@ export default function MarketplacePage() {
                                     )}
                                   </div>
                                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-400">
-                                    <span>Token #{offer.tokenId}</span>
+                                    <span title={String(offer.tokenId)}>Token #{shortTokenId(offer.tokenId)}</span>
                                     <span className="text-zinc-600">•</span>
                                     <span>
                                       {offer.isExpired
@@ -2872,6 +2979,7 @@ export default function MarketplacePage() {
               onOpenChange={setMakeOfferOpen}
               beast={offerBeast}
               tokenId={offerTokenId}
+              collection={activeCollection.address}
               onOfferMade={() => {
                 setMakeOfferOpen(false);
                 // Refetch offers after making one
@@ -3027,7 +3135,7 @@ export default function MarketplacePage() {
           onLevelRangeChange={filtersHook.handleLevelRangeChange}
           onAdventurersKilledRangeChange={filtersHook.handleAdventurersKilledRangeChange}
           unclaimedSkullsFilter={filtersHook.unclaimedSkullsFilter}
-          onUnclaimedSkullsChange={filtersHook.handleUnclaimedSkullsChange}
+          onUnclaimedSkullsChange={SUMMIT_ENABLED ? filtersHook.handleUnclaimedSkullsChange : undefined}
           skullsLoading={filtersHook.skullsLoading}
           onResetFilters={filtersHook.handleResetFilters}
         />

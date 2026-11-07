@@ -13,6 +13,7 @@ import {
   getBeastLastDeathTimestamp,
 } from "./beast";
 import { toBigIntSafe } from "./bigint";
+import { compareTokenIdStrings, toSafeTokenNumber } from "./tokenId";
 
 /** Minimal token info needed for USD price conversion during sorting */
 export type TokenPriceInfo = {
@@ -134,7 +135,10 @@ export function sortListings(
 
       case "skulls-desc":
         return {
-          primary: unclaimedSkullsMap?.get(Number(tokenId)) ?? -1,
+          primary: (() => {
+            const n = toSafeTokenNumber(tokenId);
+            return n === null ? -1 : unclaimedSkullsMap?.get(n) ?? -1;
+          })(),
           secondary: tokenId,
         };
 
@@ -240,7 +244,10 @@ export function sortBeasts(beasts: Beast[], option: SortOption, unclaimedSkullsM
       case "last-death-desc":
         return getBeastLastDeathTimestamp(beast) ?? 0;
       case "skulls-desc":
-        return unclaimedSkullsMap?.get(beast.numericId) ?? -1;
+      {
+        const n = toSafeTokenNumber(beast.tokenId);
+        return n === null ? -1 : unclaimedSkullsMap?.get(n) ?? -1;
+      }
       case "default":
       default:
         return beast.power ?? -Infinity;
@@ -263,7 +270,7 @@ export function sortBeasts(beasts: Beast[], option: SortOption, unclaimedSkullsM
     }
 
     if (compare === 0) {
-      return a.beast.numericId - b.beast.numericId;
+      return compareTokenIdStrings(a.beast.tokenId, b.beast.tokenId);
     }
     return isDesc ? -compare : compare;
   });

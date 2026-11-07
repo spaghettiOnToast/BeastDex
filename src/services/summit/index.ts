@@ -5,6 +5,7 @@ import {
   createDefaultSummitBeastData,
 } from "../summitApi";
 import type { SummitBeastData } from "./types";
+import { resolveRpcUrl } from "../tx";
 
 export type { SummitBeastData, SummitLiveStats } from "./types";
 
@@ -15,10 +16,7 @@ const SKULL_CONTRACT_ADDRESS =
 let _rpcProvider: RpcProvider | null = null;
 function getRpcProvider(): RpcProvider {
   if (!_rpcProvider) {
-    const envUrl = (import.meta as any)?.env?.VITE_RPC_URL as string | undefined;
-    _rpcProvider = new RpcProvider({
-      nodeUrl: envUrl || "https://api.cartridge.gg/x/starknet/mainnet",
-    });
+    _rpcProvider = new RpcProvider({ nodeUrl: resolveRpcUrl() });
   }
   return _rpcProvider;
 }

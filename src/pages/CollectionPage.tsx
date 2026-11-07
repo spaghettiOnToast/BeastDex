@@ -29,7 +29,7 @@ import { Grid, Table } from "lucide-react";
 import {
   fetchBeastAttributeFilters,
   fetchBeasts,
-  fetchBeastsByIds,
+  fetchGenesisBeasts,
   fetchOwnerBeastStats,
   fetchOwnerBeastHighlights,
   type Beast,
@@ -53,6 +53,7 @@ import { fetchOwnerSummitRankFromApi, type OwnerSummitRank } from "../services/s
 import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
 import type { OverviewCard } from "../components/account/OverviewCards";
 import { ClaimCorpseButton } from "../components/collection/ClaimCorpseButton";
+import FestivalBeastsStrip from "../components/profile/FestivalBeastsStrip";
 
 const TABS = [
   { key: "all", label: "All" },
@@ -412,13 +413,12 @@ function CollectionPage() {
       .toLowerCase();
   }, []);
 
-  // Load all Genesis beasts (token ids 1-75) via the collectables SDK
+  // Load all Genesis beasts (one per species) via the collectables SDK
   const loadAllGenesisBeasts = useCallback(async (): Promise<
     Map<string, Beast>
   > => {
     try {
-      const genesisIds = Array.from({ length: 75 }, (_, i) => i + 1);
-      const beasts = await fetchBeastsByIds(genesisIds);
+      const beasts = await fetchGenesisBeasts();
 
       const genesisMap = new Map<string, Beast>();
 
@@ -509,7 +509,7 @@ function CollectionPage() {
         const template = getBeastTemplate(key);
         templateCatalog[key] = {
           id: `template-${key}`,
-          numericId: 0,
+          tokenId: "",
           name: label,
           image: template.placeholderImage,
           owner: null,
@@ -1060,6 +1060,9 @@ function CollectionPage() {
           overviewCards={overviewCards}
         />
 
+        {/* Tiddy Mun / Black Shuck held by this owner (hidden when none) */}
+        <FestivalBeastsStrip owner={resolvedAddress || null} />
+
         {/* Consolidate SQL errors into a single banner */}
         {(() => {
           const errors = [summaryError, catalogError, filtersError].filter(Boolean);
@@ -1220,7 +1223,7 @@ function CollectionPage() {
                 beast={
                   entry.beast ?? {
                     id: entry.id,
-                    numericId: 0,
+                    tokenId: "",
                     name: entry.label,
                     image: "",
                     owner: null,

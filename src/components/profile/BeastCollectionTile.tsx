@@ -1,4 +1,4 @@
-import { TOTAL_BEAST_VARIETIES } from "../../utils/beastCollection";
+import { useSpeciesCount } from "../../hooks/useBeastQueries";
 
 type BeastCollectionTileProps = {
   animatedShinyCount: number;
@@ -22,6 +22,7 @@ export function BeastCollectionTile({
   uniqueShinyTypes,
   uniqueStandardTypes,
 }: BeastCollectionTileProps) {
+  const totalSpecies = useSpeciesCount();
   const cards = [
     {
       key: "animatedShiny",
@@ -84,11 +85,11 @@ export function BeastCollectionTile({
                 {card.count}
               </p>
               <p className={`text-[10px] sm:text-xs leading-none ${
-                card.unique === TOTAL_BEAST_VARIETIES
+                card.unique === totalSpecies
                   ? "text-[#39ff14] animate-pulse font-semibold"
                   : "text-zinc-500"
               }`}>
-                {card.unique}/{TOTAL_BEAST_VARIETIES} unique
+                {card.unique}/{totalSpecies} unique
               </p>
             </div>
           </div>

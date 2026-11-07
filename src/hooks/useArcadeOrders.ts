@@ -1,9 +1,10 @@
 import { useMemo, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getChecksumAddress } from "starknet";
-import { CategoryType, StatusType } from "@cartridge/arcade";
+import { CategoryType, StatusType } from "../services/marketplace/arcadeTypes";
 import { compareStarknetAddresses, padStarknetAddress } from "../utils/address";
 import { TORII_PRODUCTION_BASE } from "../services/shared/toriiEndpoint";
+import { toTokenIdString, toTokenIdHex } from "../utils/tokenId";
 
 const ARCADE_GRAPHQL_ENDPOINT = import.meta.env.VITE_ARCADE_TORII_BASE
   ? `${import.meta.env.VITE_ARCADE_TORII_BASE}/graphql`
@@ -19,7 +20,8 @@ export type ArcadeOrderModelCompat = {
   status: { value: StatusType; into: () => number };
   expiration: number;
   collection: string;
-  tokenId: number;
+  /** canonical decimal token id (v3 ids are 251-bit; never a JS number) */
+  tokenId: string;
   quantity: number;
   price: string; // Keep as string to avoid precision loss with large numbers
   currency: string;
@@ -32,7 +34,7 @@ function parseGraphQLOrder(node: any): ArcadeOrderModelCompat | null {
 
   const id = Number(node.id ?? 0);
   const expiration = parseInt(node.expiration ?? "0", 16);
-  const tokenId = parseInt(node.token_id ?? "0", 16);
+  const tokenId = toTokenIdString(node.token_id ?? "0x0") ?? "0";
   const quantity = parseInt(node.quantity ?? "1", 16);
   // Keep price as string to avoid precision loss - convert hex to decimal string
   const priceHex = node.price ?? "0x0";
@@ -404,7 +406,8 @@ async function fetchOffersForTokenGraphQL(
   limit: number = 50,
   signal?: AbortSignal
 ): Promise<ArcadeOrderModelCompat[]> {
-  const tokenIdHex = `0x${parseInt(tokenId, 10).toString(16)}`;
+  const tokenIdHex = toTokenIdHex(tokenId);
+  if (!tokenIdHex) return [];
 
   const query = `
     query GetOffersForToken($collection: String!, $tokenId: String!, $limit: Int!) {

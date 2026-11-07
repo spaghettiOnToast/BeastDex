@@ -156,7 +156,7 @@ export default function EditListingDialog({
       await editListing(
         account,
         listing.orderId ?? 0,
-        BEASTS_COLLECTION_ADDRESS,
+        listing.collection ?? BEASTS_COLLECTION_ADDRESS,
         listing.tokenId,
         quantity,
         priceBigInt.toString(),

@@ -1,3 +1,15 @@
+import { CONTRACT_ADDRESS as BEASTS_ADDRESS } from "../beast/constants";
+import { FESTIVAL_COLLECTIONS } from "../festivalBeasts";
+
+/**
+ * Marketplace on/off switch. Off (tab, /marketplace route, buy/offer/cart UI
+ * and wallet approvals hidden; the route redirects home) until the v3
+ * marketplace is verified end-to-end; set VITE_MARKETPLACE_ENABLED=true to
+ * enable (e.g. in .env.local for testing, then in production to unhide).
+ */
+export const MARKETPLACE_ENABLED =
+  (import.meta.env.VITE_MARKETPLACE_ENABLED as string | undefined)?.trim().toLowerCase() === "true";
+
 // Marketplace contract address from environment
 export const MARKETPLACE_ADDRESS =
   (import.meta.env.VITE_MARKETPLACE_ADDRESS as string) ||
@@ -93,6 +105,49 @@ export function getDefaultListingExpiration(): bigint {
 
 // Collection address (re-use beasts contract)
 export { CONTRACT_ADDRESS as BEASTS_COLLECTION_ADDRESS } from "../beast/constants";
+
+// =============================================================================
+// TRADABLE COLLECTIONS
+// =============================================================================
+// Beasts v3 plus the festival collections (freely transferable ERC721s; see
+// services/festivalBeasts). All trade on the same Arcade marketplace contract.
+
+export type MarketplaceCollection = {
+  id: string;
+  name: string;
+  address: string;
+  kind: "beast" | "festival";
+  /** festival collections: slug in services/festivalBeasts */
+  festivalSlug?: string;
+};
+
+export const MARKETPLACE_COLLECTIONS: MarketplaceCollection[] = [
+  { id: "beasts", name: "Beasts", address: BEASTS_ADDRESS, kind: "beast" },
+  ...FESTIVAL_COLLECTIONS.map((c) => ({
+    id: c.slug,
+    name: c.name,
+    address: c.address,
+    kind: "festival" as const,
+    festivalSlug: c.slug,
+  })),
+];
+
+/** Canonical (lowercase, 0x + 64 hex) form of an address, as Torii stores felts. */
+export function paddedAddress(address: string): string {
+  return `0x${BigInt(address).toString(16).padStart(64, "0")}`;
+}
+
+export function getMarketplaceCollection(idOrAddress: string | null | undefined): MarketplaceCollection | null {
+  if (!idOrAddress) return null;
+  const byId = MARKETPLACE_COLLECTIONS.find((c) => c.id === idOrAddress);
+  if (byId) return byId;
+  try {
+    const target = BigInt(idOrAddress);
+    return MARKETPLACE_COLLECTIONS.find((c) => BigInt(c.address) === target) ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // =============================================================================
 // FEE STRUCTURE
