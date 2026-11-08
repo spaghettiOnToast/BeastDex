@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAccount, useDisconnect } from "@starknet-react/core";
 
-import { ChevronDown, LogOut, User, Wallet } from "lucide-react";
+import { AtSign, ChevronDown, LogOut, User, Wallet } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { controllerConnector } from "../../wallet/controller";
 import { connectorIconSrc, walletName } from "../../wallet/connectors";
@@ -18,6 +18,8 @@ import { useTermsOfService } from "../../contexts/TermsOfServiceContext";
 import { WalletConnectDialog } from "./WalletConnectDialog";
 import { MarketplaceApprovals } from "./MarketplaceApprovals";
 import { MARKETPLACE_ENABLED } from "../../services/marketplace/constants";
+import { BROTHER_ID_URL, lookupWalletNames } from "../../services/walletNames";
+import { normaliseStarknetAddress } from "../../utils/address";
 
 type ControllerProfile = {
   username?: string | null;
@@ -67,6 +69,23 @@ export function WalletButton() {
     };
   }, [address, isController, connector]);
 
+  // Other wallets (Ready, Braavos, …): show their .brother name when they have one.
+  const [walletName_, setWalletName] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setWalletName(null);
+    if (!address || isController) return;
+    const key = normaliseStarknetAddress(address);
+    lookupWalletNames([address])
+      .then((names) => {
+        if (!cancelled && key) setWalletName(names[key] ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [address, isController]);
+
   const disconnect = useCallback(async () => {
     try {
       await disconnectAsync();
@@ -100,7 +119,7 @@ export function WalletButton() {
     );
   }
 
-  const label = username ?? shortAddress(address);
+  const label = username ?? walletName_ ?? shortAddress(address);
   const icon = connector ? connectorIconSrc(connector) : null;
 
   return (
@@ -138,6 +157,14 @@ export function WalletButton() {
           <User className="h-4 w-4" />
           Profile
         </DropdownMenuItem>
+        {!username && !walletName_ && (
+          <DropdownMenuItem asChild className="cursor-pointer focus:bg-white/[0.06] focus:text-white">
+            <a href={BROTHER_ID_URL} target="_blank" rel="noreferrer">
+              <AtSign className="h-4 w-4" />
+              Set username
+            </a>
+          </DropdownMenuItem>
+        )}
         {isController && (
           <DropdownMenuItem
             onClick={() => {

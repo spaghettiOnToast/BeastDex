@@ -1,4 +1,4 @@
-import { lookupControllerUsernames } from "./controller";
+import { lookupWalletNames } from "./walletNames";
 import { normaliseStarknetAddresses } from "../utils/address";
 import { config } from "../config";
 
@@ -109,7 +109,8 @@ class UsernameCache {
 
     try {
       // Fetch all usernames in a single API call
-      const fetchedUsernames = await lookupControllerUsernames(addressesToFetch);
+      // Controller usernames, then .brother names (profanity filtered)
+      const fetchedUsernames = await lookupWalletNames(addressesToFetch);
 
       // Cache individual results
       const now = Date.now();

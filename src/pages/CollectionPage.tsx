@@ -53,6 +53,8 @@ import { apiCache } from "../services/apiCache";
 import { fetchOwnerSummitRankFromApi, type OwnerSummitRank } from "../services/summitApi";
 import { CollectionHero, type OverviewCard } from "../components/collection/CollectionHero";
 import { ProfileHeader } from "../components/profile/ProfileHeader";
+import { BROTHER_ID_URL } from "../services/walletNames";
+import { useAccount } from "@starknet-react/core";
 
 import { ClaimCorpseButton } from "../components/collection/ClaimCorpseButton";
 import FestivalBeastsStrip from "../components/profile/FestivalBeastsStrip";
@@ -859,6 +861,14 @@ function CollectionPage() {
     [resolvedAddress]
   );
 
+  // Own profile shown by address: offer to claim a .brother name
+  const { address: connectedAddress } = useAccount();
+  const isOwnProfile = Boolean(
+    connectedAddress &&
+      normalisedAccountAddress &&
+      normaliseStarknetAddress(connectedAddress) === normaliseStarknetAddress(normalisedAccountAddress)
+  );
+
   const accountUsername = useMemo(() => {
     if (!normalisedAccountAddress) return null;
     const key = normalisedAccountAddress.toLowerCase();
@@ -1037,6 +1047,7 @@ function CollectionPage() {
     <AppLayout topBar={topBar}>
       <div className="flex flex-col gap-2">
         <ProfileHeader
+          setUsernameHref={isOwnProfile && /^0x/i.test(displayName) ? BROTHER_ID_URL : null}
           title={collectionStats.mostPowerfulTitle}
           displayName={displayName}
           nameIsAddress={!accountUsername && !identifierIsUsername}

@@ -23,6 +23,8 @@ type ProfileHeaderProps = {
   onBack?: (e: MouseEvent<HTMLAnchorElement>) => void;
   /** small status line under the name (e.g. username lookup state) */
   status?: ReactNode;
+  /** own profile without a name: link to claim one (Brother ID) */
+  setUsernameHref?: string | null;
 };
 
 /** Deterministic two-colour gradient from an address, as a simple avatar. */
@@ -47,6 +49,7 @@ export function ProfileHeader({
   refreshDisabled = false,
   onBack,
   status,
+  setUsernameHref,
 }: ProfileHeaderProps) {
   const [copied, setCopied] = useState(false);
   const copyAddress = async () => {
@@ -117,6 +120,17 @@ export function ProfileHeader({
                 >
                   {copied ? <Check className="h-3.5 w-3.5 text-accent" /> : <Copy className="h-3.5 w-3.5" />}
                 </button>
+              )}
+              {setUsernameHref && (
+                <a
+                  href={setUsernameHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-white/[0.1] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 transition-colors hover:border-gold/50 hover:text-gold"
+                  title="Claim a .brother name to show instead of your address"
+                >
+                  Set username
+                </a>
               )}
               {complete && (
                 <span className="rounded-full border border-[#39ff14]/40 bg-[#39ff14]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#39ff14]">
