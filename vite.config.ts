@@ -25,6 +25,10 @@ export default defineConfig({
     ],
   },
   build: {
+    // Vite 7's 'baseline-widely-available' browsers, stated explicitly: the
+    // top-level-await plugin otherwise transforms for Chrome 87 / ES2020, which
+    // esbuild >= 0.25 refuses for some dependency code (destructuring).
+    target: ['chrome107', 'edge107', 'firefox104', 'safari16'],
     rollupOptions: {
       output: {
         manualChunks: {
