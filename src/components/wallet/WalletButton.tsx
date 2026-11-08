@@ -17,6 +17,9 @@ import { ControllerConnector } from "@cartridge/connector";
 import { useTermsOfService } from "../../contexts/TermsOfServiceContext";
 import { WalletConnectDialog } from "./WalletConnectDialog";
 import { MarketplaceApprovals } from "./MarketplaceApprovals";
+import { WalletBalances } from "./WalletBalances";
+import { SendTokenDialog } from "./SendTokenDialog";
+import { ReceiveDialog } from "./ReceiveDialog";
 import { MARKETPLACE_ENABLED } from "../../services/marketplace/constants";
 import { BROTHER_ID_URL, lookupWalletNames } from "../../services/walletNames";
 import { normaliseStarknetAddress } from "../../utils/address";
@@ -35,6 +38,12 @@ export function WalletButton() {
   const { disconnectAsync } = useDisconnect();
   const [username, setUsername] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // The menu closes before the send/receive dialogs open (a dialog over an open
+  // dropdown fights it for focus).
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [sendToken, setSendToken] = useState<string | null>(null);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [receiveOpen, setReceiveOpen] = useState(false);
   const { promptToSAcceptance, hasAcceptedToS } = useTermsOfService();
   const navigate = useNavigate();
 
@@ -123,7 +132,8 @@ export function WalletButton() {
   const icon = connector ? connectorIconSrc(connector) : null;
 
   return (
-    <DropdownMenu>
+    <>
+    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
       <DropdownMenuTrigger asChild>
         <Button className="bg-[#fbcb4a] text-black text-xs font-semibold uppercase tracking-wide hover:bg-[#f0b833] hover:text-black h-8 sm:h-9 px-2 sm:px-3 md:min-w-[120px]">
           {icon && (
@@ -150,6 +160,19 @@ export function WalletButton() {
             {walletName(connector)}
           </div>
         )}
+        <WalletBalances
+          address={address}
+          onSend={(token) => {
+            setMenuOpen(false);
+            setSendToken(token);
+            setSendOpen(true);
+          }}
+          onReceive={() => {
+            setMenuOpen(false);
+            setReceiveOpen(true);
+          }}
+        />
+        <DropdownMenuSeparator className="bg-white/[0.06]" />
         <DropdownMenuItem
           onClick={() => navigate(`/account/${encodeURIComponent(username || address)}`)}
           className="cursor-pointer focus:bg-white/[0.06] focus:text-white"
@@ -191,6 +214,9 @@ export function WalletButton() {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    <SendTokenDialog open={sendOpen} onOpenChange={setSendOpen} initialToken={sendToken} />
+    <ReceiveDialog open={receiveOpen} onOpenChange={setReceiveOpen} address={address} name={username ?? walletName_} />
+    </>
   );
 }
 
