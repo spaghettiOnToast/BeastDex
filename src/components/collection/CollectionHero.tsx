@@ -64,10 +64,8 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast, beasts }: 
   const totalSpecies = useSpeciesCount();
   const complete = stats.uniqueBeastTypes >= totalSpecies && totalSpecies > 0;
 
+  // Rarest first
   const variants = [
-    { key: "standard", label: "Standard", count: stats.standardCount, unique: stats.uniqueStandardTypes, color: "#22c55e" },
-    { key: "shiny", label: "Shiny", count: stats.shinyCount, unique: stats.uniqueShinyTypes, color: "#fde047" },
-    { key: "animated", label: "MIDI", count: stats.animatedCount, unique: stats.uniqueAnimatedTypes, color: "#7dd3fc" },
     {
       key: "animatedShiny",
       label: "Shiny MIDI",
@@ -76,6 +74,9 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast, beasts }: 
       color: "linear-gradient(90deg, #ec4899, #a855f7, #38bdf8)",
       dot: "#ec4899",
     },
+    { key: "shiny", label: "Shiny", count: stats.shinyCount, unique: stats.uniqueShinyTypes, color: "#fde047" },
+    { key: "animated", label: "MIDI", count: stats.animatedCount, unique: stats.uniqueAnimatedTypes, color: "#7dd3fc" },
+    { key: "standard", label: "Standard", count: stats.standardCount, unique: stats.uniqueStandardTypes, color: "#22c55e" },
   ];
 
   const grades = beasts && beasts.length > 0 ? gradeBuckets(beasts) : null;
