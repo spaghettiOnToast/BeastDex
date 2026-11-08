@@ -4,6 +4,7 @@
  */
 import { GAMES_API_URL, GAME_CORE_ADDRESS, GAME_DUNGEONS } from "./constants";
 import { decodeGameTokenId, gameExpiresAt, type DecodedGameToken } from "./tokenId";
+import { withReadProvider } from "../tx";
 
 /** One game as returned by `GET /games?owner=…` */
 type ApiGameRow = {
@@ -208,15 +209,41 @@ export async function fetchOwnerGames(
   return perMinter.flat().sort((a, b) => b.decoded.mintedAt - a.decoded.mintedAt);
 }
 
-/** Current state of one game (owner included), or null if the API doesn't know it. */
+const blockTimes = new Map<number, number>();
+
+/** Unix seconds of a block (cached; blocks are immutable). */
+async function blockTimestamp(block: number): Promise<number | null> {
+  const cached = blockTimes.get(block);
+  if (cached !== undefined) return cached;
+  try {
+    const b = await withReadProvider((p) => p.getBlockWithTxHashes(block));
+    const ts = Number((b as { timestamp?: number }).timestamp ?? 0);
+    if (!ts) return null;
+    blockTimes.set(block, ts);
+    return ts;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Current state of one game (owner included), or null if the API doesn't know
+ * it. The detail endpoint only gives the last action's block, so its time is
+ * read from the chain.
+ */
 export async function fetchGame(tokenId: string, signal?: AbortSignal): Promise<AdventurerGame | null> {
   const hex = `0x${BigInt(tokenId).toString(16).padStart(64, "0")}`;
+  let game: AdventurerGame | null;
   try {
-    return gameFromDetail(await getJson<ApiGameDetail>(`/games/${hex}`, signal));
+    game = gameFromDetail(await getJson<ApiGameDetail>(`/games/${hex}`, signal));
   } catch (err) {
-    if (err instanceof Error && err.message.includes(" 404 ")) return null;
+    if (err instanceof Error && err.message.includes(" 404")) return null;
     throw err;
   }
+  if (game && game.started && game.lastActionAt === null && game.lastActionBlock) {
+    game.lastActionAt = await blockTimestamp(game.lastActionBlock);
+  }
+  return game;
 }
 
 /**

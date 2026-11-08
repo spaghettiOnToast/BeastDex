@@ -1,68 +1,107 @@
 /**
  * Adventurers market: Loot Survivor games (v2 game core NFTs) on the same
- * Arcade marketplace as Beasts. Browse / buy listings, manage and send your
- * own games, recent sales.
+ * Arcade marketplace as Beasts. Listings, my games (list / send / offers
+ * received), my offers, recent sales.
  *
- * A listed game stays playable by its seller, so every card shows live state
- * (refreshed each minute) and the purchase re-reads the game right before
- * confirming and again right before sending the transaction.
+ * A listed game stays playable by its seller, so trading follows the rules in
+ * services/adventurers/rules: list only when unplayed or idle 5 min, buy only
+ * if the game hasn't moved since listing, accept an offer only if it hasn't
+ * moved since the offer. Live state is re-read before every trade.
  */
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useAccount } from "@starknet-react/core";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, ExternalLink, Loader2, RefreshCw, Send, Tag, X } from "lucide-react";
+import { AlertTriangle, ExternalLink, HandCoins, Loader2, RefreshCw, Send, Tag, X } from "lucide-react";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import { IndexerStatusBanner } from "../components/marketplace/IndexerStatusBanner";
 import { MarketSwitch } from "../components/marketplace/MarketSwitch";
 import ListDialog from "../components/marketplace/ListDialog";
+import MakeOfferDialog from "../components/marketplace/MakeOfferDialog";
 import PurchaseConfirmDialog from "../components/marketplace/PurchaseConfirmDialog";
 import TokenIcon from "../components/ui/TokenIcon";
 import { Button } from "../components/ui/button";
-import { AdventurerCard } from "../components/adventurers/AdventurerCard";
-import { formatAgo, playedSinceListed } from "../services/adventurers/format";
+import { AdventurerCard, GameStatusBadge } from "../components/adventurers/AdventurerCard";
+import { GameOffersDialog } from "../components/adventurers/GameOffersDialog";
 import { SendGamesDialog } from "../components/adventurers/SendGamesDialog";
 import { useAdventurerListings, useMyGames, type AdventurerListing } from "../hooks/useAdventurerGames";
-import { useArcadeSalesForCollection } from "../hooks/useArcadeOrders";
+import {
+  useArcadeSalesForCollection,
+  useOffersReceivedForListings,
+  useUserOffers,
+  type ArcadeOrderModelCompat,
+} from "../hooks/useArcadeOrders";
 import { useMarketplaceActions } from "./marketplace/hooks/useMarketplaceActions";
 import { useTermsOfService } from "../contexts/TermsOfServiceContext";
 import { cn } from "../lib/utils";
 import { compareStarknetAddresses } from "../utils/address";
 import { formatPrice } from "../utils/price";
 import { isUserRejection } from "../utils/transaction";
-import { getPaymentTokenByAddress, CLIENT_FEE_BP } from "../services/marketplace/constants";
+import { getPaymentTokenByAddress, CLIENT_FEE_BP, marketplaceTokenKey } from "../services/marketplace/constants";
+import type { OrderModel } from "../services/marketplace/arcadeTypes";
 import type { Beast } from "../services/beast";
+import { formatAgo } from "../services/adventurers/format";
 import {
   ADVENTURER_ROYALTY_BP,
   GAME_CORE_ADDRESS,
   GAME_DUNGEONS,
+  IDLE_SECONDS,
+  acceptOfferBlocker,
+  buyBlocker,
   fetchGame,
   gameDungeonFor,
   gameStatus,
   gameTradeBlocker,
+  listBlocker,
   lootSurvivorPlayUrl,
+  playedSince,
   type AdventurerGame,
+  type GameStatus,
 } from "../services/adventurers";
 
-type Tab = "browse" | "mine" | "sold";
-type StatusFilter = "all" | "unplayed" | "in-progress";
-type Sort = "recent" | "price-asc" | "price-desc" | "level-desc";
+type Tab = "browse" | "mine" | "offers" | "sold";
+type Sort = "recent" | "price-asc" | "price-desc" | "level-desc" | "level-asc" | "health-desc" | "gold-desc" | "idle-desc" | "minted-desc";
+type MineFilter = "all" | "listed" | "offers" | GameStatus | "soulbound";
+
+const SORTS: Array<[Sort, string]> = [
+  ["recent", "Recently listed"],
+  ["price-asc", "Price: low to high"],
+  ["price-desc", "Price: high to low"],
+  ["level-desc", "Level: high to low"],
+  ["level-asc", "Level: low to high"],
+  ["health-desc", "Health: high to low"],
+  ["gold-desc", "Gold: high to low"],
+  ["idle-desc", "Longest idle"],
+  ["minted-desc", "Newest game"],
+];
+const LEVELS = [0, 5, 10, 15, 20, 30];
 
 const symbolFor = (currency?: string | null) => getPaymentTokenByAddress(currency ?? undefined)?.symbol ?? "STRK";
 const priceLabel = (l: { price: string; paymentToken?: string | null }) => {
   const symbol = symbolFor(l.paymentToken);
   return `${formatPrice(l.price, symbol)} ${symbol}`;
 };
+const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+const cmpBig = (a: bigint, b: bigint) => (a < b ? -1 : a > b ? 1 : 0);
 
-/** A ListDialog target: it only reads id/name from the Beast shape. */
-function gameListTarget(game: AdventurerGame): Beast {
-  const d = gameDungeonFor(game.minterId);
+function decodeMinter(tokenId: string): number {
+  try {
+    return Number((BigInt(tokenId) >> 168n) & 0xffffffn);
+  } catch {
+    return 0;
+  }
+}
+
+/** The Beast-shaped target ListDialog / MakeOfferDialog expect (they only read id + name). */
+function gameTarget(tokenId: string, game: AdventurerGame | null): Beast {
+  const d = gameDungeonFor(game?.minterId ?? decodeMinter(tokenId));
   return {
-    id: `game:0x${BigInt(game.tokenId).toString(16)}`,
-    tokenId: game.tokenId,
-    name: `${d.name} · Lv ${game.level} (#${BigInt(game.tokenId).toString(16).slice(-6)})`,
+    id: `game:0x${BigInt(tokenId).toString(16)}`,
+    tokenId,
+    name: `${d.name} · Lv ${game?.level ?? "?"} (#${BigInt(tokenId).toString(16).slice(-6)})`,
     image: "",
-    owner: game.owner ?? null,
+    owner: game?.owner ?? null,
     attributes: [],
     metadata: { attributes: [] },
     power: null,
@@ -81,6 +120,26 @@ function describeChange(before: AdventurerGame | null, after: AdventurerGame): s
   return out;
 }
 
+/** Why no one can buy a listing (dead / expired / stuck / soulbound / moved since listing), or null. */
+function unavailableReason(l: AdventurerListing): string | null {
+  if (!l.game) return null; // still loading: keep visible
+  if (l.game.decoded.soulbound) return "soulbound";
+  if (gameTradeBlocker(l.game)) return gameStatus(l.game);
+  if (playedSince(l.game, l.createdAt)) return "played";
+  return null;
+}
+
+/** Counts per status, plus soulbound. */
+function tally(games: Array<AdventurerGame | null>) {
+  const t = { unplayed: 0, "in-progress": 0, dead: 0, expired: 0, stuck: 0, soulbound: 0 } as Record<GameStatus | "soulbound", number>;
+  for (const g of games) {
+    if (!g) continue;
+    t[gameStatus(g)] += 1;
+    if (g.decoded.soulbound) t.soulbound += 1;
+  }
+  return t;
+}
+
 export default function AdventurerMarketplace() {
   const { address, account } = useAccount();
   const { hasAcceptedToS, openToSDialog } = useTermsOfService();
@@ -89,6 +148,13 @@ export default function AdventurerMarketplace() {
   const market = useAdventurerListings();
   const myGames = useMyGames(address);
   const sales = useArcadeSalesForCollection(GAME_CORE_ADDRESS, 50);
+
+  const myTokenKeys = useMemo(
+    () => (myGames.data ?? []).map((g) => marketplaceTokenKey(GAME_CORE_ADDRESS, g.tokenId)),
+    [myGames.data],
+  );
+  const offersReceived = useOffersReceivedForListings(GAME_CORE_ADDRESS, myTokenKeys, !!address);
+  const myOffers = useUserOffers(address, GAME_CORE_ADDRESS);
 
   const actions = useMarketplaceActions({
     account,
@@ -113,42 +179,69 @@ export default function AdventurerMarketplace() {
     [hasAcceptedToS, openToSDialog],
   );
 
-  // ---------------------------------------------------------------- browse
+  // ================================================================ listings
   const [dungeonFilter, setDungeonFilter] = useState<number | "all">("all");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [sort, setSort] = useState<Sort>("recent");
+  const [statusFilter, setStatusFilter] = useState<"all" | "unplayed" | "in-progress">("all");
+  const [minLevel, setMinLevel] = useState(0);
+  const [buyableOnly, setBuyableOnly] = useState(false);
   const [showUnavailable, setShowUnavailable] = useState(false);
+  const [sort, setSort] = useState<Sort>("recent");
+
+  const activeListings = useMemo(() => market.listings.filter((l) => l.active), [market.listings]);
+
+  const hiddenCounts = useMemo(() => {
+    const c = { dead: 0, expired: 0, stuck: 0, soulbound: 0, played: 0 } as Record<string, number>;
+    for (const l of activeListings) {
+      const r = unavailableReason(l);
+      if (r) c[r] = (c[r] ?? 0) + 1;
+    }
+    return c;
+  }, [activeListings]);
+
+  const listingTally = useMemo(() => tally(activeListings.map((l) => l.game)), [activeListings]);
 
   const browseListings = useMemo(() => {
-    const filtered = market.listings.filter((l) => {
-      if (!l.active) return false;
-      const status = l.game ? gameStatus(l.game) : null;
-      const unavailable = !l.game || !!gameTradeBlocker(l.game);
-      if (unavailable && !showUnavailable) return false;
-      if (dungeonFilter !== "all" && (l.game?.minterId ?? -1) !== dungeonFilter) return false;
-      if (statusFilter !== "all" && status !== statusFilter) return false;
+    const filtered = activeListings.filter((l) => {
+      if (!showUnavailable && unavailableReason(l)) return false;
+      if (dungeonFilter !== "all" && (l.game?.minterId ?? decodeMinter(l.tokenId)) !== dungeonFilter) return false;
+      if (statusFilter !== "all" && (!l.game || gameStatus(l.game) !== statusFilter)) return false;
+      if (minLevel > 0 && (l.game?.level ?? 0) < minLevel) return false;
+      if (buyableOnly && buyBlocker(l.game, l.createdAt)) return false;
       return true;
     });
-    const price = (l: AdventurerListing) => BigInt(l.price);
+    const idleSince = (l: AdventurerListing) => (l.game?.started ? (l.game.lastActionAt ?? Infinity) : (l.game?.decoded.mintedAt ?? Infinity));
     return filtered.sort((a, b) => {
       switch (sort) {
         case "price-asc":
-          return price(a) < price(b) ? -1 : price(a) > price(b) ? 1 : 0;
+          return cmpBig(BigInt(a.price), BigInt(b.price));
         case "price-desc":
-          return price(a) > price(b) ? -1 : price(a) < price(b) ? 1 : 0;
+          return cmpBig(BigInt(b.price), BigInt(a.price));
         case "level-desc":
           return (b.game?.level ?? 0) - (a.game?.level ?? 0);
+        case "level-asc":
+          return (a.game?.level ?? 0) - (b.game?.level ?? 0);
+        case "health-desc":
+          return (b.game?.health ?? 0) - (a.game?.health ?? 0);
+        case "gold-desc":
+          return (b.game?.gold ?? 0) - (a.game?.gold ?? 0);
+        case "idle-desc":
+          return idleSince(a) - idleSince(b);
+        case "minted-desc":
+          return (b.game?.decoded.mintedAt ?? 0) - (a.game?.decoded.mintedAt ?? 0);
         default:
           return (b.createdAt ?? 0) - (a.createdAt ?? 0) || b.orderId - a.orderId;
       }
     });
-  }, [market.listings, dungeonFilter, statusFilter, sort, showUnavailable]);
+  }, [activeListings, dungeonFilter, statusFilter, minLevel, buyableOnly, showUnavailable, sort]);
 
   const dungeonCounts = useMemo(() => {
     const counts = new Map<number, number>();
-    for (const l of market.listings) if (l.active && l.game) counts.set(l.game.minterId, (counts.get(l.game.minterId) ?? 0) + 1);
+    for (const l of activeListings) {
+      const m = l.game?.minterId ?? decodeMinter(l.tokenId);
+      counts.set(m, (counts.get(m) ?? 0) + 1);
+    }
     return counts;
-  }, [market.listings]);
+  }, [activeListings]);
 
   // ---------------------------------------------------------------- buying
   const [buying, setBuying] = useState<{ listing: AdventurerListing; fresh: AdventurerGame | null; changes: string[] } | null>(
@@ -170,10 +263,9 @@ export default function AdventurerMarketplace() {
       }
     });
 
-  const buyBlocker = (b: NonNullable<typeof buying>): string | null => {
-    if (!b.fresh) return "Couldn't find this game on Loot Survivor.";
-    if (b.fresh.owner && !compareStarknetAddresses(b.fresh.owner, b.listing.seller)) return "The seller no longer owns this game.";
-    return gameTradeBlocker(b.fresh);
+  const purchaseBlocker = (b: NonNullable<typeof buying>): string | null => {
+    if (b.fresh?.owner && !compareStarknetAddresses(b.fresh.owner, b.listing.seller)) return "The seller no longer owns this game.";
+    return buyBlocker(b.fresh, b.listing.createdAt);
   };
 
   const confirmBuy = async () => {
@@ -182,9 +274,9 @@ export default function AdventurerMarketplace() {
     const latest = await fetchGame(buying.listing.tokenId).catch(() => null);
     if (!latest) return toast.error("Couldn't re-check the game. Try again.");
     const changes = describeChange(buying.fresh, latest);
-    if (changes.length > 0) {
+    if (changes.length > 0 || buyBlocker(latest, buying.listing.createdAt)) {
       setBuying({ ...buying, fresh: latest, changes });
-      toast.warning("The game changed while you were reviewing it. Check the new state before buying.");
+      toast.warning("The game changed while you were reviewing it.");
       return;
     }
     const listing = buying.listing;
@@ -193,28 +285,59 @@ export default function AdventurerMarketplace() {
     void myGames.refetch();
   };
 
-  // ---------------------------------------------------------------- my games
-  const [hideFinished, setHideFinished] = useState(true);
+  // ---------------------------------------------------------------- offers (making)
+  const [offerTarget, setOfferTarget] = useState<{ tokenId: string; game: AdventurerGame | null } | null>(null);
+
+  // ================================================================ my games
+  const [mineFilter, setMineFilter] = useState<MineFilter>("all");
+  const [mineSort, setMineSort] = useState<"newest" | "level" | "last-action">("newest");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sendOpen, setSendOpen] = useState(false);
   const [listTarget, setListTarget] = useState<AdventurerGame | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [offersFor, setOffersFor] = useState<AdventurerGame | null>(null);
 
   const myListingByToken = useMemo(() => {
     const m = new Map<string, AdventurerListing>();
     if (!address) return m;
-    for (const l of market.listings) if (l.active && compareStarknetAddresses(l.seller, address)) m.set(l.tokenId, l);
+    for (const l of activeListings) if (compareStarknetAddresses(l.seller, address)) m.set(l.tokenId, l);
     return m;
-  }, [market.listings, address]);
+  }, [activeListings, address]);
 
-  const visibleMyGames = useMemo(
-    () => (myGames.data ?? []).filter((g) => !hideFinished || !gameTradeBlocker(g) || myListingByToken.has(g.tokenId)),
-    [myGames.data, hideFinished, myListingByToken],
-  );
-  const selectedGames = useMemo(
-    () => (myGames.data ?? []).filter((g) => selected.has(g.tokenId)),
-    [myGames.data, selected],
-  );
+  const offersByToken = useMemo(() => {
+    const m = new Map<string, ArcadeOrderModelCompat[]>();
+    for (const o of offersReceived.data ?? []) {
+      const id = BigInt(o.tokenId).toString();
+      m.set(id, [...(m.get(id) ?? []), o]);
+    }
+    return m;
+  }, [offersReceived.data]);
+
+  const allMine = useMemo(() => myGames.data ?? [], [myGames.data]);
+  const mineTally = useMemo(() => tally(allMine), [allMine]);
+  const visibleMyGames = useMemo(() => {
+    const keep = (g: AdventurerGame) => {
+      switch (mineFilter) {
+        case "all":
+          return true;
+        case "listed":
+          return myListingByToken.has(g.tokenId);
+        case "offers":
+          return offersByToken.has(g.tokenId);
+        case "soulbound":
+          return g.decoded.soulbound;
+        default:
+          return gameStatus(g) === mineFilter;
+      }
+    };
+    return allMine.filter(keep).sort((a, b) => {
+      if (mineSort === "level") return b.level - a.level;
+      if (mineSort === "last-action") return (b.lastActionAt ?? b.decoded.mintedAt) - (a.lastActionAt ?? a.decoded.mintedAt);
+      return b.decoded.mintedAt - a.decoded.mintedAt;
+    });
+  }, [allMine, mineFilter, mineSort, myListingByToken, offersByToken]);
+
+  const selectedGames = useMemo(() => allMine.filter((g) => selected.has(g.tokenId)), [allMine, selected]);
   const toggleSelected = (id: string) =>
     setSelected((s) => {
       const next = new Set(s);
@@ -223,15 +346,16 @@ export default function AdventurerMarketplace() {
       return next;
     });
 
-  const cancelListing = async (listing: AdventurerListing) => {
+  const cancelOrder = async (order: { listingId: string; orderId: number; tokenId: string }, label: string) => {
     if (!account) return;
-    setCancellingId(listing.listingId);
-    const toastId = toast.loading("Cancelling listing…");
+    setCancellingId(order.listingId);
+    const toastId = toast.loading(`Cancelling ${label}…`);
     try {
-      await actions.cancel(account, BigInt(listing.orderId), GAME_CORE_ADDRESS, BigInt(listing.tokenId));
-      toast.success("Listing cancelled", { id: toastId });
-      market.markListingAsSold(listing.listingId);
+      await actions.cancel(account, BigInt(order.orderId), GAME_CORE_ADDRESS, BigInt(order.tokenId));
+      toast.success(`${label[0].toUpperCase()}${label.slice(1)} cancelled`, { id: toastId });
+      market.markListingAsSold(order.listingId);
       void market.refetchOrders();
+      void myOffers.refetch();
     } catch (e) {
       if (isUserRejection(e)) toast.info("Cancel aborted", { id: toastId });
       else toast.error((e as Error).message || "Cancel failed", { id: toastId });
@@ -240,19 +364,57 @@ export default function AdventurerMarketplace() {
     }
   };
 
+  const acceptOffer = async (offer: ArcadeOrderModelCompat) => {
+    if (!offersFor) return;
+    const fresh = await fetchGame(offersFor.tokenId).catch(() => null);
+    const blocker = acceptOfferBlocker(fresh, offer.createdAt);
+    if (blocker) {
+      if (fresh) setOffersFor(fresh);
+      return toast.error(blocker);
+    }
+    const ok = await actions.handleAcceptOffer(offer as unknown as OrderModel);
+    if (ok) {
+      setOffersFor(null);
+      void offersReceived.refetch();
+      void myGames.refetch();
+    }
+  };
+
+  // ================================================================ my offers
+  const now = Math.floor(Date.now() / 1000);
+  const myOfferRows = useMemo(
+    () => (myOffers.data ?? []).filter((o) => o.status.into() === 1).sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)),
+    [myOffers.data],
+  );
+  const offerGames = useQuery({
+    queryKey: ["adventurerOfferGames", myOfferRows.map((o) => o.tokenId).join(",")],
+    enabled: tab === "offers" && myOfferRows.length > 0,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const ids = [...new Set(myOfferRows.map((o) => BigInt(o.tokenId).toString()))];
+      const games = await Promise.all(ids.map((id) => fetchGame(id).catch(() => null)));
+      return new Map(ids.map((id, i) => [id, games[i]]));
+    },
+  });
+
   const refresh = () => {
     void market.refetchOrders();
     void market.refetchGames();
     void myGames.refetch();
+    void offersReceived.refetch();
+    void myOffers.refetch();
     void sales.invalidateAndRefetch();
   };
 
-  // ---------------------------------------------------------------- render
+  // ================================================================ render
+  const receivedCount = offersReceived.data?.length ?? 0;
   const tabs: Array<{ value: Tab; label: string }> = [
-    { value: "browse", label: `Listings${market.listings.length ? ` (${market.listings.filter((l) => l.active).length})` : ""}` },
-    { value: "mine", label: "My Games" },
+    { value: "browse", label: `Listings${activeListings.length ? ` (${activeListings.length})` : ""}` },
+    { value: "mine", label: `My Games${allMine.length ? ` (${allMine.length})` : ""}${receivedCount ? ` · ${receivedCount} offer${receivedCount === 1 ? "" : "s"}` : ""}` },
+    { value: "offers", label: `My Offers${myOfferRows.length ? ` (${myOfferRows.length})` : ""}` },
     { value: "sold", label: "Recent Sales" },
   ];
+  const hiddenTotal = Object.values(hiddenCounts).reduce((a, b) => a + b, 0);
 
   return (
     <AppLayout topBar={<TopBar />}>
@@ -266,7 +428,7 @@ export default function AdventurerMarketplace() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="inline-flex gap-1 rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-1">
+          <div className="inline-flex flex-wrap gap-1 rounded-lg border border-gray-800 bg-[#0f0f13]/70 p-1">
             {tabs.map((t) => (
               <button
                 key={t.value}
@@ -280,63 +442,99 @@ export default function AdventurerMarketplace() {
               </button>
             ))}
           </div>
-          <Button variant="outline" size="sm" onClick={refresh} disabled={market.ordersFetching}>
+          <Button variant="outline" size="sm" onClick={refresh} disabled={market.ordersFetching} aria-label="Refresh">
             <RefreshCw className={cn("h-4 w-4", market.ordersFetching && "animate-spin")} />
           </Button>
         </div>
 
+        {/* ------------------------------------------------------------ listings */}
         {tab === "browse" && (
           <section className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <FilterChip active={dungeonFilter === "all"} onClick={() => setDungeonFilter("all")}>
-                All dungeons
+                All dungeons <Count n={activeListings.length} />
               </FilterChip>
               {GAME_DUNGEONS.map((d) => (
                 <FilterChip key={d.minterId} active={dungeonFilter === d.minterId} onClick={() => setDungeonFilter(d.minterId)}>
                   <span className="h-2 w-2 rounded-full" style={{ background: d.accentColor }} />
-                  {d.name}
-                  {dungeonCounts.get(d.minterId) ? <span className="text-zinc-500">{dungeonCounts.get(d.minterId)}</span> : null}
+                  {d.name} <Count n={dungeonCounts.get(d.minterId) ?? 0} />
                 </FilterChip>
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {(
-                [
-                  ["all", "Any status"],
-                  ["unplayed", "Unplayed"],
-                  ["in-progress", "Game started"],
-                ] as const
-              ).map(([v, label]) => (
-                <FilterChip key={v} active={statusFilter === v} onClick={() => setStatusFilter(v)}>
-                  {label}
-                </FilterChip>
-              ))}
+              <FilterChip active={statusFilter === "all"} onClick={() => setStatusFilter("all")}>
+                Any status
+              </FilterChip>
+              <FilterChip active={statusFilter === "unplayed"} onClick={() => setStatusFilter("unplayed")}>
+                Unplayed <Count n={listingTally.unplayed} />
+              </FilterChip>
+              <FilterChip active={statusFilter === "in-progress"} onClick={() => setStatusFilter("in-progress")}>
+                Live <Count n={listingTally["in-progress"]} />
+              </FilterChip>
+              <select
+                value={minLevel}
+                onChange={(e) => setMinLevel(Number(e.target.value))}
+                className="h-8 rounded-md border border-white/10 bg-black/40 px-2 text-xs text-zinc-200"
+                aria-label="Minimum level"
+              >
+                {LEVELS.map((lv) => (
+                  <option key={lv} value={lv}>
+                    {lv === 0 ? "Any level" : `Level ${lv}+`}
+                  </option>
+                ))}
+              </select>
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value as Sort)}
                 className="h-8 rounded-md border border-white/10 bg-black/40 px-2 text-xs text-zinc-200"
                 aria-label="Sort"
               >
-                <option value="recent">Recently listed</option>
-                <option value="price-asc">Price: low to high</option>
-                <option value="price-desc">Price: high to low</option>
-                <option value="level-desc">Level: high to low</option>
+                {SORTS.map(([v, label]) => (
+                  <option key={v} value={v}>
+                    {label}
+                  </option>
+                ))}
               </select>
-              <label className="flex items-center gap-1.5 text-xs text-zinc-400">
-                <input type="checkbox" checked={showUnavailable} onChange={(e) => setShowUnavailable(e.target.checked)} />
-                Show dead / expired
+              <label className="flex items-center gap-1.5 text-xs text-zinc-400" title="Hide games in cooldown or otherwise not buyable right now">
+                <input type="checkbox" checked={buyableOnly} onChange={(e) => setBuyableOnly(e.target.checked)} />
+                Buyable now
               </label>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-500">
+              <span>
+                Showing {browseListings.length} of {activeListings.length}
+              </span>
+              {hiddenTotal > 0 && (
+                <>
+                  <span>
+                    {showUnavailable ? "Including" : "Hidden"}:{" "}
+                    {[
+                      [hiddenCounts.dead, "dead"],
+                      [hiddenCounts.expired, "expired"],
+                      [hiddenCounts.soulbound, "soulbound"],
+                      [hiddenCounts.stuck, "stuck"],
+                      [hiddenCounts.played, "played since listed"],
+                    ]
+                      .filter(([n]) => (n as number) > 0)
+                      .map(([n, label]) => `${n} ${label}`)
+                      .join(" · ")}
+                  </span>
+                  <label className="flex items-center gap-1.5 text-zinc-400">
+                    <input type="checkbox" checked={showUnavailable} onChange={(e) => setShowUnavailable(e.target.checked)} />
+                    Show them
+                  </label>
+                </>
+              )}
             </div>
 
             {market.listingsError ? (
               <p className="text-sm text-red-400">{market.listingsError}</p>
             ) : market.ordersLoading || market.gamesLoading ? (
-              <p className="flex items-center gap-2 text-sm text-zinc-400">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading listings…
-              </p>
+              <Spinner>Loading listings…</Spinner>
             ) : browseListings.length === 0 ? (
               <EmptyState>
-                No games listed{dungeonFilter !== "all" || statusFilter !== "all" ? " for these filters" : " yet"}. List one from{" "}
+                No games listed{activeListings.length ? " for these filters" : " yet"}. List one from{" "}
                 <button className="text-gold underline" onClick={() => setTab("mine")}>
                   My Games
                 </button>
@@ -346,10 +544,11 @@ export default function AdventurerMarketplace() {
               <Grid>
                 {browseListings.map((l) => {
                   const mine = !!address && compareStarknetAddresses(l.seller, address);
-                  const blocker = l.game ? gameTradeBlocker(l.game) : "Loading game state…";
+                  const blocker = l.game ? buyBlocker(l.game, l.createdAt) : "Loading game state…";
+                  const offerBlocker = l.game ? gameTradeBlocker(l.game) : "Loading game state…";
                   return (
                     <AdventurerCard key={l.listingId} tokenId={l.tokenId} game={l.game} listedAt={l.createdAt}>
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="space-y-1.5">
                         <span className="flex items-center gap-1 text-sm font-bold text-gold">
                           <TokenIcon symbol={symbolFor(l.paymentToken)} size="sm" />
                           {priceLabel(l)}
@@ -358,23 +557,36 @@ export default function AdventurerMarketplace() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-7 px-2 text-xs"
+                            className="h-7 w-full text-xs"
                             disabled={cancellingId === l.listingId}
-                            onClick={() => cancelListing(l)}
+                            onClick={() => cancelOrder(l, "listing")}
                           >
-                            {cancellingId === l.listingId ? "Cancelling…" : "Cancel"}
+                            {cancellingId === l.listingId ? "Cancelling…" : "Cancel listing"}
                           </Button>
                         ) : (
-                          <Button
-                            size="sm"
-                            className="h-7 bg-gold/15 px-3 text-xs font-bold text-gold border border-gold hover:bg-gold/20"
-                            disabled={!address || !!blocker || checkingId === l.listingId || actions.buyingListingId === l.listingId}
-                            title={blocker ?? undefined}
-                            onClick={() => openBuy(l)}
-                          >
-                            {checkingId === l.listingId ? "Checking…" : actions.buyingListingId === l.listingId ? "Buying…" : "Buy"}
-                          </Button>
+                          <div className="flex gap-1.5">
+                            <Button
+                              size="sm"
+                              className="h-7 flex-1 bg-gold/15 text-xs font-bold text-gold border border-gold hover:bg-gold/20"
+                              disabled={!address || !!blocker || checkingId === l.listingId || actions.buyingListingId === l.listingId}
+                              title={blocker ?? undefined}
+                              onClick={() => openBuy(l)}
+                            >
+                              {checkingId === l.listingId ? "Checking…" : actions.buyingListingId === l.listingId ? "Buying…" : "Buy"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs"
+                              disabled={!address || !!offerBlocker}
+                              title={offerBlocker ?? "Make an offer"}
+                              onClick={() => requireToS(() => setOfferTarget({ tokenId: l.tokenId, game: l.game }))}
+                            >
+                              Offer
+                            </Button>
+                          </div>
                         )}
+                        {!mine && blocker && l.game && <p className="text-[10px] leading-tight text-amber-300/80">{blocker}</p>}
                       </div>
                     </AdventurerCard>
                   );
@@ -384,42 +596,66 @@ export default function AdventurerMarketplace() {
           </section>
         )}
 
+        {/* ------------------------------------------------------------ my games */}
         {tab === "mine" && (
           <section className="space-y-3">
             {!address ? (
               <EmptyState>Connect your wallet to see your games.</EmptyState>
             ) : (
               <>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <label className="flex items-center gap-1.5 text-xs text-zinc-400">
-                    <input type="checkbox" checked={hideFinished} onChange={(e) => setHideFinished(e.target.checked)} />
-                    Hide dead / expired games
-                  </label>
-                  {selected.size > 0 && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-zinc-400">{selected.size} selected</span>
-                      <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setSelected(new Set())}>
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="h-7 bg-gold/15 text-gold border border-gold hover:bg-gold/20"
-                        onClick={() => setSendOpen(true)}
-                      >
-                        <Send className="mr-1 h-3.5 w-3.5" /> Send selected
-                      </Button>
-                    </div>
-                  )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {(
+                    [
+                      ["all", "All", allMine.length],
+                      ["unplayed", "Unplayed", mineTally.unplayed],
+                      ["in-progress", "Live", mineTally["in-progress"]],
+                      ["listed", "Listed", myListingByToken.size],
+                      ["offers", "Has offers", offersByToken.size],
+                      ["dead", "Dead", mineTally.dead],
+                      ["expired", "Expired", mineTally.expired],
+                      ["stuck", "Stuck", mineTally.stuck],
+                      ["soulbound", "Soulbound", mineTally.soulbound],
+                    ] as Array<[MineFilter, string, number]>
+                  )
+                    .filter(([v, , n]) => v === "all" || n > 0)
+                    .map(([v, label, n]) => (
+                      <FilterChip key={v} active={mineFilter === v} onClick={() => setMineFilter(v)}>
+                        {label} <Count n={n} />
+                      </FilterChip>
+                    ))}
+                  <select
+                    value={mineSort}
+                    onChange={(e) => setMineSort(e.target.value as typeof mineSort)}
+                    className="h-8 rounded-md border border-white/10 bg-black/40 px-2 text-xs text-zinc-200"
+                    aria-label="Sort my games"
+                  >
+                    <option value="newest">Newest</option>
+                    <option value="level">Level</option>
+                    <option value="last-action">Last played</option>
+                  </select>
                 </div>
+                {selected.size > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-zinc-400">{selected.size} selected</span>
+                    <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setSelected(new Set())} aria-label="Clear selection">
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button size="sm" className="h-7 bg-gold/15 text-gold border border-gold hover:bg-gold/20" onClick={() => setSendOpen(true)}>
+                      <Send className="mr-1 h-3.5 w-3.5" /> Send selected
+                    </Button>
+                  </div>
+                )}
+                <p className="text-[11px] text-zinc-500">
+                  Games can be listed when unplayed, or {IDLE_SECONDS / 60} minutes after their last move (once it's revealed). Playing a
+                  listed game voids the listing for buyers, so cancel it first. Click cards to select several to send.
+                </p>
                 {myGames.isLoading ? (
-                  <p className="flex items-center gap-2 text-sm text-zinc-400">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Loading your games…
-                  </p>
+                  <Spinner>Loading your games…</Spinner>
                 ) : myGames.error ? (
                   <p className="text-sm text-red-400">Couldn't load your games from Loot Survivor.</p>
                 ) : visibleMyGames.length === 0 ? (
                   <EmptyState>
-                    No {hideFinished ? "playable " : ""}games in this wallet.{" "}
+                    No games{mineFilter === "all" ? " in this wallet" : " match this filter"}.{" "}
                     <a className="text-gold underline" href="https://www.lootsurvivor.io/beastmode" target="_blank" rel="noopener noreferrer">
                       Get one on Loot Survivor
                     </a>
@@ -429,7 +665,9 @@ export default function AdventurerMarketplace() {
                   <Grid>
                     {visibleMyGames.map((g) => {
                       const listing = myListingByToken.get(g.tokenId);
-                      const blocker = gameTradeBlocker(g);
+                      const sendBlock = gameTradeBlocker(g);
+                      const listBlock = listBlocker(g);
+                      const offers = offersByToken.get(g.tokenId) ?? [];
                       return (
                         <AdventurerCard
                           key={g.tokenId}
@@ -437,11 +675,11 @@ export default function AdventurerMarketplace() {
                           game={g}
                           listedAt={listing?.createdAt}
                           selected={selected.has(g.tokenId)}
-                          onClick={blocker ? undefined : () => toggleSelected(g.tokenId)}
+                          onClick={sendBlock ? undefined : () => toggleSelected(g.tokenId)}
                         >
-                          <div className="flex flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                            {listing ? (
-                              <>
+                          <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                            {listing && (
+                              <div className="flex items-center gap-1.5">
                                 <span className="flex items-center gap-1 text-xs font-bold text-gold">
                                   <Tag className="h-3 w-3" /> {priceLabel(listing)}
                                 </span>
@@ -450,47 +688,54 @@ export default function AdventurerMarketplace() {
                                   variant="outline"
                                   className="ml-auto h-7 px-2 text-xs"
                                   disabled={cancellingId === listing.listingId}
-                                  onClick={() => cancelListing(listing)}
+                                  onClick={() => cancelOrder(listing, "listing")}
                                 >
-                                  {cancellingId === listing.listingId ? "Cancelling…" : "Cancel listing"}
+                                  {cancellingId === listing.listingId ? "Cancelling…" : "Cancel"}
                                 </Button>
-                              </>
-                            ) : (
-                              <>
+                              </div>
+                            )}
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {!listing && (
                                 <Button
                                   size="sm"
                                   className="h-7 bg-gold/15 px-2 text-xs text-gold border border-gold hover:bg-gold/20"
-                                  disabled={!!blocker}
-                                  title={blocker ?? undefined}
+                                  disabled={!!listBlock}
+                                  title={listBlock ?? undefined}
                                   onClick={() => requireToS(() => setListTarget(g))}
                                 >
                                   List
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 px-2 text-xs"
-                                  disabled={!!blocker}
-                                  title={blocker ?? undefined}
-                                  onClick={() => {
-                                    setSelected(new Set([g.tokenId]));
-                                    setSendOpen(true);
-                                  }}
-                                >
-                                  Send
-                                </Button>
-                              </>
-                            )}
-                            {gameStatus(g) !== "dead" && (
-                              <a
-                                href={lootSurvivorPlayUrl(g.tokenId, g.minterId)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="ml-auto flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
+                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-xs"
+                                disabled={!!sendBlock}
+                                title={sendBlock ?? undefined}
+                                onClick={() => {
+                                  setSelected(new Set([g.tokenId]));
+                                  setSendOpen(true);
+                                }}
                               >
-                                Play <ExternalLink className="h-3 w-3" />
-                              </a>
-                            )}
+                                Send
+                              </Button>
+                              {offers.length > 0 && (
+                                <Button size="sm" variant="outline" className="h-7 border-gold/50 px-2 text-xs text-gold" onClick={() => setOffersFor(g)}>
+                                  <HandCoins className="mr-1 h-3.5 w-3.5" /> {offers.length} offer{offers.length === 1 ? "" : "s"}
+                                </Button>
+                              )}
+                              {gameStatus(g) !== "dead" && gameStatus(g) !== "expired" && (
+                                <a
+                                  href={lootSurvivorPlayUrl(g.tokenId, g.minterId)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="ml-auto flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
+                                >
+                                  Play <ExternalLink className="h-3 w-3" />
+                                </a>
+                              )}
+                            </div>
+                            {!listing && listBlock && !sendBlock && <p className="text-[10px] leading-tight text-amber-300/80">{listBlock}</p>}
                           </div>
                         </AdventurerCard>
                       );
@@ -502,10 +747,83 @@ export default function AdventurerMarketplace() {
           </section>
         )}
 
+        {/* ------------------------------------------------------------ my offers */}
+        {tab === "offers" && (
+          <section className="space-y-2">
+            {!address ? (
+              <EmptyState>Connect your wallet to see your offers.</EmptyState>
+            ) : myOffers.isLoading ? (
+              <Spinner>Loading offers…</Spinner>
+            ) : myOfferRows.length === 0 ? (
+              <EmptyState>You haven't made any offers on games. Use “Offer” on a listing.</EmptyState>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-white/[0.06]">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-white/[0.03] text-zinc-500">
+                    <tr>
+                      <th className="px-3 py-2">Game</th>
+                      <th className="px-3 py-2">Status now</th>
+                      <th className="px-3 py-2">Offer</th>
+                      <th className="px-3 py-2">Made</th>
+                      <th className="px-3 py-2">Expires</th>
+                      <th className="px-3 py-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {myOfferRows.map((o) => {
+                      const id = BigInt(o.tokenId).toString();
+                      const g = offerGames.data?.get(id) ?? null;
+                      const d = gameDungeonFor(decodeMinter(id));
+                      const expired = o.expiration <= now;
+                      const moved = playedSince(g, o.createdAt);
+                      return (
+                        <tr key={o.id} className="border-t border-white/[0.04]">
+                          <td className="px-3 py-2">
+                            <span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ background: d.accentColor }} />
+                            {d.name} {g ? `Lv ${g.level}` : ""}{" "}
+                            <span className="font-mono text-zinc-500">#{BigInt(o.tokenId).toString(16).slice(-6)}</span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex flex-wrap items-center gap-1">
+                              {g ? <GameStatusBadge status={gameStatus(g)} /> : <span className="text-zinc-500">…</span>}
+                              {moved && <span className="text-amber-300">played since</span>}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 font-semibold text-gold">{priceLabel({ price: o.price, paymentToken: o.currency })}</td>
+                          <td className="px-3 py-2 text-zinc-400">{o.createdAt ? formatAgo(o.createdAt) : "—"}</td>
+                          <td className={cn("px-3 py-2", expired ? "text-red-400" : "text-zinc-400")}>
+                            {expired ? "Expired" : new Date(o.expiration * 1000).toLocaleDateString()}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs"
+                              disabled={cancellingId === String(o.id)}
+                              onClick={() => cancelOrder({ listingId: String(o.id), orderId: o.id, tokenId: id }, "offer")}
+                            >
+                              {cancellingId === String(o.id) ? "Cancelling…" : "Cancel"}
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="text-[11px] text-zinc-500">
+              Offers lock in the price, not the game: if the owner keeps playing, BeastDex won't let them accept an older offer, but
+              the marketplace contract itself doesn't check. Cancel offers on games whose state changed, and prefer short durations.
+            </p>
+          </section>
+        )}
+
+        {/* ------------------------------------------------------------ sales */}
         {tab === "sold" && (
           <section>
             {sales.isLoading ? (
-              <p className="text-sm text-zinc-400">Loading sales…</p>
+              <Spinner>Loading sales…</Spinner>
             ) : (sales.data ?? []).length === 0 ? (
               <EmptyState>No adventurer sales yet.</EmptyState>
             ) : (
@@ -544,30 +862,57 @@ export default function AdventurerMarketplace() {
         )}
 
         <p className="text-[11px] text-zinc-600">
-          Sellers pay the game's {ADVENTURER_ROYALTY_BP / 100}% creator royalty (set by Loot Survivor on the NFT contract); buyers
-          pay the {CLIENT_FEE_BP / 100}% BeastDex client fee on top of the price.
+          Sellers pay the game's {ADVENTURER_ROYALTY_BP / 100}% creator royalty (set by Loot Survivor on the NFT contract); buyers pay
+          the {CLIENT_FEE_BP / 100}% BeastDex client fee on top of the price.
         </p>
       </div>
 
       <ListDialog
         open={!!listTarget}
         onOpenChange={(o) => !o && setListTarget(null)}
-        beast={listTarget ? gameListTarget(listTarget) : null}
+        beast={listTarget ? gameTarget(listTarget.tokenId, listTarget) : null}
         collection={GAME_CORE_ADDRESS}
         itemLabel="Game"
         notice={
           listTarget?.started ? (
-            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-200">
-              This game has started. Buyers see its live state and a "played since listed" flag if you keep playing, so
-              cancel the listing before you play on.
-            </div>
+            <Warning>
+              This game has started. If you play it after listing, buyers can't purchase it until you relist, so cancel the
+              listing before you play on.
+            </Warning>
           ) : null
         }
-        existingListings={listTarget && myListingByToken.get(listTarget.tokenId) ? [myListingByToken.get(listTarget.tokenId)!] : []}
         onListed={() => {
           setListTarget(null);
           void actions.handleListed();
         }}
+      />
+
+      <MakeOfferDialog
+        open={!!offerTarget}
+        onOpenChange={(o) => !o && setOfferTarget(null)}
+        beast={offerTarget ? gameTarget(offerTarget.tokenId, offerTarget.game) : null}
+        tokenId={offerTarget?.tokenId}
+        collection={GAME_CORE_ADDRESS}
+        itemLabel="Game"
+        notice={
+          <Warning>
+            You're offering on the game as it is now. If the owner plays after your offer, BeastDex won't let them accept it, but
+            other marketplaces might. Choose a short duration.
+          </Warning>
+        }
+        onOfferMade={() => {
+          setOfferTarget(null);
+          setTimeout(() => void myOffers.refetch(), 3000);
+        }}
+      />
+
+      <GameOffersDialog
+        open={!!offersFor}
+        onOpenChange={(o) => !o && setOffersFor(null)}
+        game={offersFor}
+        offers={offersFor ? (offersByToken.get(offersFor.tokenId) ?? []) : []}
+        acceptingId={actions.acceptingOfferId}
+        onAccept={acceptOffer}
       />
 
       <SendGamesDialog
@@ -591,24 +936,19 @@ export default function AdventurerMarketplace() {
           onConfirm={confirmBuy}
           itemLabel="Game"
           itemName={`${gameDungeonFor(buying.fresh?.minterId ?? decodeMinter(buying.listing.tokenId)).name} · Lv ${buying.fresh?.level ?? "?"}`}
-          confirmDisabled={!!buyBlocker(buying)}
+          confirmDisabled={!!purchaseBlocker(buying)}
           preview={
             <div className="space-y-2">
               <div className="mx-auto w-[240px]">
                 <AdventurerCard tokenId={buying.listing.tokenId} game={buying.fresh} listedAt={buying.listing.createdAt} />
               </div>
-              {buyBlocker(buying) && (
-                <Warning tone="red">{buyBlocker(buying)}</Warning>
-              )}
+              {purchaseBlocker(buying) && <Warning tone="red">{purchaseBlocker(buying)}</Warning>}
               {buying.changes.length > 0 && (
                 <Warning>Changed since you last saw it: {buying.changes.join(", ")}. The card shows the current state.</Warning>
               )}
-              {!buyBlocker(buying) && playedSinceListed(buying.fresh, buying.listing.createdAt) && (
-                <Warning>The seller has played this game since listing it. The card shows the current state.</Warning>
-              )}
-              {!buyBlocker(buying) && buying.fresh?.started && (
+              {!purchaseBlocker(buying) && buying.fresh?.started && (
                 <p className="text-center text-[11px] text-zinc-500">
-                  The seller can still play until the sale lands. BeastDex re-checks the game just before you sign.
+                  Untouched since it was listed. BeastDex re-checks it once more just before you sign.
                 </p>
               )}
             </div>
@@ -619,22 +959,24 @@ export default function AdventurerMarketplace() {
   );
 }
 
-const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
-
-function decodeMinter(tokenId: string): number {
-  try {
-    return Number((BigInt(tokenId) >> 168n) & 0xffffffn);
-  } catch {
-    return 0;
-  }
-}
-
 function Grid({ children }: { children: ReactNode }) {
   return <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{children}</div>;
 }
 
 function EmptyState({ children }: { children: ReactNode }) {
   return <div className="rounded-xl border border-white/[0.06] bg-surface/40 p-8 text-center text-sm text-zinc-400">{children}</div>;
+}
+
+function Spinner({ children }: { children: ReactNode }) {
+  return (
+    <p className="flex items-center gap-2 text-sm text-zinc-400">
+      <Loader2 className="h-4 w-4 animate-spin" /> {children}
+    </p>
+  );
+}
+
+function Count({ n }: { n: number }) {
+  return <span className="text-zinc-500">{n}</span>;
 }
 
 function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {

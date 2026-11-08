@@ -9,6 +9,12 @@ import {
   GAME_CORE_ADDRESS,
   levelFromXp,
   lootSurvivorPlayUrl,
+  listBlocker,
+  buyBlocker,
+  acceptOfferBlocker,
+  playedSince,
+  secondsUntilIdle,
+  IDLE_SECONDS,
 } from "../src/services/adventurers";
 
 // A real Beast Mode game (lootsurvivor.io/play?id=…&dungeon=beastmode)
@@ -101,5 +107,50 @@ describe("dungeons and links", () => {
     const [from, to, low, high] = call.calldata as string[];
     expect([from, to]).toEqual(["0x1", "0x2"]);
     expect((BigInt(high) << 128n) + BigInt(low)).toBe(BigInt(BEAST_MODE_ID));
+  });
+});
+
+describe("trading rules", () => {
+  const base = {
+    tokenId: "0x000000000000000000000100000000020000000001c84854010d862100172621",
+    score: 22,
+    health: 128,
+    gold: 8,
+    actionCount: 7,
+    started: true,
+    gameOver: false,
+    stuck: false,
+    lastActionAt: "2026-11-08T22:00:00.000Z",
+  };
+  const lastAction = Date.parse(base.lastActionAt) / 1000;
+  const live = gameFromRow(base)!;
+  const unplayed = gameFromRow({ ...base, started: false, actionCount: 0, lastActionAt: null })!;
+
+  it("lists unplayed games any time, started games after 5 idle minutes", () => {
+    expect(listBlocker(unplayed, lastAction)).toBeNull();
+    expect(listBlocker(live, lastAction + 60)).toMatch(/Wait 4 min/);
+    expect(listBlocker(live, lastAction + IDLE_SECONDS)).toBeNull();
+    expect(secondsUntilIdle(live, lastAction + 100)).toBe(IDLE_SECONDS - 100);
+  });
+
+  it("refuses when the last action time is unknown", () => {
+    expect(listBlocker({ ...live, lastActionAt: null }, lastAction + 9999)).toMatch(/Couldn't read/);
+  });
+
+  it("voids a listing once the game moves after it", () => {
+    const listedAt = lastAction + 600;
+    const later = listedAt + 3600;
+    expect(buyBlocker(live, listedAt, later)).toBeNull();
+    const playedAfter = { ...live, lastActionAt: listedAt + 10 };
+    expect(playedSince(playedAfter, listedAt)).toBe(true);
+    expect(buyBlocker(playedAfter, listedAt, later)).toMatch(/after listing/);
+    expect(buyBlocker(gameFromRow({ ...base, gameOver: true })!, listedAt, later)).toMatch(/dead/);
+    expect(buyBlocker(null, listedAt, later)).toMatch(/Couldn't find/);
+  });
+
+  it("blocks accepting an offer made before the owner's last move", () => {
+    expect(acceptOfferBlocker(live, lastAction + 60, lastAction + 3600)).toBeNull();
+    expect(acceptOfferBlocker(live, lastAction - 60, lastAction + 3600)).toMatch(/played since this offer/);
+    expect(acceptOfferBlocker(live, lastAction + 60, lastAction + 120)).toMatch(/Wait/);
   });
 });

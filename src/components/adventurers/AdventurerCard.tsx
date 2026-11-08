@@ -1,31 +1,54 @@
-import type { ReactNode } from "react";
-import { AlertTriangle, Clock, Coins, ExternalLink, Heart, Lock, Sparkles } from "lucide-react";
+import type { CSSProperties, ReactNode } from "react";
+import { AlertTriangle, Clock, Coins, ExternalLink, Heart, Sparkles } from "lucide-react";
 import { cn } from "../../lib/utils";
 import {
   dungeonImageUrl,
   gameDungeonFor,
   gameStatus,
   lootSurvivorWatchUrl,
+  playedSince,
+  secondsUntilIdle,
   type AdventurerGame,
   type GameStatus,
 } from "../../services/adventurers";
 import { decodeGameTokenId } from "../../services/adventurers/tokenId";
-import { formatAgo, playedSinceListed } from "../../services/adventurers/format";
+import { formatAgo } from "../../services/adventurers/format";
 
-const STATUS_BADGE: Record<GameStatus, { label: string; className: string }> = {
-  unplayed: { label: "Unplayed", className: "border-emerald-500/40 bg-emerald-900/60 text-emerald-300" },
-  "in-progress": { label: "Game started", className: "border-amber-500/40 bg-amber-900/60 text-amber-300" },
-  dead: { label: "Dead", className: "border-red-500/40 bg-red-950/70 text-red-300" },
-  expired: { label: "Expired", className: "border-zinc-500/40 bg-zinc-900/80 text-zinc-400" },
-  stuck: { label: "Stuck", className: "border-orange-500/40 bg-orange-950/70 text-orange-300" },
+/** Plate colours, in the style of the beast card's grade badge. */
+const STATUS_PLATE: Record<GameStatus, { label: string; title: string; bg: string; fg: string; border: string }> = {
+  unplayed: { label: "UNPLAYED", title: "Fresh ticket: not started yet", bg: "#c4a44a", fg: "#000", border: "#f3dc8a" },
+  "in-progress": { label: "LIVE", title: "Game started: the adventurer is alive", bg: "#15803d", fg: "#fff", border: "#86efac" },
+  dead: { label: "DEAD", title: "The adventurer died", bg: "#dc2626", fg: "#fff", border: "#fca5a5" },
+  expired: { label: "EXPIRED", title: "The game's play window has ended", bg: "#3f3f46", fg: "#d4d4d8", border: "#71717a" },
+  stuck: { label: "STUCK", title: "An action was never revealed", bg: "#c2410c", fg: "#fff", border: "#fdba74" },
 };
 
-export function GameStatusBadge({ status }: { status: GameStatus }) {
-  const b = STATUS_BADGE[status];
+const plateStyle = (bg: string, fg: string, border: string): CSSProperties => ({
+  background: bg,
+  color: fg,
+  border: `1px solid ${border}`,
+  borderRadius: 4,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.6)",
+  fontWeight: "bold",
+  letterSpacing: 0.5,
+  lineHeight: 1,
+});
+
+function Plate({ children, title, style }: { children: ReactNode; title: string; style: CSSProperties }) {
   return (
-    <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider", b.className)}>
-      {b.label}
+    <span title={title} style={style} className="px-[5px] py-[3px] text-[9px]">
+      {children}
     </span>
+  );
+}
+
+/** Grade-style status plate (also used in lists and dialogs). */
+export function GameStatusBadge({ status }: { status: GameStatus }) {
+  const p = STATUS_PLATE[status];
+  return (
+    <Plate title={p.title} style={plateStyle(p.bg, p.fg, p.border)}>
+      {p.label}
+    </Plate>
   );
 }
 
@@ -45,8 +68,10 @@ export function AdventurerCard({ tokenId, game, listedAt, selected, onClick, chi
   const decoded = game?.decoded ?? decodeGameTokenId(tokenId);
   const dungeon = gameDungeonFor(decoded?.minterId ?? 0);
   const status = game ? gameStatus(game) : null;
-  const changed = playedSinceListed(game, listedAt);
-  const shortId = `${BigInt(tokenId).toString(16).slice(-6)}`;
+  const changed = playedSince(game, listedAt);
+  const coolingFor = game && status === "in-progress" ? secondsUntilIdle(game) : 0;
+  const inBattle = !!game && status === "in-progress" && game.beastHealth > 0;
+  const shortId = BigInt(tokenId).toString(16).slice(-6);
 
   return (
     <div
@@ -66,21 +91,35 @@ export function AdventurerCard({ tokenId, game, listedAt, selected, onClick, chi
           loading="lazy"
           className={cn("h-full w-full object-cover", (status === "dead" || status === "expired") && "grayscale opacity-50")}
         />
+        {/* Status plates, top-left like the beast grade badge */}
+        <div className="absolute left-[5px] top-[5px] z-10 flex flex-wrap gap-1">
+          {status && <GameStatusBadge status={status} />}
+          {decoded?.soulbound && (
+            <Plate title="Soulbound: can't be sold or sent" style={plateStyle("#0b0b0d", "#fff", "rgba(255,255,255,0.25)")}>
+              SOULBOUND
+            </Plate>
+          )}
+          {inBattle && (
+            <Plate title={`In a fight (beast has ${game!.beastHealth} HP)`} style={plateStyle("#6d28d9", "#fff", "#c4b5fd")}>
+              IN BATTLE
+            </Plate>
+          )}
+          {coolingFor !== null && coolingFor > 0 && (
+            <Plate
+              title="Played under 5 minutes ago: can be sold once its last move is revealed"
+              style={plateStyle("#0b0b0d", "#fcd34d", "#fcd34d88")}
+            >
+              COOLDOWN {Math.ceil(coolingFor / 60)}M
+            </Plate>
+          )}
+        </div>
         <span
-          className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/75 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white"
+          className="absolute right-[5px] top-[5px] flex items-center gap-1 rounded-full bg-black/75 px-2 py-0.5 text-[10px] font-bold text-white"
           title={`Minted by ${dungeon.name} (minter ${dungeon.minterId})`}
         >
           <span className="h-1.5 w-1.5 rounded-full" style={{ background: dungeon.accentColor }} />
           {dungeon.name}
         </span>
-        <div className="absolute right-2 top-2 flex flex-col items-end gap-1">
-          {status && <GameStatusBadge status={status} />}
-          {decoded?.soulbound && (
-            <span className="flex items-center gap-1 rounded-full border border-zinc-500/40 bg-black/75 px-2 py-0.5 text-[10px] font-bold uppercase text-zinc-300">
-              <Lock className="h-3 w-3" /> Soulbound
-            </span>
-          )}
-        </div>
         <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/90 to-transparent px-2 pb-1.5 pt-6">
           <span className="text-lg font-bold leading-none text-white">
             {game ? `Lv ${game.level}` : "—"}
@@ -105,8 +144,9 @@ export function AdventurerCard({ tokenId, game, listedAt, selected, onClick, chi
               {game.started ? (
                 <>
                   <Clock className="h-3 w-3" />
+                  Game started ·{" "}
                   {game.lastActionAt
-                    ? `Last action ${formatAgo(game.lastActionAt)}`
+                    ? `last action ${formatAgo(game.lastActionAt)}`
                     : `${game.actionCount} action${game.actionCount === 1 ? "" : "s"}`}
                 </>
               ) : (
