@@ -8,6 +8,8 @@ import {
   quoteExactOutput,
   sameToken,
   swapPremium,
+  tokenKey,
+  totalCap,
   type ExactOutputQuote,
 } from "../src/services/marketplace/swap";
 import { BEASTS_COLLECTION_ADDRESS, CLIENT_FEE_BP, clientFeeBpFor, sellerRoyaltyFor } from "../src/services/marketplace/constants";
@@ -119,15 +121,38 @@ describe("max spend and price moves", () => {
   it("stops when a fresh quote needs more than the confirmed maximum", async () => {
     mockQuote(apiQuote);
     await expect(
-      prepareSwapForPurchase({ token: STRK, slippageBp: 100, maxIn: 9n * e18 }, SURV, 10n * e18),
+      prepareSwapForPurchase({ token: STRK, slippageBp: 100, caps: { [tokenKey(SURV)]: 9n * e18 } }, SURV, 10n * e18),
     ).rejects.toBeInstanceOf(PriceMovedError);
   });
 
   it("caps the transfer at the confirmed maximum", async () => {
     mockQuote(apiQuote);
-    const { calls, maxIn } = await prepareSwapForPurchase({ token: STRK, slippageBp: 100, maxIn: 95n * e18 / 10n }, SURV, 10n * e18);
+    const { calls, maxIn } = await prepareSwapForPurchase(
+      { token: STRK, slippageBp: 100, caps: { [tokenKey(SURV)]: 95n * e18 / 10n } },
+      SURV,
+      10n * e18,
+    );
     expect(maxIn).toBe(95n * e18 / 10n);
     expect(BigInt(calls[0].calldata[1])).toBe(95n * e18 / 10n);
+  });
+});
+
+describe("mixed-currency carts (sweep)", () => {
+  it("keys caps per listing token and totals them for the balance check", () => {
+    const LORDS = "0x0124aeb495b947201f5fac96fd1138e326ad86195b98df6dec9009158a533b49";
+    const pw = { token: STRK, slippageBp: 100, caps: { [tokenKey(SURV)]: 3n, [tokenKey(LORDS)]: 4n } };
+    expect(totalCap(pw)).toBe(7n);
+    expect(tokenKey("0x00" + SURV.slice(2))).toBe(tokenKey(SURV));
+  });
+
+  it("uses each token's own cap", async () => {
+    mockQuote(apiQuote);
+    const { maxIn } = await prepareSwapForPurchase(
+      { token: STRK, slippageBp: 100, caps: { [tokenKey(SURV)]: 10n * e18, other: 1n } },
+      SURV,
+      10n * e18,
+    );
+    expect(maxIn).toBe(10n * e18);
   });
 });
 

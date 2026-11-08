@@ -15,6 +15,7 @@ import {
   buildMarketplaceExecuteCall,
   getErc20ApprovalCallIfNeeded,
   getSwapCallsForPurchase,
+  assertPayTokenCoversCaps,
 } from "../../../services/marketplace/approvals";
 import {
   BEASTS_COLLECTION_ADDRESS,
@@ -341,6 +342,9 @@ export function useMarketplaceActions({
           }
           listingsByToken.get(tokenAddr)!.push(listing);
         }
+
+        // Several swaps may draw on the same pay token: check it covers them all
+        await assertPayTokenCoversCaps(account, payWith);
 
         // Step 3: Add approval calls for each token
         for (const [tokenAddr, tokenListings] of listingsByToken) {

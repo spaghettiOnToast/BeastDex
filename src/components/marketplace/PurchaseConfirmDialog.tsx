@@ -159,8 +159,7 @@ export default function PurchaseConfirmDialog({
             </div>
 
             <PayWithPicker
-              currency={listingToken}
-              amountOut={totalBigInt}
+              needs={[{ currency: listingToken, amount: totalBigInt }]}
               value={payWith}
               onChange={setPayWith}
               onBlockerChange={setSwapBlocker}

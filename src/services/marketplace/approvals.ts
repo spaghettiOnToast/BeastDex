@@ -13,7 +13,7 @@ import {
 } from "../../utils/uint256";
 import { getReadProvider, withReadProvider } from "../tx";
 import { executeMarketplaceCalls } from "./safety";
-import { prepareSwapForPurchase, sameToken, type PayWith, type SwapCall } from "./swap";
+import { prepareSwapForPurchase, sameToken, totalCap, type PayWith, type SwapCall } from "./swap";
 
 /** Read-only RPC provider (no wallet needed), with public-RPC fallback. */
 export function getPublicProvider(): RpcProvider {
@@ -623,8 +623,17 @@ export function buildMarketplaceExecuteCall(
   };
 }
 
+/** Throws unless the pay-token balance covers every confirmed swap cap together (carts with several swaps). */
+export async function assertPayTokenCoversCaps(account: AccountInterface, payWith: PayWith | undefined): Promise<void> {
+  if (!payWith || !account.address) return;
+  const needed = totalCap(payWith);
+  if (needed === 0n) return;
+  const balance = await getErc20Balance(getProvider(account), payWith.token, account.address);
+  if (balance < needed) throw new Error("Not enough balance of the token you chose to pay with (including slippage).");
+}
+
 /**
- * Swap calls (fresh quote, capped at `payWith.maxIn`) delivering exactly
+ * Swap calls (fresh quote, capped at the confirmed `payWith.caps`) delivering exactly
  * `amount` of `currency` to the buyer; checks the pay-token balance covers the cap.
  * Empty when paying in `currency` itself.
  */

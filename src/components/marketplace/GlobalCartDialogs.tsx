@@ -13,7 +13,7 @@ import {
   CLIENT_FEE_RECEIVER,
   ROYALTIES_ENABLED,
 } from "../../services/marketplace/constants";
-import { getErc20ApprovalCallIfNeeded, getProvider, getSwapCallsForPurchase } from "../../services/marketplace/approvals";
+import { getErc20ApprovalCallIfNeeded, getProvider, getSwapCallsForPurchase, assertPayTokenCoversCaps } from "../../services/marketplace/approvals";
 import { toBigIntSafe } from "../../utils/bigint";
 import { toUint256Hex } from "../../utils/uint256";
 import { isUserRejection } from "../../utils/transaction";
@@ -84,6 +84,9 @@ export function GlobalCartDialogs() {
           }
           listingsByToken.get(tokenAddr)!.push(listing);
         }
+
+        // Several swaps may draw on the same pay token: check it covers them all
+        await assertPayTokenCoversCaps(account, payWith);
 
         // Calculate total needed per token and add approval calls
         for (const [tokenAddr, tokenListings] of listingsByToken) {

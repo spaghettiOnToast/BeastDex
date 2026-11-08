@@ -165,18 +165,24 @@ export function buildSwapCalls(quote: ExactOutputQuote, maxIn: bigint): SwapCall
 }
 
 /**
- * How the buyer wants to pay (omitted / same token = no swap). `maxIn` is the
- * most they agreed to spend (shown quote + slippage); the purchase stops if a
- * fresh quote needs more.
+ * How the buyer wants to pay (omitted / same token = no swap). `caps` holds,
+ * per listing currency (see `tokenKey`), the most they agreed to spend on that
+ * swap (shown quote + slippage); the purchase stops if a fresh quote needs more.
  */
-export type PayWith = { token: string; slippageBp: number; maxIn?: bigint };
+export type PayWith = { token: string; slippageBp: number; caps?: Record<string, bigint> };
+
+/** Map key for a token address (hex without padding). */
+export const tokenKey = (address: string) => BigInt(address).toString(16);
+
+/** Sum of the confirmed caps (what the pay-token balance must cover). */
+export const totalCap = (payWith: PayWith) => Object.values(payWith.caps ?? {}).reduce((a, b) => a + b, 0n);
 
 export class PriceMovedError extends Error {}
 
 /** Fresh quote + swap calls for a purchase needing exactly `amountOut` of `buyToken`. */
 export async function prepareSwapForPurchase(payWith: PayWith, buyToken: string, amountOut: bigint) {
   const quote = await quoteExactOutput(payWith.token, buyToken, amountOut);
-  const cap = payWith.maxIn ?? maxSpend(quote.amountIn, payWith.slippageBp);
+  const cap = payWith.caps?.[tokenKey(buyToken)] ?? maxSpend(quote.amountIn, payWith.slippageBp);
   if (quote.amountIn > cap) {
     throw new PriceMovedError("The swap price moved above the maximum you confirmed. Review the new quote and try again.");
   }

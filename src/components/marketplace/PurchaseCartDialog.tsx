@@ -129,13 +129,11 @@ export default function PurchaseCartDialog({
   const invalidListings = listings.filter(l => invalidListingIds.has(l.listingId));
   const hasInvalidListings = invalidListings.length > 0;
 
-  // Pay-with-any-token needs one listing currency (one exact amount to swap into)
-  const cartCurrencies = [...new Set(validListings.map((l) => l.paymentToken ?? "0x0"))];
-  const cartCurrency = cartCurrencies.length === 1 ? cartCurrencies[0] : null;
+  // Pay with any token: one swap per listing currency that differs from it
+  const firstCurrency = validListings.find((l) => l.paymentToken)?.paymentToken ?? null;
   useEffect(() => {
-    if (cartCurrency) setPayWith((p) => (sameToken(p.token, cartCurrency) || p.token !== "0x0" ? p : { ...p, token: cartCurrency }));
-  }, [cartCurrency]);
-  const swapping = !!cartCurrency && payWith.token !== "0x0" && !sameToken(payWith.token, cartCurrency);
+    if (firstCurrency) setPayWith((p) => (p.token !== "0x0" ? p : { ...p, token: firstCurrency }));
+  }, [firstCurrency]);
 
   const handlePurchaseClick = () => {
     const pw = swapping ? payWith : undefined;
@@ -200,6 +198,11 @@ export default function PurchaseCartDialog({
       totalUsd,
     };
   });
+
+  const paymentNeeds = tokenTotals
+    .filter((t) => t.tokenAddress !== "default")
+    .map((t) => ({ currency: t.tokenAddress, amount: t.total }));
+  const swapping = payWith.token !== "0x0" && paymentNeeds.some((n) => !sameToken(n.currency, payWith.token));
 
   const formatListingPrice = (listing: Listing) => {
     const token = getPaymentTokenByAddress(listing.paymentToken ?? undefined);
@@ -379,21 +382,15 @@ export default function PurchaseCartDialog({
               <p className="text-[10px] text-gray-500 italic">
                 A {CLIENT_FEE_BP / 100}% client fee is added to each purchase. Each purchase uses the token specified in the listing.
               </p>
-              {validListings.length > 0 &&
-                (cartCurrency && tokenTotals.length === 1 ? (
-                  <PayWithPicker
-                    currency={cartCurrency}
-                    amountOut={tokenTotals[0].total}
-                    value={payWith.token === "0x0" ? { ...payWith, token: cartCurrency } : payWith}
-                    onChange={setPayWith}
-                    onBlockerChange={setSwapBlocker}
-                    disabled={isProcessing}
-                  />
-                ) : (
-                  <p className="text-[10px] text-gray-500">
-                    Paying in another token works when every item in the cart is priced in the same token.
-                  </p>
-                ))}
+              {validListings.length > 0 && payWith.token !== "0x0" && (
+                <PayWithPicker
+                  needs={paymentNeeds}
+                  value={payWith}
+                  onChange={setPayWith}
+                  onBlockerChange={setSwapBlocker}
+                  disabled={isProcessing}
+                />
+              )}
               {validListings.length > 0 && (
                 <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-3">
                   <p className="text-xs text-yellow-200">

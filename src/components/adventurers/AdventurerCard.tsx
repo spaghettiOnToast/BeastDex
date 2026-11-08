@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
-import { AlertTriangle, Clock, Coins, ExternalLink, Heart, Shield, Sparkles } from "lucide-react";
+import { AlertTriangle, Clock, Coins, ExternalLink, Heart, Sparkles } from "lucide-react";
 import { cn } from "../../lib/utils";
 import {
   dungeonImageUrl,
@@ -75,10 +75,8 @@ export function AdventurerCard({ tokenId, game, listedAt, selected, onClick, chi
   const inBattle = !!game && status === "in-progress" && game.beastHealth > 0;
   const shortId = BigInt(tokenId).toString(16).slice(-6);
 
-  // Gear: shown while hovering the art/stats (desktop) or pinned with the Gear chip (touch)
-  const [hovering, setHovering] = useState(false);
-  const [pinned, setPinned] = useState(false);
-  const showGear = hovering || pinned;
+  // Gear: shown while hovering the art/stats (a tap counts as hover on touch screens)
+  const [showGear, setShowGear] = useState(false);
   const detail = useGameDetail(tokenId, showGear && !game?.gear);
   const gear = game?.gear ?? detail.data?.gear;
 
@@ -94,7 +92,7 @@ export function AdventurerCard({ tokenId, game, listedAt, selected, onClick, chi
       onClick={onClick}
     >
       {/* Art + stats: hovering here swaps in the gear panel (the action buttons below stay clickable) */}
-      <div className="relative" onMouseEnter={() => setHovering(true)} onMouseLeave={() => setHovering(false)}>
+      <div className="relative" onMouseEnter={() => setShowGear(true)} onMouseLeave={() => setShowGear(false)}>
       {showGear && (
         <div className="absolute inset-0 z-30 bg-[#0b0b0f]/95 backdrop-blur-sm">
           <GearPanel gear={gear} loading={detail.isFetching} />
@@ -141,23 +139,7 @@ export function AdventurerCard({ tokenId, game, listedAt, selected, onClick, chi
             {game ? `Lv ${game.level}` : "—"}
             {game && game.xp > 0 && <span className="ml-1 text-[10px] font-normal text-zinc-400">{game.xp} XP</span>}
           </span>
-          <span className="flex items-center gap-1.5">
-            <button
-              type="button"
-              className={cn(
-                "relative z-40 flex items-center gap-0.5 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-bold uppercase text-zinc-300 hover:text-white",
-                pinned && "text-gold",
-              )}
-              title="Show gear"
-              onClick={(e) => {
-                e.stopPropagation();
-                setPinned((p) => !p);
-              }}
-            >
-              <Shield className="h-3 w-3" /> Gear
-            </button>
-            <span className="font-mono text-[10px] text-zinc-500">#{shortId}</span>
-          </span>
+          <span className="font-mono text-[10px] text-zinc-500">#{shortId}</span>
         </div>
       </div>
 
