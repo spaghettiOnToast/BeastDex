@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Link,
   useNavigate,
   useParams,
   useSearchParams,
@@ -34,6 +33,7 @@ import { lookupControllerAddresses } from "../services/controller";
 import { getUserFriendlyErrorMessage } from "../utils/error";
 import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
 import { CollectionHero, type OverviewCard } from "../components/collection/CollectionHero";
+import { ProfileHeader } from "../components/profile/ProfileHeader";
 import { Grid, Table } from "lucide-react";
 import { Button } from "../components/ui/button";
 
@@ -466,8 +466,6 @@ function AccountPage() {
     trimmedIdentifier,
   ]);
 
-  const displayAddressClass =
-    accountUsername || identifierIsUsername ? "" : "font-mono";
 
   const collectionRouteIdentifier = useMemo(
     () =>
@@ -547,90 +545,27 @@ function AccountPage() {
   return (
     <AppLayout topBar={topBar}>
       <div className="space-y-4">
-        <div className="rounded-xl border border-white/[0.06] bg-surface-raised p-4">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="flex flex-col items-start space-y-2">
-              {mostPowerfulTitle ? (
-                <div className="bg-gradient-to-r from-pink-500 via-cyan-400 to-green-400 bg-clip-text text-lg md:text-xl font-bold uppercase tracking-wider text-transparent">
-                  "{mostPowerfulTitle}"
-                </div>
-              ) : null}
-
-              <div className="flex items-center gap-3">
-                <h1 className="text-xl md:text-2xl font-bold text-white tracking-wide font-display">
-                  <span
-                    className={displayAddressClass}
-                    title={normalisedAccountAddress || undefined}
-                  >
-                    {displayAddress}
-                  </span>
-                </h1>
-
-                <div className="flex items-center gap-1.5 sm:gap-2 ml-2 sm:ml-4 text-xs sm:text-sm">
-                  <span className={`text-sm sm:text-lg${displayStats.uniqueBeastTypes === totalSpecies ? " animate-bounce" : ""}`}>
-                    {displayStats.uniqueBeastTypes === totalSpecies ? "🎉" : "🏆"}
-                  </span>
-                  <span className="uppercase tracking-wider text-zinc-500 font-medium text-[10px] sm:text-sm">
-                    Total
-                  </span>
-                  <span className={`font-bold ${
-                    displayStats.uniqueBeastTypes === totalSpecies
-                      ? "text-[#39ff14] drop-shadow-[0_0_8px_rgba(57,255,20,0.6)]"
-                      : "text-white"
-                  }`}>
-                    {displayStats.uniqueBeastTypes}
-                  </span>
-                  <span className="text-zinc-500 text-xs sm:text-base">
-                    / {totalSpecies}
-                  </span>
-                  {displayStats.uniqueBeastTypes === totalSpecies && (
-                    <span className="text-[#39ff14] font-bold text-[10px] sm:text-sm drop-shadow-[0_0_8px_rgba(57,255,20,0.6)]">
-                      COMPLETE!
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {usernamesError ? (
-                <p className="text-xs text-red-400">{usernamesError}</p>
-              ) : usernamesLoading && Object.keys(ownerUsernames).length === 0 ? (
-                <p className="text-xs text-zinc-500">Loading usernames...</p>
-              ) : null}
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-              <div className="flex items-center gap-3">
-                {collectionRouteIdentifier ? (
-                  <Link
-                    to={`/collection/${encodeURIComponent(collectionRouteIdentifier)}`}
-                    className="inline-flex items-center px-3 py-1.5 text-sm font-semibold uppercase tracking-wide bg-[#a855f7] text-white rounded-lg hover:bg-[#9333ea] transition-colors"
-                  >
-                    Collection
-                  </Link>
-                ) : null}
-
-                <button
-                  type="button"
-                  onClick={handleRefresh}
-                  disabled={anyLoading || !resolvedAddress}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-white/[0.06] text-zinc-300 rounded-lg hover:bg-white/[0.10] disabled:opacity-50 transition-colors"
-                >
-                  {anyLoading ? (
-                    <div className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
-                  ) : null}
-                  <span>Refresh</span>
-                </button>
-              </div>
-              <Link
-                to="/"
-                onClick={handleBackToHome}
-                className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
-              >
-                ← Back to Home
-              </Link>
-            </div>
-          </div>
-        </div>
+        <ProfileHeader
+          title={mostPowerfulTitle}
+          displayName={displayAddress}
+          nameIsAddress={!accountUsername && !identifierIsUsername}
+          address={normalisedAccountAddress || null}
+          complete={totalSpecies > 0 && displayStats.uniqueBeastTypes >= totalSpecies}
+          collectionHref={
+            collectionRouteIdentifier ? `/collection/${encodeURIComponent(collectionRouteIdentifier)}` : null
+          }
+          onRefresh={handleRefresh}
+          refreshing={anyLoading}
+          refreshDisabled={anyLoading || !resolvedAddress}
+          onBack={handleBackToHome}
+          status={
+            usernamesError ? (
+              <p className="text-xs text-red-400">{usernamesError}</p>
+            ) : usernamesLoading && Object.keys(ownerUsernames).length === 0 ? (
+              <p className="text-xs text-zinc-500">Loading usernames...</p>
+            ) : null
+          }
+        />
 
         {/* Error Display */}
         {identifierError ? (
