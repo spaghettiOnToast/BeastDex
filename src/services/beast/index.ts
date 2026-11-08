@@ -6,7 +6,7 @@ import {
   VISUAL_TO_EFFECTS,
 } from "./helpers";
 export { hasCompleteMetadata, beastVisual, beastRarityScore };
-import { collectablesClient } from "./collectablesClient";
+import { collectablesClient, legacyCollectablesClient } from "./collectablesClient";
 import {
   ITEM_NAME_PREFIXES,
   ITEM_NAME_SUFFIXES,
@@ -25,8 +25,6 @@ import type { BeastVisual } from "./types";
 const _beastCursorCache = new Map<string, Map<number, string | null>>();
 
 // Module-level cache for Slayer leaderboard (excludes EXCLUDED_OWNER_ADDRESS)
-type SlayerCache = { timestamp: number; entries: import("./types").BeastSlayerEntry[] };
-let _slayerCache: SlayerCache | null = null;
 const SLAYER_CACHE_TTL_MS = 5 * 60 * 1000;
 
 
@@ -409,37 +407,83 @@ export async function fetchBeastAttributeFilters(): Promise<BeastAttributeFilter
 }
 
 
+/** How many legacy slayers the leaderboard covers (per order). */
+const SLAYER_POOL_SIZE = 100;
+const _slayerPools = new Map<string, { timestamp: number; items: SdkLegacyBeast[] }>();
+type SdkLegacyBeast = Awaited<ReturnType<typeof legacyCollectablesClient.beasts.list>>["items"][number];
+type SdkV3Beast = Awaited<ReturnType<typeof collectablesClient.beasts.list>>["items"][number];
+const _v3ByAffixes = new Map<string, SdkV3Beast | null>();
+
+/**
+ * The v3 token of a legacy beast: legacy beasts are unique per species +
+ * prefix + suffix, and the unnamed ones are the species' Genesis beast.
+ */
+async function findV3Twin(legacy: SdkLegacyBeast): Promise<SdkV3Beast | null> {
+  const named = Boolean(legacy.prefixName && legacy.suffixName);
+  const key = named ? `${legacy.beastId}|${legacy.prefixName}|${legacy.suffixName}` : `${legacy.beastId}|genesis`;
+  if (_v3ByAffixes.has(key)) return _v3ByAffixes.get(key) ?? null;
+  try {
+    const r = await collectablesClient.beasts.list({
+      beastId: legacy.beastId,
+      ...(named ? { prefixName: legacy.prefixName!, suffixName: legacy.suffixName! } : { genesis: true }),
+      limit: 1,
+      includeOwner: true,
+    });
+    const twin = r.items[0] ?? null;
+    _v3ByAffixes.set(key, twin);
+    return twin;
+  } catch {
+    return null; // not cached: retry next time
+  }
+}
+
+/**
+ * All-time Slayer leaderboard. v3 reset adventurer kills at the migration, so
+ * kills come from the legacy collection (ranked there), plus any v3 kills since;
+ * each entry shows the beast's current v3 token, owner and rank.
+ */
 export async function fetchBeastSlayerLeaderboard({
   limit = 10,
   offset = 0,
+  order = "desc",
 }: FetchLeaderboardOptions = {}): Promise<BeastSlayerEntry[]> {
   const now = Date.now();
-
-  if (!_slayerCache || now - _slayerCache.timestamp > SLAYER_CACHE_TTL_MS) {
-    const result = await collectablesClient.beasts.list({
+  let pool = _slayerPools.get(order);
+  if (!pool || now - pool.timestamp > SLAYER_CACHE_TTL_MS) {
+    const result = await legacyCollectablesClient.beasts.list({
       sort: "adventurers_killed",
-      order: "desc",
+      order,
       adventurersKilledGte: 1,
-      limit: 100,
+      limit: SLAYER_POOL_SIZE,
       includeOwner: true,
     });
-
-    const excludedAddr = normalizeAddress(EXCLUDED_OWNER_ADDRESS);
-    const entries = result.items
-      .filter((item) => !item.owner || normalizeAddress(item.owner) !== excludedAddr)
-      .map((item, idx) => ({
-        rank: idx + 1,
-        beastId: toTokenIdString(item.tokenId) ?? String(item.tokenId),
-        beastName: mapSdkBeast(item).name,
-        beastRank: item.rank ?? 0,
-        owner: item.owner ?? null,
-        kills: item.adventurersKilled ?? 0,
-      }));
-
-    _slayerCache = { timestamp: now, entries };
+    pool = { timestamp: now, items: result.items };
+    _slayerPools.set(order, pool);
   }
 
-  return _slayerCache.entries.slice(offset, offset + limit);
+  const slice = pool.items.slice(offset, offset + limit);
+  const twins: Array<SdkV3Beast | null> = [];
+  for (let i = 0; i < slice.length; i += 10) {
+    twins.push(...(await Promise.all(slice.slice(i, i + 10).map(findV3Twin))));
+  }
+
+  const excludedAddr = normalizeAddress(EXCLUDED_OWNER_ADDRESS);
+  return slice
+    .map((legacy, i) => {
+      const twin = twins[i];
+      const owner = twin?.owner ?? legacy.owner ?? null;
+      return {
+        rank: offset + i + 1,
+        beastId: twin ? toTokenIdString(twin.tokenId) ?? String(twin.tokenId) : String(legacy.tokenId),
+        beastName: mapSdkBeast((twin ?? legacy) as SdkV3Beast).name,
+        beastRank: twin?.rank ?? legacy.rank ?? 0,
+        owner,
+        kills: (legacy.adventurersKilled ?? 0) + (twin?.adventurersKilled ?? 0),
+        inV3: Boolean(twin),
+        genesis: Boolean(twin?.genesis ?? legacy.genesis),
+      };
+    })
+    .filter((e) => !e.owner || normalizeAddress(e.owner) !== excludedAddr);
 }
 
 export async function fetchOwnerBeastStats(

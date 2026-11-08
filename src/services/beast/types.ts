@@ -91,11 +91,16 @@ export type BeastHighlights = {
 
 export type BeastSlayerEntry = {
   rank: number;
+  /** v3 token id when the beast was found in v3, else the legacy token id */
   beastId: string;
   beastName: string;
   beastRank: number;
   owner: string | null;
+  /** all-time adventurer kills: legacy (pre-migration) + v3 */
   kills: number;
+  /** false when no v3 token was found for this legacy beast */
+  inV3: boolean;
+  genesis: boolean;
 };
 
 export type BeastPowerRank = {
@@ -115,4 +120,6 @@ export type BeastHealthRank = {
 export type FetchLeaderboardOptions = {
   limit?: number;
   offset?: number;
+  /** "desc" = most first (default) */
+  order?: "asc" | "desc";
 };

@@ -12,3 +12,13 @@ export const COLLECTABLES_API_URL =
   DEFAULT_COLLECTABLES_API_URL;
 
 export const collectablesClient = new CollectablesClient({ baseUrl: COLLECTABLES_API_URL });
+
+/**
+ * The LEGACY Beasts collection (pre-v3). v3 reset adventurer kill counts at the
+ * migration, so the all-time Slayer leaderboard reads kills from here.
+ */
+export const LEGACY_COLLECTABLES_API_URL =
+  (import.meta.env.VITE_LEGACY_COLLECTABLES_API_URL as string | undefined)?.trim() ||
+  "https://api-production-589d2.up.railway.app";
+
+export const legacyCollectablesClient = new CollectablesClient({ baseUrl: LEGACY_COLLECTABLES_API_URL });
