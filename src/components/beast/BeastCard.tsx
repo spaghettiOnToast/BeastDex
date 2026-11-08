@@ -12,6 +12,7 @@ import { CONTRACT_ADDRESS } from "../../services/beast/constants";
 import { readRpcUrls } from "../../services/tx";
 import { fetchV3CardImgSrc, spriteSpeciesName } from "../../services/beast/cardImage";
 import { unrankedReason, UNRANKED_LABELS } from "../../utils/beast";
+import MidiNotesArt from "./MidiNotesArt";
 
 // On-chain card images for beasts without a bundled sprite (v3 species past the
 // bundled set), keyed by token id. Shared across cards to avoid repeat RPC reads.
@@ -52,6 +53,8 @@ type Props = {
   duplicateCount?: number;
   /** Highlights the card when every named variant of this species/affix has been collected */
   hasAllVariants?: boolean;
+  /** Draw the MIDI notes background on MIDI beasts (default true). */
+  showNotes?: boolean;
   className?: string;
 };
 
@@ -82,6 +85,7 @@ const BeastCard = memo(function BeastCard({
   disabled = false,
   duplicateCount,
   hasAllVariants = false,
+  showNotes = true,
   className,
 }: Props) {
   const { image, owner, attributes, power } = beast;
@@ -195,6 +199,16 @@ const BeastCard = memo(function BeastCard({
             style={{ width: "100%", height: "100%", display: "block" }}
           />
         )}
+        {/* MIDI beasts: the notes background over the card, drawn from its song. */}
+        {showNotes && cardImageSrc && !missing && beast.midi && beast.tokenId && beast.visualEffects !== undefined && (
+          <MidiNotesArt
+            card={cardImageSrc}
+            tokenId={beast.tokenId}
+            speciesId={beast.speciesId}
+            visualEffects={beast.visualEffects}
+            alt={String(getAttr(attributes, "Beast") ?? beast.name)}
+          />
+        )}
         {/* Grade badge: gold for 10, dark for 1-9, red when the beast has no
             grade at all (legacy beast or missing data) so it stands out.
             Placeholder cards (no token id) and "missing" slots get none. */}
@@ -233,11 +247,10 @@ const BeastCard = memo(function BeastCard({
             </div>
           );
         })()}
-        {/* MIDI: the card plays a MIDI track. Its notes background only exists on
-            the player page (detail view), not the static card, so flag it here. */}
+        {/* MIDI: the card plays a MIDI track (its notes background is drawn by MidiNotesArt). */}
         {!missing && beast.tokenId && beast.midi && (
           <div
-            title="MIDI beast — its card plays a music track (notes background on the player page)"
+            title="MIDI beast — its card plays a music track; open it to listen"
             style={{
               position: "absolute", top: "16.5%", right: "8%", zIndex: 20, lineHeight: 1,
               background: "rgba(11,11,13,0.85)", color: "#c4b5fd", fontWeight: "bold", letterSpacing: 0.5,

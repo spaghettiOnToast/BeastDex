@@ -119,3 +119,10 @@ export function hasCompleteMetadata(beast: Beast): boolean {
   if (!beast.attributes || beast.attributes.length === 0) return false;
   return true;
 }
+
+/** "12.3% of beasts · 1 in 8": how rare one visual preset is among `total` beasts. */
+export function presetShareLabel(count: number, total: number): string {
+  if (!(total > 0) || !(count > 0)) return "None collected yet";
+  const pct = (count / total) * 100;
+  return `${pct < 1 ? pct.toFixed(2) : pct.toFixed(1)}% of beasts · 1 in ${Math.round(total / count).toLocaleString()}`;
+}

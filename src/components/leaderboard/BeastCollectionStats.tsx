@@ -3,6 +3,7 @@ import { fetchTierCollectionStats, type TierCollectionStats } from "../../servic
 import { useBeastHighlights } from "../../hooks/useBeastQueries";
 import { GradeBrowser } from "./GradeBrowser";
 import { CollectionGlance } from "./CollectionGlance";
+import { presetShareLabel } from "../../services/beast/helpers";
 
 const TIER_COLORS: Record<number, { text: string; gradient: string; border: string }> = {
   1: { text: "text-orange-400", gradient: "from-orange-500 to-orange-400", border: "border-orange-500/30" },
@@ -29,6 +30,8 @@ export function BeastCollectionStats() {
   }, []);
 
 
+  const presetTotal =
+    (highlights?.animatedShinyCount ?? 0) + (highlights?.shinyCount ?? 0) + (highlights?.animatedCount ?? 0) + (highlights?.standardCount ?? 0);
   const summaryTiles = [
     { label: "Shiny MIDI Beasts", value: highlights?.animatedShinyCount ?? 0, gradient: "from-pink-400/20 via-purple-400/10 to-accent/20", accent: "text-pink-400" },
     { label: "Shiny Beasts", value: highlights?.shinyCount ?? 0, gradient: "from-yellow-400/20 via-amber-400/10 to-orange-400/20", accent: "text-amber-400" },
@@ -51,7 +54,7 @@ export function BeastCollectionStats() {
               <div className={`mt-3 text-3xl font-black tracking-tight ${tile.accent}`}>
                 {highlightsLoading && !highlights ? "—" : tile.value.toLocaleString()}
               </div>
-              <div className="mt-2 text-xs text-zinc-500">Total collected across all adventurers</div>
+              <div className="mt-2 text-xs text-zinc-500">{highlightsLoading && !highlights ? "\u00a0" : presetShareLabel(tile.value, presetTotal)}</div>
             </div>
           </div>
         ))}
