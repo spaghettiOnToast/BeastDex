@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 type Owned = {
   tokenId: string;
-  beastId: number;
   rank: number;
   cardGrade: number;
   visualEffects: number; // 0 regular, 1 shiny, 2 animated, 3 shiny animated
@@ -10,12 +9,7 @@ type Owned = {
   lastDeathTimestamp: number;
   animated: boolean; // always true on v3 — must not be used for the visual
 };
-const store = vi.hoisted(() => ({
-  owned: [] as Owned[],
-  queries: [] as unknown[],
-  /** ranked beasts per species with power >= key, for rank estimates */
-  stronger: (() => 0) as (speciesId: number, powerGte: number) => number,
-}));
+const store = vi.hoisted(() => ({ owned: [] as Owned[], queries: [] as unknown[] }));
 
 vi.mock("../src/services/beast/collectablesClient", () => ({
   collectablesClient: {
@@ -24,23 +18,18 @@ vi.mock("../src/services/beast/collectablesClient", () => ({
         store.queries.push(q);
         return { items: store.owned, total: store.owned.length };
       },
-      list: async (q: { beastId: number; powerGte: number }) => ({
-        items: [],
-        total: store.stronger(q.beastId, q.powerGte),
-      }),
     },
   },
 }));
 vi.mock("../src/services/beast/helpers", async (orig) => ({
   ...(await orig<typeof import("../src/services/beast/helpers")>()),
-  mapSdkBeast: (item: Owned) => ({ name: item.tokenId, rank: item.rank }),
+  mapSdkBeast: (item: Owned) => ({ name: item.tokenId }),
 }));
 
 import { fetchOwnerBeastHighlights, ownedBeastRarityScore } from "../src/services/beast";
 import { apiCache } from "../src/services/apiCache";
 
 const beast = (o: Partial<Owned> & { tokenId: string }): Owned => ({
-  beastId: 1,
   rank: 0,
   cardGrade: 5,
   visualEffects: 0,
@@ -68,21 +57,7 @@ describe("ownedBeastRarityScore", () => {
 describe("fetchOwnerBeastHighlights", () => {
   beforeEach(() => {
     store.queries = [];
-    store.stronger = () => 0;
     apiCache.clearAll();
-  });
-
-  it("estimates ranks for unranked beasts (1 + stronger ranked same-species beasts)", async () => {
-    // Leviathan (species 54) at 210 power: 242 ranked Leviathans have >= 211
-    store.stronger = (speciesId, powerGte) => (speciesId === 54 && powerGte === 211 ? 242 : 0);
-    store.owned = [
-      beast({ tokenId: "fairy", beastId: 21, rank: 1229, power: 19 }),
-      beast({ tokenId: "leviathan", beastId: 54, rank: 0, power: 210 }),
-    ];
-    const h = await fetchOwnerBeastHighlights("0x4");
-    expect(h.highestRanked?.name).toBe("leviathan");
-    expect((h.highestRanked as { rank?: number }).rank).toBe(243);
-    expect(h.highestRanked?.rankEstimated).toBe(true);
   });
 
   it("rarest combines rank, grade and visual; one owner query for everything", async () => {
@@ -97,9 +72,6 @@ describe("fetchOwnerBeastHighlights", () => {
   });
 
   it("highest rank is the lowest rank >= 1 (rank 1 best), ties by power", async () => {
-    store.stronger = () => {
-      throw new Error("estimate unavailable"); // unranked stays unranked
-    };
     store.owned = [
       beast({ tokenId: "unranked", rank: 0, power: 999 }),
       beast({ tokenId: "r5-weak", rank: 5, power: 10 }),
@@ -110,10 +82,7 @@ describe("fetchOwnerBeastHighlights", () => {
     expect(h.highestRanked?.name).toBe("r5-strong");
   });
 
-  it("no ranked beasts and no estimate -> no highest rank; last collected is the most recent", async () => {
-    store.stronger = () => {
-      throw new Error("estimate unavailable");
-    };
+  it("no ranked beasts -> no highest rank; last collected is the most recent", async () => {
     store.owned = [
       beast({ tokenId: "old", lastDeathTimestamp: 100 }),
       beast({ tokenId: "new", lastDeathTimestamp: 200 }),

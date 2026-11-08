@@ -7,7 +7,6 @@ import {
 } from "./helpers";
 export { hasCompleteMetadata, beastVisual, beastRarityScore };
 import { collectablesClient } from "./collectablesClient";
-import { estimateSpeciesRank, MAX_RANK_ESTIMATES_PER_OWNER } from "./rankEstimate";
 import {
   ITEM_NAME_PREFIXES,
   ITEM_NAME_SUFFIXES,
@@ -534,34 +533,6 @@ export function pickOwnerHighlights(items: SdkOwnedBeast[]) {
   };
 }
 
-/**
- * Fill in estimated ranks for unranked (rank 0) beasts, strongest first, up to
- * MAX_RANK_ESTIMATES_PER_OWNER. Returns copies; `estimated` holds the copies
- * whose rank is an estimate. A failed estimate leaves the beast unranked.
- */
-async function withEstimatedRanks(items: SdkOwnedBeast[]) {
-  const unranked = items
-    .filter((b) => (b.rank ?? 0) < 1 && b.power != null)
-    .sort((a, b) => (b.power ?? 0) - (a.power ?? 0))
-    .slice(0, MAX_RANK_ESTIMATES_PER_OWNER);
-  const estimates = new Map<SdkOwnedBeast, number>();
-  await Promise.all(
-    unranked.map(async (b) => {
-      const rank = await estimateSpeciesRank(b.beastId, b.power ?? 0).catch(() => null);
-      if (rank != null) estimates.set(b, rank);
-    })
-  );
-  const estimated = new Set<SdkOwnedBeast>();
-  const out = items.map((b) => {
-    const rank = estimates.get(b);
-    if (rank == null) return b;
-    const copy = { ...b, rank };
-    estimated.add(copy);
-    return copy;
-  });
-  return { items: out, estimated };
-}
-
 export async function fetchOwnerBeastHighlights(
   ownerAddress: string
 ): Promise<OwnerBeastHighlights> {
@@ -579,20 +550,15 @@ export async function fetchOwnerBeastHighlights(
     const addr = normalizeAddress(normalised);
 
     // Owner-scoped queries return the whole holding by default
-    const { items: rawItems } = await collectablesClient.beasts.byOwner(addr, {});
-    const { items, estimated } = await withEstimatedRanks(rawItems);
+    const { items } = await collectablesClient.beasts.byOwner(addr, {});
     const { rarest: rarestItem, highestRanked: highestRankedItem, lastCollected: lastCollectedItem } =
       pickOwnerHighlights(items);
 
-    const toBeast = (item: SdkOwnedBeast) => {
-      const beast = mapSdkBeast(item);
-      return estimated.has(item) ? { ...beast, rankEstimated: true } : beast;
-    };
-    const lastCollectedBeast = lastCollectedItem ? toBeast(lastCollectedItem) : null;
+    const lastCollectedBeast = lastCollectedItem ? mapSdkBeast(lastCollectedItem) : null;
 
     return {
-      rarest: rarestItem ? toBeast(rarestItem) : null,
-      highestRanked: highestRankedItem ? toBeast(highestRankedItem) : null,
+      rarest: rarestItem ? mapSdkBeast(rarestItem) : null,
+      highestRanked: highestRankedItem ? mapSdkBeast(highestRankedItem) : null,
       lastCollected: lastCollectedBeast,
       lastCollectedName: lastCollectedBeast?.name ?? null,
     };
