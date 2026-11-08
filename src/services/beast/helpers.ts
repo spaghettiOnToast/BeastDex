@@ -103,6 +103,7 @@ export function mapSdkBeast(sdkBeast: SdkBeast): Beast {
     transferLockedUntil: sdkBeast.transferLockedUntil,
     genesis: sdkBeast.genesis,
     mega: sdkBeast.mega,
+    minterData: sdkBeast.minterData,
     midi: sdkBeast.midi,
     hasBundledImage,
   };

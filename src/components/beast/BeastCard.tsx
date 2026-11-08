@@ -11,6 +11,7 @@ import type { Beast, BeastAttribute } from "../../services/beast";
 import { CONTRACT_ADDRESS } from "../../services/beast/constants";
 import { readRpcUrls } from "../../services/tx";
 import { fetchV3CardImgSrc, spriteSpeciesName } from "../../services/beast/cardImage";
+import { unrankedReason, UNRANKED_LABELS } from "../../utils/beast";
 
 // On-chain card images for beasts without a bundled sprite (v3 species past the
 // bundled set), keyed by token id. Shared across cards to avoid repeat RPC reads.
@@ -232,23 +233,34 @@ const BeastCard = memo(function BeastCard({
             </div>
           );
         })()}
-        {/* Rank 0 = not ranked yet by the collectables API: label it rather
-            than leaving the corner blank (the card art draws no rank for 0). */}
-        {!missing && beast.tokenId && beast.visualEffects !== undefined && cardInput.rank < 1 && (
-          <div
-            title="Unranked — this beast hasn't been ranked yet"
-            style={{
-              position: "absolute", top: 5, right: 5, zIndex: 20, lineHeight: 1,
-              background: "#0b0b0d", color: "#a1a1aa", fontWeight: "bold", letterSpacing: 0.5,
-              border: "1px solid rgba(255,255,255,0.15)", borderRadius: 4,
-              boxShadow: "0 1px 4px rgba(0,0,0,0.6)",
-            }}
-            className="px-[3px] py-[2px] text-[7px] @min-[150px]:px-[5px] @min-[150px]:py-[3px] @min-[150px]:text-[9px]"
-          >
-            <span className="@min-[150px]:hidden">UNR.</span>
-            <span className="hidden @min-[150px]:inline">UNRANKED</span>
-          </div>
-        )}
+        {/* Rank 0: label why (Genesis / Festival / Unranked) rather than leaving
+            the corner blank (the card art draws no rank for 0). */}
+        {!missing && beast.tokenId && beast.visualEffects !== undefined && cardInput.rank < 1 && (() => {
+          const reason = unrankedReason(beast) ?? "unranked";
+          const tone =
+            reason === "genesis"
+              ? { color: "#e2b94c", border: "rgba(226,185,76,0.55)", title: "Genesis beast — one of the 75 originals" }
+              : reason === "festival"
+                ? { color: "#80ff00", border: "rgba(128,255,0,0.45)", title: "Festival beast — minted in a festival dungeon" }
+                : { color: "#a1a1aa", border: "rgba(255,255,255,0.15)", title: "Unranked — this beast hasn't been ranked yet" };
+          const label = UNRANKED_LABELS[reason];
+          const short = reason === "genesis" ? "GEN" : reason === "festival" ? "FEST" : "UNR.";
+          return (
+            <div
+              title={tone.title}
+              style={{
+                position: "absolute", top: 5, right: 5, zIndex: 20, lineHeight: 1,
+                background: "#0b0b0d", color: tone.color, fontWeight: "bold", letterSpacing: 0.5,
+                border: `1px solid ${tone.border}`, borderRadius: 4,
+                boxShadow: "0 1px 4px rgba(0,0,0,0.6)",
+              }}
+              className="px-[3px] py-[2px] text-[7px] uppercase @min-[150px]:px-[5px] @min-[150px]:py-[3px] @min-[150px]:text-[9px]"
+            >
+              <span className="@min-[150px]:hidden">{short}</span>
+              <span className="hidden @min-[150px]:inline">{label}</span>
+            </div>
+          );
+        })()}
         {missing && (
           <div style={{
             position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",

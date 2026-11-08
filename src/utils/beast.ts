@@ -205,6 +205,24 @@ export function getBeastRank(beast: Beast | null | undefined): number | null {
 }
 
 /**
+ * Why a beast has no rank (rank 0), or null when it is ranked:
+ * - "genesis": the 75 original Genesis mints (never ranked)
+ * - "festival": new v3 mints (minterData 0, no legacy origin) — festival
+ *   dungeon beasts the ranking hasn't picked up
+ * - "unranked": anything else without a rank
+ */
+export function unrankedReason(beast: Beast | null | undefined): "genesis" | "festival" | "unranked" | null {
+  if (!beast) return null;
+  const rank = getBeastRank(beast);
+  if (rank != null && rank >= 1) return null;
+  if (beast.genesis) return "genesis";
+  if (beast.minterData === 0) return "festival";
+  return "unranked";
+}
+
+export const UNRANKED_LABELS = { genesis: "Genesis", festival: "Festival", unranked: "Unranked" } as const;
+
+/**
  * Get the last death timestamp from a beast
  * @param beast - The beast to extract the timestamp from
  * @returns The timestamp or null

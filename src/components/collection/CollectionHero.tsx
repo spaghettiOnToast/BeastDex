@@ -1,6 +1,6 @@
 import type { Beast } from "../../services/beast";
 import type { BeastCollectionStats } from "../../utils/beastCollection";
-import { getBeastRank } from "../../utils/beast";
+import { getBeastRank, unrankedReason, UNRANKED_LABELS } from "../../utils/beast";
 import { useSpeciesCount } from "../../hooks/useBeastQueries";
 
 /** A headline number in the hero (beasts, combined power/health, summit rank). */
@@ -36,8 +36,8 @@ function rarityStat(beast: Beast): string | null {
   const parts = [
     beast.visual && beast.visual !== "Regular" ? `✨ ${beast.visual}` : null,
     beast.cardGrade != null ? `💎 Grade ${beast.cardGrade}` : null,
-    // rank 0 = not ranked yet
-    rank != null && rank > 0 ? `👑 #${rank}` : "Unranked",
+    // rank 0: Genesis / Festival / Unranked
+    rank != null && rank > 0 ? `👑 #${rank}` : UNRANKED_LABELS[unrankedReason(beast) ?? "unranked"],
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
 }

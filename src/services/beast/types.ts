@@ -41,6 +41,8 @@ export type Beast = {
   /** Unix seconds a timed transfer lock ends; 0/undefined when none */
   transferLockedUntil?: number;
   genesis?: boolean;
+  /** v3 minter data: legacy token id for migrated beasts, 0 for new (festival) mints */
+  minterData?: number;
   mega?: boolean;
   midi?: boolean;
   /** false when the package has no bundled sprite (v3 species past the bundled set) */
