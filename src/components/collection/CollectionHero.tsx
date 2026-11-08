@@ -30,6 +30,17 @@ function splitBeastName(name: string | null | undefined): { title: string | null
   return m ? { title: m[1], species: m[2] } : { title: null, species: trimmed };
 }
 
+/** What the rarity score is made of: visual, card grade and species rank. */
+function rarityStat(beast: Beast): string | null {
+  const rank = getBeastRank(beast);
+  const parts = [
+    beast.visual && beast.visual !== "Regular" ? `✨ ${beast.visual}` : null,
+    beast.cardGrade != null ? `💎 Grade ${beast.cardGrade}` : null,
+    rank != null && rank > 0 ? `👑 #${rank}` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
+
 function ProgressBar({ value, total, color }: { value: number; total: number; color: string }) {
   return (
     <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]" role="presentation">
@@ -85,15 +96,8 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast }: Collecti
       key: "rarest",
       label: "Rarest",
       beast: stats.rarest,
-      // highest card grade, then highest power (see fetchOwnerBeastHighlights)
-      stat: stats.rarest
-        ? [
-            stats.rarest.cardGrade != null && `💎 Grade ${stats.rarest.cardGrade}`,
-            stats.rarest.power != null && `⚡ ${stats.rarest.power.toLocaleString()}`,
-          ]
-            .filter(Boolean)
-            .join(" · ") || null
-        : null,
+      // combined rank + card grade + visual score (see fetchOwnerBeastHighlights)
+      stat: stats.rarest ? rarityStat(stats.rarest) : null,
       accent: "text-purple-300",
     },
     {

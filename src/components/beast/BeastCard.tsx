@@ -171,7 +171,7 @@ const BeastCard = memo(function BeastCard({
     <div
       style={{ cursor: disabled || missing ? "default" : "pointer", opacity: missing || disabled ? 0.5 : 1, position: "relative" }}
       onClick={() => { if (!disabled && !missing) onSelect?.(beast); }}
-      className={`transition-transform duration-150 hover:scale-[1.03] w-full${className ? ` ${className}` : ""}`}
+      className={`@container transition-transform duration-150 hover:scale-[1.03] w-full${className ? ` ${className}` : ""}`}
     >
       {(duplicateCount ?? 0) > 1 && !missing && (
         <div style={{
@@ -212,10 +212,23 @@ const BeastCard = memo(function BeastCard({
                 border: `1px solid ${!graded ? "#fca5a5" : perfect ? "#f3dc8a" : "rgba(255,255,255,0.25)"}`,
                 borderRadius: 4,
                 boxShadow: "0 1px 4px rgba(0,0,0,0.6)",
-                padding: "3px 5px", fontSize: 9, fontWeight: "bold", letterSpacing: 0.5,
+                fontWeight: "bold", letterSpacing: 0.5,
               }}
+              // Narrow cards (3-up on phones) get a compact "G8" so the
+              // badge doesn't cover the beast's name.
+              className="px-[3px] py-[2px] text-[7px] @min-[150px]:px-[5px] @min-[150px]:py-[3px] @min-[150px]:text-[9px]"
             >
-              {graded ? `GRADE ${beast.cardGrade}` : "NO GRADE"}
+              {graded ? (
+                <>
+                  <span className="@min-[150px]:hidden">G{beast.cardGrade}</span>
+                  <span className="hidden @min-[150px]:inline">GRADE {beast.cardGrade}</span>
+                </>
+              ) : (
+                <>
+                  <span className="@min-[150px]:hidden">NO G</span>
+                  <span className="hidden @min-[150px]:inline">NO GRADE</span>
+                </>
+              )}
             </div>
           );
         })()}
