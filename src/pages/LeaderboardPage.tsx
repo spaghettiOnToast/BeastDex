@@ -2,10 +2,11 @@ import { useState } from "react";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import { HallOfFame } from "../components/leaderboard/HallOfFame";
+import { RemainingToCollect } from "../components/leaderboard/RemainingToCollect";
 import { BeastCollectionStats } from "../components/leaderboard/BeastCollectionStats";
 import { BeastSlayerLeaderboard } from "../components/leaderboard/BeastSlayerLeaderboard";
 
-type LeaderboardTab = "stats" | "hallOfFame" | "slayer";
+type LeaderboardTab = "stats" | "remaining" | "hallOfFame" | "slayer";
 
 function LeaderboardPage() {
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("stats");
@@ -14,6 +15,7 @@ function LeaderboardPage() {
 
   const tabs = [
     { id: "stats" as const, label: "Collection Stats" },
+    { id: "remaining" as const, label: "Remaining" },
     { id: "hallOfFame" as const, label: "Hall of Fame" },
     { id: "slayer" as const, label: "Slayer" },
   ];
@@ -58,6 +60,7 @@ function LeaderboardPage() {
           <div className="absolute inset-0 bg-gradient-to-br from-[#8bff72]/5 via-transparent to-lsGold/5 rounded-2xl pointer-events-none"></div>
           <div className="relative z-10">
             {activeTab === "stats" && <BeastCollectionStats />}
+            {activeTab === "remaining" && <RemainingToCollect />}
             {activeTab === "hallOfFame" && <HallOfFame />}
             {activeTab === "slayer" && <BeastSlayerLeaderboard />}
           </div>
