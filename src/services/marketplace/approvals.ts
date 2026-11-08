@@ -352,22 +352,22 @@ async function getTokenOwner(
     const tokenIdBigInt = typeof tokenId === 'bigint' ? tokenId : BigInt(tokenId.toString());
     const tokenIdU256 = toUint256Hex(tokenIdBigInt);
 
-    const response = await provider.callContract(
-      {
-        contractAddress: collectionAddress,
-        entrypoint: "ownerOf",
-        calldata: tokenIdU256,
-      },
-      "latest"
-    );
-
-    const rawResult = Array.isArray(response) ? response : (response as any).result;
-    if (!Array.isArray(rawResult) || rawResult.length === 0) {
-      return null;
+    // Beasts v3 only exposes snake_case `owner_of` (no camelCase `ownerOf`);
+    // fall back to `ownerOf` for older camelCase-only ERC721s.
+    for (const entrypoint of ["owner_of", "ownerOf"]) {
+      try {
+        const response = await provider.callContract(
+          { contractAddress: collectionAddress, entrypoint, calldata: tokenIdU256 },
+          "latest"
+        );
+        const rawResult = Array.isArray(response) ? response : (response as any).result;
+        // returns a single felt252 (address)
+        if (Array.isArray(rawResult) && rawResult.length > 0) return rawResult[0];
+      } catch {
+        // try the next spelling
+      }
     }
-
-    // ownerOf returns a single felt252 (address)
-    return rawResult[0];
+    return null;
   } catch {
     return null;
   }
@@ -571,7 +571,11 @@ export async function validateListingOwnership(
   const actualOwner = await getTokenOwner(provider, collectionAddress, tokenId);
 
   if (!actualOwner) {
-    return false; // Unable to verify ownership
+    // Couldn't read the owner (RPC error / unknown ABI). This is only a backup to
+    // the contract's get_validity check, and execute reverts if the seller no
+    // longer owns the token, so don't block the purchase on a failed read.
+    console.warn("[validateListingOwnership] Could not read token owner; skipping backup check");
+    return true;
   }
 
   const isValid = compareStarknetAddresses(actualOwner, expectedOwner);
