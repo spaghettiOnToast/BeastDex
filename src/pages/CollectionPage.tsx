@@ -50,7 +50,7 @@ import { Button } from "../components/ui/button";
 import { getBeastTemplate } from "../data/beastTemplates";
 import { apiCache } from "../services/apiCache";
 import { fetchOwnerSummitRankFromApi, type OwnerSummitRank } from "../services/summitApi";
-import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
+import { CollectionHero } from "../components/collection/CollectionHero";
 import type { OverviewCard } from "../components/account/OverviewCards";
 import { ClaimCorpseButton } from "../components/collection/ClaimCorpseButton";
 import FestivalBeastsStrip from "../components/profile/FestivalBeastsStrip";
@@ -892,7 +892,7 @@ function CollectionPage() {
   }, [mostPowerfulBeast]);
 
 
-  // Display stats for ThreeColumnStatsLayout
+  // Display stats for the collection hero
   const displayStats = useMemo(() => ({
     animatedShinyCount: collectionStats.animatedShinyCount,
     animatedCount: collectionStats.animatedCount,
@@ -1054,10 +1054,11 @@ function CollectionPage() {
           </Link>
         </div>
 
-        {/* Profile Stats - Three Column Layout */}
-        <ThreeColumnStatsLayout
-          collectionStats={displayStats}
+        {/* Collection hero: species progress, headline numbers, variants, highlights */}
+        <CollectionHero
+          stats={displayStats}
           overviewCards={overviewCards}
+          onSelectBeast={handleBeastSelect}
         />
 
         {/* Tiddy Mun / Black Shuck held by this owner (hidden when none) */}
