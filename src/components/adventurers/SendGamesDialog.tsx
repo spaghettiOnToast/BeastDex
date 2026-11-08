@@ -13,6 +13,7 @@ import { isUserRejection } from "../../utils/transaction";
 import { waitForTx } from "../../services/tx";
 import { buildGameTransferCall, gameDungeonFor, gameStatus, type AdventurerGame } from "../../services/adventurers";
 import { GameStatusBadge } from "./AdventurerCard";
+import { SendGameNotice } from "./TxNotices";
 
 type Props = {
   open: boolean;
@@ -20,9 +21,12 @@ type Props = {
   games: AdventurerGame[];
   onRemove?: (tokenId: string) => void;
   onSent?: () => void;
+  /** how many of `games` are listed / have offers (for the warnings) */
+  listedCount?: number;
+  offersCount?: number;
 };
 
-export function SendGamesDialog({ open, onClose, games, onRemove, onSent }: Props) {
+export function SendGamesDialog({ open, onClose, games, onRemove, onSent, listedCount = 0, offersCount = 0 }: Props) {
   const { address, account } = useAccount();
   const [recipient, setRecipient] = useState("");
   const [resolved, setResolved] = useState<string | null>(null);
@@ -169,9 +173,7 @@ export function SendGamesDialog({ open, onClose, games, onRemove, onSent }: Prop
               </Alert>
             )}
 
-            <p className="text-[11px] text-zinc-500">
-              Transfers can't be undone. Any live listing of these games stops working once they leave your wallet.
-            </p>
+            <SendGameNotice listed={listedCount} withOffers={offersCount} />
 
             <Button
               className="w-full bg-gold/15 font-bold text-gold border border-gold hover:bg-gold/20"

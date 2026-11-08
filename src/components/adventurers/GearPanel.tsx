@@ -5,6 +5,8 @@ import {
   itemImageUrl,
   itemName,
   itemTier,
+  itemSpecials,
+  specialItemName,
   type AdventurerGear,
   type GearItem,
 } from "../../services/adventurers";
@@ -22,7 +24,7 @@ const STAT_LABELS: Array<[keyof AdventurerGear["stats"], string]> = [
 /** Tier colours: T1 gold → T5 grey. */
 const TIER_COLOR = ["#a1a1aa", "#facc15", "#c084fc", "#60a5fa", "#4ade80", "#a1a1aa"];
 
-function ItemRow({ slot, item }: { slot: string; item?: GearItem }) {
+function ItemRow({ slot, item, salt }: { slot: string; item?: GearItem; salt: number }) {
   if (!item) {
     return (
       <div className="flex items-center gap-1.5 text-zinc-600">
@@ -32,8 +34,14 @@ function ItemRow({ slot, item }: { slot: string; item?: GearItem }) {
     );
   }
   const tier = itemTier(item.id);
+  const greatness = itemGreatness(item.xp);
+  const specials = itemSpecials(item.id, greatness, salt);
+  const special = [specials.prefix, specials.suffix].filter(Boolean).join(" · ");
   return (
-    <div className="flex items-center gap-1.5" title={`${slot}: ${itemName(item.id)} · Tier ${tier} · Greatness ${itemGreatness(item.xp)} (${item.xp} XP)`}>
+    <div
+      className="flex items-center gap-1.5"
+      title={`${slot}: ${specialItemName(itemName(item.id), specials)} · Tier ${tier} · Greatness ${greatness} (${item.xp} XP)`}
+    >
       <img
         src={itemImageUrl(item.id)}
         alt=""
@@ -41,11 +49,14 @@ function ItemRow({ slot, item }: { slot: string; item?: GearItem }) {
         className="h-5 w-5 flex-shrink-0 rounded bg-black/40 object-contain"
         onError={(e) => (e.currentTarget.style.visibility = "hidden")}
       />
-      <span className="min-w-0 flex-1 truncate text-zinc-200">{itemName(item.id)}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-zinc-200">{itemName(item.id)}</span>
+        {special && <span className="block truncate text-[9px] text-gold/80">{special}</span>}
+      </span>
       <span className="flex-shrink-0 font-mono" style={{ color: TIER_COLOR[tier] }}>
         T{tier}
       </span>
-      <span className="w-6 flex-shrink-0 text-right font-mono text-zinc-400">G{itemGreatness(item.xp)}</span>
+      <span className="w-6 flex-shrink-0 text-right font-mono text-zinc-400">G{greatness}</span>
     </div>
   );
 }
@@ -70,7 +81,7 @@ export function GearPanel({ gear, loading }: { gear?: AdventurerGear; loading: b
       <div className="text-[9px] font-bold uppercase tracking-wider text-zinc-500">Equipped</div>
       <div className="space-y-1">
         {GEAR_SLOTS.map((slot) => (
-          <ItemRow key={slot} slot={slot} item={gear.equipment[slot]} />
+          <ItemRow key={slot} slot={slot} item={gear.equipment[slot]} salt={gear.specialsSalt} />
         ))}
       </div>
       <div className="grid grid-cols-7 gap-0.5 border-t border-white/10 pt-1.5 text-center">
@@ -86,7 +97,9 @@ export function GearPanel({ gear, loading }: { gear?: AdventurerGear; loading: b
         <div className="border-t border-white/10 pt-1.5">
           <div className="mb-0.5 text-[9px] font-bold uppercase tracking-wider text-zinc-500">Bag ({gear.bag.length})</div>
           <div className="text-zinc-300">
-            {gear.bag.map((i) => `${itemName(i.id)} T${itemTier(i.id)}`).join(" · ")}
+            {gear.bag
+              .map((i) => `${specialItemName(itemName(i.id), itemSpecials(i.id, itemGreatness(i.xp), gear.specialsSalt))} T${itemTier(i.id)}`)
+              .join(" · ")}
           </div>
         </div>
       )}

@@ -25,6 +25,7 @@ import { Button } from "../components/ui/button";
 import { AdventurerCard, GameStatusBadge } from "../components/adventurers/AdventurerCard";
 import { GameOffersDialog } from "../components/adventurers/GameOffersDialog";
 import { SendGamesDialog } from "../components/adventurers/SendGamesDialog";
+import { BuyGameNotice, ConfirmTxDialog, ListGameNotice, NoticeBox, OfferGameNotice } from "../components/adventurers/TxNotices";
 import { useAdventurerListings, useMyGames, type AdventurerListing } from "../hooks/useAdventurerGames";
 import {
   useArcadeSalesForCollection,
@@ -346,7 +347,13 @@ export default function AdventurerMarketplace() {
       return next;
     });
 
-  const cancelOrder = async (order: { listingId: string; orderId: number; tokenId: string }, label: string) => {
+  type CancelTarget = { order: { listingId: string; orderId: number; tokenId: string }; label: "listing" | "offer"; price: string };
+  const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
+  /** Opens the confirm step; the tx is sent from there. */
+  const cancelOrder = (order: CancelTarget["order"], label: CancelTarget["label"], price = "") =>
+    setCancelTarget({ order, label, price });
+
+  const sendCancel = async (order: CancelTarget["order"], label: string) => {
     if (!account) return;
     setCancellingId(order.listingId);
     const toastId = toast.loading(`Cancelling ${label}…`);
@@ -361,6 +368,7 @@ export default function AdventurerMarketplace() {
       else toast.error((e as Error).message || "Cancel failed", { id: toastId });
     } finally {
       setCancellingId(null);
+      setCancelTarget(null);
     }
   };
 
@@ -559,7 +567,7 @@ export default function AdventurerMarketplace() {
                             variant="outline"
                             className="h-7 w-full text-xs"
                             disabled={cancellingId === l.listingId}
-                            onClick={() => cancelOrder(l, "listing")}
+                            onClick={() => cancelOrder(l, "listing", priceLabel(l))}
                           >
                             {cancellingId === l.listingId ? "Cancelling…" : "Cancel listing"}
                           </Button>
@@ -688,7 +696,7 @@ export default function AdventurerMarketplace() {
                                   variant="outline"
                                   className="ml-auto h-7 px-2 text-xs"
                                   disabled={cancellingId === listing.listingId}
-                                  onClick={() => cancelOrder(listing, "listing")}
+                                  onClick={() => cancelOrder(listing, "listing", priceLabel(listing))}
                                 >
                                   {cancellingId === listing.listingId ? "Cancelling…" : "Cancel"}
                                 </Button>
@@ -800,7 +808,9 @@ export default function AdventurerMarketplace() {
                               variant="outline"
                               className="h-7 px-2 text-xs"
                               disabled={cancellingId === String(o.id)}
-                              onClick={() => cancelOrder({ listingId: String(o.id), orderId: o.id, tokenId: id }, "offer")}
+                              onClick={() =>
+                                cancelOrder({ listingId: String(o.id), orderId: o.id, tokenId: id }, "offer", priceLabel({ price: o.price, paymentToken: o.currency }))
+                              }
                             >
                               {cancellingId === String(o.id) ? "Cancelling…" : "Cancel"}
                             </Button>
@@ -873,14 +883,7 @@ export default function AdventurerMarketplace() {
         beast={listTarget ? gameTarget(listTarget.tokenId, listTarget) : null}
         collection={GAME_CORE_ADDRESS}
         itemLabel="Game"
-        notice={
-          listTarget?.started ? (
-            <Warning>
-              This game has started. If you play it after listing, buyers can't purchase it until you relist, so cancel the
-              listing before you play on.
-            </Warning>
-          ) : null
-        }
+        notice={<ListGameNotice started={!!listTarget?.started} />}
         onListed={() => {
           setListTarget(null);
           void actions.handleListed();
@@ -894,12 +897,7 @@ export default function AdventurerMarketplace() {
         tokenId={offerTarget?.tokenId}
         collection={GAME_CORE_ADDRESS}
         itemLabel="Game"
-        notice={
-          <Warning>
-            You're offering on the game as it is now. If the owner plays after your offer, BeastDex won't let them accept it, but
-            other marketplaces might. Choose a short duration.
-          </Warning>
-        }
+        notice={<OfferGameNotice />}
         onOfferMade={() => {
           setOfferTarget(null);
           setTimeout(() => void myOffers.refetch(), 3000);
@@ -919,12 +917,50 @@ export default function AdventurerMarketplace() {
         open={sendOpen}
         onClose={() => setSendOpen(false)}
         games={selectedGames}
+        listedCount={selectedGames.filter((g) => myListingByToken.has(g.tokenId)).length}
+        offersCount={selectedGames.filter((g) => offersByToken.has(g.tokenId)).length}
         onRemove={(id) => toggleSelected(id)}
         onSent={() => {
           setSelected(new Set());
           setTimeout(() => void myGames.refetch(), 4000);
         }}
       />
+
+      <ConfirmTxDialog
+        open={!!cancelTarget}
+        onOpenChange={(o) => !o && setCancelTarget(null)}
+        title={cancelTarget?.label === "offer" ? "Cancel offer?" : "Cancel listing?"}
+        description={
+          cancelTarget
+            ? `${gameDungeonFor(decodeMinter(cancelTarget.order.tokenId)).name} #${BigInt(cancelTarget.order.tokenId).toString(16).slice(-6)}${cancelTarget.price ? ` · ${cancelTarget.price}` : ""}`
+            : undefined
+        }
+        confirmLabel={cancelTarget?.label === "offer" ? "Cancel offer" : "Cancel listing"}
+        busy={!!cancelTarget && cancellingId === cancelTarget.order.listingId}
+        onConfirm={() => cancelTarget && sendCancel(cancelTarget.order, cancelTarget.label)}
+      >
+        {cancelTarget?.label === "offer" ? (
+          <NoticeBox
+            tone="blue"
+            title="What happens"
+            items={[
+              "Your offer is removed, so the owner can no longer accept it.",
+              "No marketplace fee or royalty, only network gas.",
+              "Your wallet's spending approval for this token stays in place. You can revoke it from your wallet if you like.",
+            ]}
+          />
+        ) : (
+          <NoticeBox
+            tone="blue"
+            title="What happens"
+            items={[
+              "The listing is removed. The game stays in your wallet and you can play it straight away.",
+              "No marketplace fee or royalty, only network gas.",
+              "The marketplace keeps its approval for your Loot Survivor games. Revoke it from the wallet menu if you won't list again.",
+            ]}
+          />
+        )}
+      </ConfirmTxDialog>
 
       {buying && (
         <PurchaseConfirmDialog
@@ -947,10 +983,9 @@ export default function AdventurerMarketplace() {
                 <Warning>Changed since you last saw it: {buying.changes.join(", ")}. The card shows the current state.</Warning>
               )}
               {!purchaseBlocker(buying) && buying.fresh?.started && (
-                <p className="text-center text-[11px] text-zinc-500">
-                  Untouched since it was listed. BeastDex re-checks it once more just before you sign.
-                </p>
+                <p className="text-center text-[11px] text-emerald-300/80">Untouched since it was listed.</p>
               )}
+              <BuyGameNotice started={!!buying.fresh?.started} />
             </div>
           }
         />

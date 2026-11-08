@@ -38,6 +38,7 @@ type ApiGameDetail = {
     stats?: Partial<Record<keyof AdventurerStats, number>>;
     equipment?: Record<string, { id?: number; xp?: number } | undefined>;
     stat_upgrades_available?: number;
+    item_specials_salt?: number;
   } | null;
   bag?: Array<{ id?: number; xp?: number }>;
   actionCount?: number;
@@ -66,6 +67,8 @@ export type AdventurerGear = {
   bag: GearItem[];
   stats: AdventurerStats;
   statUpgrades: number;
+  /** seeds item special names (see specials.ts) */
+  specialsSalt: number;
 };
 
 export type GameStatus = "unplayed" | "in-progress" | "dead" | "expired" | "stuck";
@@ -206,6 +209,7 @@ export function gearFromDetail(detail: ApiGameDetail): AdventurerGear | undefine
       luck: st.luck ?? 0,
     },
     statUpgrades: a.stat_upgrades_available ?? 0,
+    specialsSalt: a.item_specials_salt ?? 0,
   };
 }
 

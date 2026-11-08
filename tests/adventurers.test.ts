@@ -22,6 +22,8 @@ import {
   itemTier,
   itemGreatness,
   itemImageUrl,
+  itemSpecials,
+  specialItemName,
 } from "../src/services/adventurers";
 
 // A real Beast Mode game (lootsurvivor.io/play?id=…&dungeon=beastmode)
@@ -199,5 +201,25 @@ describe("gear", () => {
     expect(g.gear?.bag).toEqual([{ id: 12, xp: 0 }]);
     expect(g.gear?.stats.intelligence).toBe(5);
     expect(g.gear?.statUpgrades).toBe(1);
+  });
+});
+
+describe("item specials", () => {
+  // Game 0x…1c8404e010c64b6001b06a1 (item_specials_salt 11096), all gear at greatness 20.
+  // Expected names come from the lootsurvivor.io client's algorithm (getSpecialsSeed / getSpecials).
+  const salt = 11096;
+  const name = (id: number, xp: number) => specialItemName(itemName(id), itemSpecials(id, itemGreatness(xp), salt));
+
+  it("derives prefix and suffix at greatness 19+", () => {
+    expect(name(9, 400)).toBe("Corpse Whisper Ghost Wand of Fury");
+    expect(name(17, 400)).toBe("Onslaught Shadow Divine Robe of Detection");
+    expect(name(3, 400)).toBe("Vortex Root Amulet of the Twins");
+    expect(name(4, 400)).toBe("Miracle Instrument Silver Ring of Anger");
+  });
+
+  it("only the suffix at 15–18, nothing below 15", () => {
+    expect(itemSpecials(9, 15, salt)).toEqual({ suffix: "of Fury", prefix: null });
+    expect(itemSpecials(9, 14, salt)).toEqual({ suffix: null, prefix: null });
+    expect(name(19, 144)).toBe("Linen Robe"); // G12
   });
 });

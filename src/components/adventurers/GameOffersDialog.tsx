@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Button } from "../ui/button";
@@ -13,6 +14,9 @@ import {
   type AdventurerGame,
 } from "../../services/adventurers";
 import { formatAgo } from "../../services/adventurers/format";
+import { useArcadeBookConfig } from "../../hooks/useArcadeBookConfig";
+import { CLIENT_FEE_BP } from "../../services/marketplace/constants";
+import { FeeTable, NoticeBox } from "./TxNotices";
 
 type Props = {
   open: boolean;
@@ -27,11 +31,71 @@ type Props = {
 /** Offers received on one of the user's games, with the accept rules applied per offer. */
 export function GameOffersDialog({ open, onOpenChange, game, offers, acceptingId, onAccept }: Props) {
   const { usernames } = useControllerUsernames(offers.map((o) => o.owner));
+  const { platformFeeBP } = useArcadeBookConfig();
+  const [confirming, setConfirming] = useState<ArcadeOrderModelCompat | null>(null);
   if (!game) return null;
   const d = gameDungeonFor(game.minterId);
+  const close = (o: boolean) => {
+    if (!o) setConfirming(null);
+    onOpenChange(o);
+  };
+
+  if (confirming) {
+    const symbol = getPaymentTokenByAddress(confirming.currency)?.symbol ?? "STRK";
+    const price = BigInt(confirming.price);
+    const royalty = (price * BigInt(ADVENTURER_ROYALTY_BP)) / 10000n;
+    const platform = (price * BigInt(platformFeeBP)) / 10000n;
+    const fmt = (v: bigint) => `${formatPrice(v, symbol)} ${symbol}`;
+    const busy = acceptingId === String(confirming.id);
+    const blocker = acceptOfferBlocker(game, confirming.createdAt);
+    return (
+      <Dialog open={open} onOpenChange={(o) => !busy && close(o)}>
+        <DialogContent className="border border-white/[0.06] bg-surface-overlay">
+          <DialogHeader>
+            <DialogTitle>Accept offer?</DialogTitle>
+            <DialogDescription>
+              Sell {d.name} Lv {game.level} (#{BigInt(game.tokenId).toString(16).slice(-6)}) for {fmt(price)}.
+            </DialogDescription>
+          </DialogHeader>
+          <FeeTable
+            rows={[
+              ["Offer", fmt(price)],
+              [`Loot Survivor royalty (${ADVENTURER_ROYALTY_BP / 100}%)`, `−${fmt(royalty)}`],
+              ...(platformFeeBP > 0 ? ([[`Marketplace fee (${platformFeeBP / 100}%)`, `−${fmt(platform)}`]] as Array<[string, string]>) : []),
+            ]}
+            total={["You receive", fmt(price - royalty - platform)]}
+          />
+          <p className="text-[11px] text-zinc-500">
+            The buyer also pays the {CLIENT_FEE_BP / 100}% BeastDex client fee on top, from their wallet. Network gas is extra.
+          </p>
+          <NoticeBox
+            title="Before you accept"
+            items={[
+              "The game leaves your wallet as soon as this lands. It can't be reversed.",
+              "Don't play the game while this is pending.",
+              "If the game is listed, that listing ends.",
+            ]}
+          />
+          {blocker && <NoticeBox tone="red" title="Can't accept" items={[blocker]} />}
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" disabled={busy} onClick={() => setConfirming(null)}>
+              Back
+            </Button>
+            <Button
+              className="flex-1 bg-gold/15 font-bold text-gold border border-gold hover:bg-gold/20"
+              disabled={busy || !!blocker}
+              onClick={() => onAccept(confirming)}
+            >
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : `Accept ${fmt(price)}`}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={close}>
       <DialogContent className="border border-white/[0.06] bg-surface-overlay">
         <DialogHeader>
           <DialogTitle>
@@ -71,9 +135,9 @@ export function GameOffersDialog({ open, onOpenChange, game, offers, acceptingId
                       className="h-8 bg-gold/15 font-bold text-gold border border-gold hover:bg-gold/20"
                       disabled={!!blocker || !!acceptingId}
                       title={blocker ?? undefined}
-                      onClick={() => onAccept(o)}
+                      onClick={() => setConfirming(o)}
                     >
-                      {acceptingId === id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Accept"}
+                      Accept…
                     </Button>
                   </div>
                   {blocker && <p className="mt-1.5 text-amber-300">{blocker}</p>}
