@@ -41,7 +41,7 @@ export type Beast = {
   /** Unix seconds a timed transfer lock ends; 0/undefined when none */
   transferLockedUntil?: number;
   genesis?: boolean;
-  /** v3 minter data: legacy token id for migrated beasts, 0 for new (festival) mints */
+  /** v3 minter data: legacy token id for migrated beasts, 0 for new v3 mints */
   minterData?: number;
   mega?: boolean;
   midi?: boolean;

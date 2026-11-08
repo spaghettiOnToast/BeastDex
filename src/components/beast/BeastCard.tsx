@@ -233,18 +233,18 @@ const BeastCard = memo(function BeastCard({
             </div>
           );
         })()}
-        {/* Rank 0: label why (Genesis / Festival / Unranked) rather than leaving
+        {/* Rank 0: label why (Genesis / New / Unranked) rather than leaving
             the corner blank (the card art draws no rank for 0). */}
         {!missing && beast.tokenId && beast.visualEffects !== undefined && cardInput.rank < 1 && (() => {
           const reason = unrankedReason(beast) ?? "unranked";
           const tone =
             reason === "genesis"
               ? { color: "#e2b94c", border: "rgba(226,185,76,0.55)", title: "Genesis beast — one of the 75 originals" }
-              : reason === "festival"
-                ? { color: "#80ff00", border: "rgba(128,255,0,0.45)", title: "Festival beast — minted in a festival dungeon" }
+              : reason === "new"
+                ? { color: "#7dd3fc", border: "rgba(125,211,252,0.45)", title: "New beast — minted after the last ranking update, awaiting a rank" }
                 : { color: "#a1a1aa", border: "rgba(255,255,255,0.15)", title: "Unranked — this beast hasn't been ranked yet" };
           const label = UNRANKED_LABELS[reason];
-          const short = reason === "genesis" ? "GEN" : reason === "festival" ? "FEST" : "UNR.";
+          const short = reason === "genesis" ? "GEN" : reason === "new" ? "NEW" : "UNR.";
           return (
             <div
               title={tone.title}

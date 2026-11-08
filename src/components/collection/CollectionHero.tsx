@@ -36,7 +36,7 @@ function rarityStat(beast: Beast): string | null {
   const parts = [
     beast.visual && beast.visual !== "Regular" ? `✨ ${beast.visual}` : null,
     beast.cardGrade != null ? `💎 Grade ${beast.cardGrade}` : null,
-    // rank 0: Genesis / Festival / Unranked
+    // rank 0: Genesis / New / Unranked
     rank != null && rank > 0 ? `👑 #${rank}` : UNRANKED_LABELS[unrankedReason(beast) ?? "unranked"],
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
