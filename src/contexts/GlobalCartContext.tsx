@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
+import { useAccount } from "@starknet-react/core";
 import type { Beast } from "../services/beast";
 import type { Listing } from "../services/marketplace/types";
 import { toast } from "sonner";
@@ -37,6 +38,17 @@ export function GlobalCartProvider({ children }: { children: ReactNode }) {
 
   // Purchase cart state
   const [purchaseCart, setPurchaseCart] = useState<Listing[]>([]);
+
+  // The list cart holds the connected wallet's own beasts: drop it when the
+  // wallet changes (another wallet can't list them). The purchase cart is kept.
+  const { address } = useAccount();
+  const lastAddressRef = useRef(address);
+  useEffect(() => {
+    if (lastAddressRef.current !== address) {
+      lastAddressRef.current = address;
+      setListCart([]);
+    }
+  }, [address]);
 
   // List cart actions
   const addToListCart = useCallback((beast: Beast) => {

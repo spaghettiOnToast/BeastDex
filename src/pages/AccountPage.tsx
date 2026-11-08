@@ -42,6 +42,7 @@ import { Button } from "../components/ui/button";
 import { useSpeciesCount } from "../hooks/useBeastQueries";
 import { normaliseStarknetAddress } from "../utils/address";
 import { fetchOwnerSummitRankFromApi, type OwnerSummitRank } from "../services/summitApi";
+import { useFollowConnectedWallet } from "../hooks/useFollowConnectedWallet";
 
 function isValidHexAddress(value: string): boolean {
   if (!value.startsWith("0x") || value.length < 3) {
@@ -445,6 +446,8 @@ function AccountPage() {
       normalisedAccountAddress &&
       normaliseStarknetAddress(connectedAddress) === normaliseStarknetAddress(normalisedAccountAddress)
   );
+  // Switching wallets while on your own page moves to the new wallet's page.
+  useFollowConnectedWallet(normalisedAccountAddress, "/account");
 
   const accountUsername = useMemo(() => {
     if (!normalisedAccountAddress) return null;

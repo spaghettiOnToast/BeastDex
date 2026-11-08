@@ -306,22 +306,20 @@ export default function MarketplacePage() {
     tokenPriceMap,
   });
 
-  // Track if user beasts have been loaded (to avoid redundant loads)
-  const userBeastsLoadedRef = useRef(false);
+  // Which wallet the user's beasts were last loaded for (avoids redundant loads).
+  // Keyed by address so switching wallets loads the new wallet's beasts; a
+  // boolean reset in a separate effect ran after this one and never reloaded.
+  const userBeastsLoadedForRef = useRef<string | null>(null);
 
   // Load user beasts when connected (needed for offers count in hero card)
   // and when switching to my/my-beasts tabs
   useEffect(() => {
-    if (!userBeastsLoadedRef.current && address) {
-      userBeastsLoadedRef.current = true;
+    if (address && userBeastsLoadedForRef.current !== address) {
+      userBeastsLoadedForRef.current = address;
       dataHook.reloadUserBeasts();
     }
+    if (!address) userBeastsLoadedForRef.current = null;
   }, [address, dataHook.reloadUserBeasts]);
-
-  // Reset the loaded flag when address changes (user switches account)
-  useEffect(() => {
-    userBeastsLoadedRef.current = false;
-  }, [address]);
 
   // Cancel cart hook (list and purchase carts are in GlobalCartContext)
   const cartsHook = useMarketplaceCarts();

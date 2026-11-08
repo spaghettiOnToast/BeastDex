@@ -58,6 +58,7 @@ import { useAccount } from "@starknet-react/core";
 
 import { ClaimCorpseButton } from "../components/collection/ClaimCorpseButton";
 import FestivalBeastsStrip from "../components/profile/FestivalBeastsStrip";
+import { useFollowConnectedWallet } from "../hooks/useFollowConnectedWallet";
 
 const TABS = [
   { key: "all", label: "All" },
@@ -868,6 +869,8 @@ function CollectionPage() {
       normalisedAccountAddress &&
       normaliseStarknetAddress(connectedAddress) === normaliseStarknetAddress(normalisedAccountAddress)
   );
+  // Switching wallets while on your own page moves to the new wallet's page.
+  useFollowConnectedWallet(normalisedAccountAddress, "/collection");
 
   const accountUsername = useMemo(() => {
     if (!normalisedAccountAddress) return null;
