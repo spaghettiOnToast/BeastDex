@@ -1,4 +1,6 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { apiCache } from "../../../services/apiCache";
 import { MARKETPLACE_COLLECTION_ADDRESSES, marketplaceTokenKey } from "../../../services/marketplace/constants";
 import { festivalCollectionFor } from "../../../services/festivalBeasts";
 import { useFestivalTokens } from "../../../hooks/useFestivalTokens";
@@ -15,6 +17,9 @@ import { useBeastLookup } from "../../../hooks/useBeastLookup";
  * - useUserBeasts: Handles user's owned beasts (deferred loading)
  * - useBeastFilters: Handles available filter options
  */
+/** Re-check delays after a trade (the beasts / festival indexers lag the chain). */
+const MY_ITEMS_POLL_DELAYS_MS = [4_000, 8_000, 15_000];
+
 export function useMarketplaceData(address: string | undefined) {
   // Marketplace listings (orders + hydration) for Beasts and every festival
   // collection, shown together in one grid.
@@ -47,6 +52,38 @@ export function useMarketplaceData(address: string | undefined) {
 
   // Beast attribute filters
   const filtersHook = useBeastFilters();
+
+  /**
+   * Refresh "My Items" (owned beasts + festival holdings) after the user buys
+   * or sells. The indexers lag the chain by a few seconds, so re-check a few
+   * times after the immediate refresh. A newer call supersedes older polls.
+   */
+  const queryClient = useQueryClient();
+  const reloadUserBeasts = userBeastsHook.reload;
+  const refreshGeneration = useRef(0);
+  useEffect(() => () => void (refreshGeneration.current += 1), []); // stop polling on unmount
+  const refreshMyItems = useCallback(
+    async ({ poll = true }: { poll?: boolean } = {}) => {
+      const generation = ++refreshGeneration.current;
+      const refreshOnce = async () => {
+        apiCache.clearEndpoint("festival-tokens");
+        await Promise.all([
+          reloadUserBeasts(),
+          queryClient.invalidateQueries({ queryKey: ["festivalTokens"] }),
+        ]);
+      };
+      await refreshOnce();
+      if (!poll) return;
+      void (async () => {
+        for (const delayMs of MY_ITEMS_POLL_DELAYS_MS) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          if (generation !== refreshGeneration.current) return;
+          await refreshOnce();
+        }
+      })();
+    },
+    [reloadUserBeasts, queryClient]
+  );
 
   /**
    * Recent listings - automatically derived from main listings
@@ -127,6 +164,8 @@ export function useMarketplaceData(address: string | undefined) {
     userBeastsHasLoaded: userBeastsHook.hasLoaded,
     userBeastsError: userBeastsHook.error,
     reloadUserBeasts: userBeastsHook.reload,
+    /** Reload owned beasts + festival holdings now, then poll while indexers catch up */
+    refreshMyItems,
 
     // Filters
     availableFilters: filtersHook.filters,

@@ -635,6 +635,9 @@ export function useUserSales(
     queryKey,
     enabled: enabled && !!userAddress && !!key,
     staleTime: 30_000, // Consider data fresh for 30 seconds
+    // Poll so sales made elsewhere (someone buying the user's listing) show up
+    // and can refresh My Items.
+    refetchInterval: 60_000,
     refetchOnWindowFocus: false,
     refetchOnMount: true,
     queryFn: async ({ signal }) => {

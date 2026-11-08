@@ -340,6 +340,28 @@ export default function MarketplacePage() {
     pageSize: 100,
   });
 
+  // Refresh My Items when a new completed trade involving the user appears
+  // (their own buy, or someone buying their listing / accepting their offer).
+  const latestUserTradeAt = useMemo(
+    () =>
+      userTransactions.reduce(
+        (max, tx) => (tx.status === "completed" && tx.timestamp > max ? tx.timestamp : max),
+        0
+      ),
+    [userTransactions]
+  );
+  const seenUserTradeAt = useRef<number | null>(null);
+  const { refreshMyItems } = dataHook;
+  useEffect(() => {
+    seenUserTradeAt.current = null; // new account: re-baseline
+  }, [address]);
+  useEffect(() => {
+    if (!latestUserTradeAt) return;
+    const seen = seenUserTradeAt.current;
+    seenUserTradeAt.current = Math.max(seen ?? 0, latestUserTradeAt);
+    if (seen !== null && latestUserTradeAt > seen) void refreshMyItems();
+  }, [latestUserTradeAt, refreshMyItems]);
+
   // Combined invalidation function for all sales data
   const invalidateAllSales = useCallback(async () => {
     await Promise.all([
@@ -352,7 +374,7 @@ export default function MarketplacePage() {
   const actionsHook = useMarketplaceActionsHook({
     account,
     refetchOrders: dataHook.refetchOrders,
-    reloadUserBeasts: dataHook.reloadUserBeasts,
+    reloadUserBeasts: dataHook.refreshMyItems,
     invalidateSales: invalidateAllSales,
     markListingAsSold: dataHook.markListingAsSold,
   });
@@ -465,6 +487,7 @@ export default function MarketplacePage() {
     const unsubPurchase = subscribeToPurchase(() => {
       dataHook.refetchOrders();
       invalidateAllSales();
+      void dataHook.refreshMyItems();
     });
 
     // When an offer is made from another page, refresh user offers
@@ -957,7 +980,7 @@ export default function MarketplacePage() {
 
         // Transaction is tracked automatically by the indexer
         await dataHook.refetchOrders();
-        await dataHook.reloadUserBeasts();
+        await dataHook.refreshMyItems();
       } catch (error) {
         // Always dismiss the loading toast first
         toast.dismiss(toastId);
@@ -1032,7 +1055,7 @@ export default function MarketplacePage() {
 
         // Refresh data
         await dataHook.refetchOrders();
-        await dataHook.reloadUserBeasts();
+        await dataHook.refreshMyItems();
       } catch (error) {
         // Always dismiss the loading toast first
         toast.dismiss(toastId);
@@ -2878,7 +2901,7 @@ export default function MarketplacePage() {
               onRemoveBeast={globalCart.removeFromListCart}
               onSent={() => {
                 globalCart.clearListCart();
-                dataHook.reloadUserBeasts?.();
+                void dataHook.refreshMyItems();
               }}
             />
           )}
