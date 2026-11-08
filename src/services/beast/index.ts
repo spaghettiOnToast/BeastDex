@@ -29,10 +29,6 @@ type SlayerCache = { timestamp: number; entries: import("./types").BeastSlayerEn
 let _slayerCache: SlayerCache | null = null;
 const SLAYER_CACHE_TTL_MS = 5 * 60 * 1000;
 
-// Module-level cache for Beast of the Day (24h window, sorted client-side)
-type BotdEntry = { rank: number; beast: import("./types").Beast; owner: string; rarity_score: number; power: number; beast_rank: number; last_death: number };
-let _beastOfTheDayCache: { timestamp: number; entries: BotdEntry[] } | null = null;
-const BOTD_CACHE_TTL_MS = 3 * 60 * 1000;
 
 function _sdkQueryKey(q: BeastQuery): string {
   return JSON.stringify(q, Object.keys(q as object).sort());
@@ -412,57 +408,6 @@ export async function fetchBeastAttributeFilters(): Promise<BeastAttributeFilter
   };
 }
 
-
-export async function fetchBeastOfTheDayLeaderboard({
-  limit = 10,
-  offset = 0,
-}: FetchLeaderboardOptions = {}): Promise<Array<{
-  rank: number;
-  beast: Beast;
-  owner: string;
-  rarity_score: number;
-  power: number;
-  beast_rank: number;
-  last_death: number;
-}>> {
-  const now = Date.now();
-
-  if (!_beastOfTheDayCache || now - _beastOfTheDayCache.timestamp > BOTD_CACHE_TTL_MS) {
-    const twentyFourHoursAgo = Math.floor(now / 1000) - 24 * 60 * 60;
-
-    const result = await collectablesClient.beasts.list({
-      lastDeathTimestampGte: twentyFourHoursAgo,
-      sort: "power",
-      order: "desc",
-      limit: 100,
-      includeOwner: true,
-    });
-
-    const sorted = result.items
-      .map((item) => {
-        const beast = mapSdkBeast(item);
-        return {
-          beast,
-          owner: item.owner ?? "",
-          rarity_score: beastRarityScore(beast),
-          power: item.power ?? 0,
-          beast_rank: item.rank ?? 999999,
-          last_death: item.lastDeathTimestamp ?? 0,
-        };
-      })
-      .sort(
-        (a, b) =>
-          b.rarity_score - a.rarity_score ||
-          b.power - a.power ||
-          a.beast_rank - b.beast_rank
-      )
-      .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
-
-    _beastOfTheDayCache = { timestamp: now, entries: sorted };
-  }
-
-  return _beastOfTheDayCache.entries.slice(offset, offset + limit);
-}
 
 export async function fetchBeastSlayerLeaderboard({
   limit = 10,

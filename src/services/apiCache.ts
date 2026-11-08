@@ -24,7 +24,6 @@ class ApiCache {
     this.cacheConfigs.set("adventurer-deaths", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("beast-stats", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("beast-highlights", { ttl: 5 * 60 * 1000 }); // 5 minutes
-    this.cacheConfigs.set("beast-of-the-day", { ttl: 3 * 60 * 1000 }); // 3 minutes
     this.cacheConfigs.set("power-rank-leaderboard", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("owner-beast-stats", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("owner-beast-highlights", { ttl: 5 * 60 * 1000 }); // 5 minutes
@@ -116,7 +115,6 @@ class ApiCache {
       'beast-query',
       'beast-stats',
       'beast-highlights',
-      'beast-of-the-day',
       'power-rank-leaderboard',
     ];
 
