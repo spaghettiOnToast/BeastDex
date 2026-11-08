@@ -23,3 +23,12 @@ describe("grade filter", () => {
     expect(gradeFilterLabel("none")).toBe("No grade");
   });
 });
+
+import { gradeBuckets } from "../src/utils/gradeFilter";
+
+describe("gradeBuckets", () => {
+  it("counts 10, 9, 8 and 7-or-lower, skipping ungraded", () => {
+    const list = [10, 10, 9, 8, 8, 8, 7, 3, 0].map((g) => ({ cardGrade: g }));
+    expect(gradeBuckets([...list, {}])).toEqual({ g10: 2, g9: 1, g8: 3, g7AndBelow: 3 });
+  });
+});

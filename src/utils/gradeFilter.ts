@@ -30,3 +30,17 @@ export function gradeFilterLabel(filter: GradeFilter): string {
   return filter === "all" ? "All" : filter === "none" ? "No grade" : `Grade ${filter}`;
 }
 
+
+/** Counts for the collection hero: grades 10, 9 and 8, and everything graded 7 or lower. Ungraded beasts aren't counted. */
+export function gradeBuckets(beasts: Array<Pick<Beast, "cardGrade">>): { g10: number; g9: number; g8: number; g7AndBelow: number } {
+  const out = { g10: 0, g9: 0, g8: 0, g7AndBelow: 0 };
+  for (const b of beasts) {
+    const g = gradeOf(b);
+    if (g === null) continue;
+    if (g >= 10) out.g10 += 1;
+    else if (g === 9) out.g9 += 1;
+    else if (g === 8) out.g8 += 1;
+    else out.g7AndBelow += 1;
+  }
+  return out;
+}

@@ -2,6 +2,7 @@ import type { Beast } from "../../services/beast";
 import type { BeastCollectionStats } from "../../utils/beastCollection";
 import { getBeastRank, unrankedReason, UNRANKED_LABELS } from "../../utils/beast";
 import { useSpeciesCount } from "../../hooks/useBeastQueries";
+import { gradeBuckets } from "../../utils/gradeFilter";
 
 /** A headline number in the hero (beasts, combined power/health, summit rank). */
 export type OverviewCard = {
@@ -19,6 +20,8 @@ type CollectionHeroProps = {
   /** Headline numbers (beasts, combined power/health, summit rank) */
   overviewCards: OverviewCard[];
   onSelectBeast?: (beast: Beast) => void;
+  /** The owner's beasts, for the card-grade counts (omitted: no grade row). */
+  beasts?: Beast[];
 };
 
 const pct = (n: number, total: number) => (total > 0 ? Math.min(100, Math.round((n / total) * 100)) : 0);
@@ -57,14 +60,12 @@ const eyebrow = "text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-
  * Collection page hero: species progress + headline numbers, then the variant
  * breakdown and the collection's highlight beasts.
  */
-export function CollectionHero({ stats, overviewCards, onSelectBeast }: CollectionHeroProps) {
+export function CollectionHero({ stats, overviewCards, onSelectBeast, beasts }: CollectionHeroProps) {
   const totalSpecies = useSpeciesCount();
   const complete = stats.uniqueBeastTypes >= totalSpecies && totalSpecies > 0;
 
+  // Rarest first
   const variants = [
-    { key: "standard", label: "Standard", count: stats.standardCount, unique: stats.uniqueStandardTypes, color: "#22c55e" },
-    { key: "shiny", label: "Shiny", count: stats.shinyCount, unique: stats.uniqueShinyTypes, color: "#fde047" },
-    { key: "animated", label: "MIDI", count: stats.animatedCount, unique: stats.uniqueAnimatedTypes, color: "#7dd3fc" },
     {
       key: "animatedShiny",
       label: "Shiny MIDI",
@@ -73,7 +74,21 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast }: Collecti
       color: "linear-gradient(90deg, #ec4899, #a855f7, #38bdf8)",
       dot: "#ec4899",
     },
+    { key: "shiny", label: "Shiny", count: stats.shinyCount, unique: stats.uniqueShinyTypes, color: "#fde047" },
+    { key: "animated", label: "MIDI", count: stats.animatedCount, unique: stats.uniqueAnimatedTypes, color: "#7dd3fc" },
+    { key: "standard", label: "Standard", count: stats.standardCount, unique: stats.uniqueStandardTypes, color: "#22c55e" },
   ];
+
+  const grades = beasts && beasts.length > 0 ? gradeBuckets(beasts) : null;
+  const gradeCells = grades
+    ? [
+        { key: "g10", label: "Grade 10", value: grades.g10, accent: "text-[#e2b94c]", color: "linear-gradient(90deg, #b8941f, #e2b94c)", title: "Perfect condition" },
+        { key: "g9", label: "Grade 9", value: grades.g9, accent: "text-white", color: "#a1a1aa" },
+        { key: "g8", label: "Grade 8", value: grades.g8, accent: "text-white", color: "#71717a" },
+        { key: "g7", label: "Grade 7–0", value: grades.g7AndBelow, accent: "text-zinc-300", color: "#52525b", title: "Grade 7 or lower" },
+      ]
+    : [];
+  const gradedTotal = grades ? grades.g10 + grades.g9 + grades.g8 + grades.g7AndBelow : 0;
 
   // Rank 0 means "unranked" in the data, not first place
   const rawRank = getBeastRank(stats.highestRanked);
@@ -154,7 +169,13 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast }: Collecti
         </dl>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+      <div
+        className={`grid gap-3 ${
+          gradeCells.length > 0
+            ? "sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:grid-cols-[minmax(0,4fr)_minmax(0,3fr)_minmax(0,6fr)]"
+            : "lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]"
+        }`}
+      >
         {/* Variant breakdown */}
         <div className={`${panel} p-4 sm:p-5`}>
           <p className={`${eyebrow} mb-3`}>Variants</p>
@@ -180,8 +201,26 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast }: Collecti
           </ul>
         </div>
 
+        {/* Card grades */}
+        {gradeCells.length > 0 && (
+          <div className={`${panel} p-4 sm:p-5`}>
+            <p className={`${eyebrow} mb-3`}>Card grades</p>
+            <ul className="space-y-3">
+              {gradeCells.map((g) => (
+                <li key={g.key} className="space-y-1.5" title={g.title}>
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="font-medium text-zinc-200">{g.label}</span>
+                    <span className={`ml-auto font-bold tabular-nums ${g.accent}`}>{g.value.toLocaleString()}</span>
+                  </div>
+                  <ProgressBar value={g.value} total={gradedTotal} color={g.color} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Highlights */}
-        <div className={`${panel} p-4 sm:p-5`}>
+        <div className={`${panel} p-4 sm:p-5 ${gradeCells.length > 0 ? "sm:col-span-2 xl:col-span-1" : ""}`}>
           <p className={`${eyebrow} mb-3`}>Highlights</p>
           <div className="grid grid-cols-2 gap-2">
             {highlights.map((h) => {
