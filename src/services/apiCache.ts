@@ -29,6 +29,7 @@ class ApiCache {
     this.cacheConfigs.set("owner-beast-stats", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("owner-beast-highlights", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("festival-tokens", { ttl: 30 * 1000 }); // 30s: owners change on trades
+    this.cacheConfigs.set("beast-grade-counts", { ttl: 30 * 60 * 1000 }); // 30 min
   }
 
   private getCacheKey(endpoint: string, params: any): string {

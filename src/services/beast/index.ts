@@ -91,11 +91,15 @@ function _mapAttributeFilters(filters: AttributeFiltersInput): Partial<BeastQuer
         .filter((n): n is number => typeof n === "number");
       if (effects.length > 0) q.visualEffectsIn = effects;
     } else if (key === "card grade") {
-      // [min, max] range, or a single value meaning "at least".
+      // [min, max] range, or a single value meaning "at least"; [g, g] = exactly g.
       const lo = Number(values[0]);
       const hi = values.length >= 2 ? Number(values[1]) : CARD_GRADE_MAX;
-      if (Number.isFinite(lo) && lo > CARD_GRADE_MIN) q.cardGradeGte = lo;
-      if (Number.isFinite(hi) && hi < CARD_GRADE_MAX) q.cardGradeLte = hi;
+      if (values.length >= 2 && Number.isFinite(lo) && lo === hi) {
+        q.cardGrade = lo;
+      } else {
+        if (Number.isFinite(lo) && lo > CARD_GRADE_MIN) q.cardGradeGte = lo;
+        if (Number.isFinite(hi) && hi < CARD_GRADE_MAX) q.cardGradeLte = hi;
+      }
     } else if (key === "soulbound") {
       if (_boolFilter(values)) q.transferLockHours = beastsV3.SOULBOUND_TRANSFER_LOCK;
       else q.transferLockHoursLte = beastsV3.SOULBOUND_TRANSFER_LOCK - 1;
@@ -525,6 +529,21 @@ export type TierCollectionStats = {
   /** max supply for the tier: species in tier × MAX_BEASTS_PER_TYPE */
   maxSupply: number;
 };
+
+/** Card grades shown on the Statistics tab (0 = ungraded). */
+export const STAT_CARD_GRADES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+
+/** Number of beasts at each card grade (grade -> count), cached 30 min. */
+export async function fetchCardGradeCounts(): Promise<Record<number, number>> {
+  return apiCache.get("beast-grade-counts", {}, async () => {
+    const totals = await Promise.all(
+      STAT_CARD_GRADES.map((cardGrade) =>
+        collectablesClient.beasts.list({ cardGrade, limit: 1 }).then((r) => r.total ?? 0)
+      )
+    );
+    return Object.fromEntries(STAT_CARD_GRADES.map((g, i) => [g, totals[i]]));
+  });
+}
 
 export async function fetchTierCollectionStats(): Promise<TierCollectionStats[]> {
   return apiCache.get("tier-collection-stats", {}, async () => {
