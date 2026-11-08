@@ -31,6 +31,9 @@ export const ADVENTURER_MARKET_ENABLED =
  * (`default_royalty`, checked 2026-11-08). Arcade deducts it from the seller.
  */
 export const ADVENTURER_ROYALTY_BP = 2000;
+/** BeastDex client fee on game purchases (paid by the buyer); Beasts stay at 5%. */
+export const ADVENTURER_CLIENT_FEE_BP = 250;
+
 export const ADVENTURER_ROYALTY_RECEIVER = "0x041bb7729efa185f2cab327de0a668886302f1d4969e3edf504c4741648f858b";
 
 /** A ticket type: the dungeon behind a minter id. */

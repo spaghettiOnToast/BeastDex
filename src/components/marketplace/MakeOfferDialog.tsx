@@ -20,7 +20,7 @@ import {
 import {
   DEFAULT_PAYMENT_TOKEN,
   BEASTS_COLLECTION_ADDRESS,
-  CLIENT_FEE_BP,
+  clientFeeBpFor,
   MARKETPLACE_ADDRESS,
 } from "../../services/marketplace/constants";
 import { getErc20ApprovalCallIfNeeded, getProvider } from "../../services/marketplace/approvals";
@@ -120,7 +120,7 @@ export default function MakeOfferDialog({
   // Calculate fee and total (fee is paid by buyer)
   const feeDetails = useMemo(() => {
     if (!priceBigInt) return null;
-    const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
+    const feeAmount = (priceBigInt * BigInt(clientFeeBpFor(collection))) / 10000n;
     const totalAmount = priceBigInt + feeAmount;
     return {
       feeAmount,
@@ -128,7 +128,7 @@ export default function MakeOfferDialog({
       feeFormatted: fromWei(feeAmount, tokenDecimals),
       totalFormatted: fromWei(totalAmount, tokenDecimals),
     };
-  }, [priceBigInt, tokenDecimals]);
+  }, [priceBigInt, tokenDecimals, collection]);
 
   const canSubmit = useMemo(() => {
     return (
@@ -345,7 +345,7 @@ export default function MakeOfferDialog({
                 <span className="text-sm font-medium">{price} {tokenSymbol}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-zinc-400">Client Fee ({CLIENT_FEE_BP / 100}%):</span>
+                <span className="text-sm text-zinc-400">Client Fee ({clientFeeBpFor(collection) / 100}%):</span>
                 <span className="text-sm font-medium text-zinc-400">+{feeDetails.feeFormatted} {tokenSymbol}</span>
               </div>
               <div className="flex justify-between border-t border-white/[0.08] pt-2">

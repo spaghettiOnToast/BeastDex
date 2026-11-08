@@ -39,11 +39,13 @@ import { cn } from "../lib/utils";
 import { compareStarknetAddresses } from "../utils/address";
 import { formatPrice } from "../utils/price";
 import { isUserRejection } from "../utils/transaction";
-import { getPaymentTokenByAddress, CLIENT_FEE_BP, marketplaceTokenKey } from "../services/marketplace/constants";
+import { getPaymentTokenByAddress, marketplaceTokenKey } from "../services/marketplace/constants";
 import type { OrderModel } from "../services/marketplace/arcadeTypes";
+import type { PayWith } from "../services/marketplace/swap";
 import type { Beast } from "../services/beast";
 import { formatAgo } from "../services/adventurers/format";
 import {
+  ADVENTURER_CLIENT_FEE_BP,
   ADVENTURER_ROYALTY_BP,
   GAME_CORE_ADDRESS,
   GAME_DUNGEONS,
@@ -269,7 +271,7 @@ export default function AdventurerMarketplace() {
     return buyBlocker(b.fresh, b.listing.createdAt);
   };
 
-  const confirmBuy = async () => {
+  const confirmBuy = async (payWith?: PayWith) => {
     if (!buying?.fresh) return;
     // Last look right before signing: the seller may have kept playing
     const latest = await fetchGame(buying.listing.tokenId).catch(() => null);
@@ -282,7 +284,7 @@ export default function AdventurerMarketplace() {
     }
     const listing = buying.listing;
     setBuying(null);
-    await actions.handlePurchase(listing);
+    await actions.handlePurchase(listing, payWith);
     void myGames.refetch();
   };
 
@@ -873,7 +875,7 @@ export default function AdventurerMarketplace() {
 
         <p className="text-[11px] text-zinc-600">
           Sellers pay the game's {ADVENTURER_ROYALTY_BP / 100}% creator royalty (set by Loot Survivor on the NFT contract); buyers pay
-          the {CLIENT_FEE_BP / 100}% BeastDex client fee on top of the price.
+          the {ADVENTURER_CLIENT_FEE_BP / 100}% BeastDex client fee on top of the price.
         </p>
       </div>
 

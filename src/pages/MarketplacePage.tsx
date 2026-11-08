@@ -2932,9 +2932,9 @@ function BeastMarketplace() {
                   : ""
               }
               isProcessing={!!actionsHook.buyingListingId}
-              onConfirm={() => {
+              onConfirm={(payWith) => {
                 if (purchasingListing) {
-                  actionsHook.handlePurchase(purchasingListing);
+                  actionsHook.handlePurchase(purchasingListing, payWith);
                 }
                 setPurchaseConfirmOpen(false);
               }}
@@ -2954,10 +2954,11 @@ function BeastMarketplace() {
               listings={globalCart.purchaseCart}
               onRemove={globalCart.removeFromPurchaseCart}
               onClearAll={globalCart.clearPurchaseCart}
-              onPurchaseAll={(validListings) =>
+              onPurchaseAll={(validListings, payWith) =>
                 actionsHook.handlePurchaseAll(
                   validListings ?? globalCart.purchaseCart,
-                  globalCart.removeFromPurchaseCart
+                  globalCart.removeFromPurchaseCart,
+                  payWith
                 ).then((success) => {
                   if (success) setPurchaseCartOpen(false);
                 })

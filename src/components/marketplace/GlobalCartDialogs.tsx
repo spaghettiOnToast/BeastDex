@@ -9,16 +9,18 @@ import { toast } from "sonner";
 import {
   MARKETPLACE_ADDRESS,
   BEASTS_COLLECTION_ADDRESS,
-  CLIENT_FEE_BP,
+  clientFeeBpFor,
   CLIENT_FEE_RECEIVER,
   ROYALTIES_ENABLED,
 } from "../../services/marketplace/constants";
-import { getErc20ApprovalCallIfNeeded, getProvider } from "../../services/marketplace/approvals";
+import { getErc20ApprovalCallIfNeeded, getProvider, getSwapCallsForPurchase } from "../../services/marketplace/approvals";
 import { toBigIntSafe } from "../../utils/bigint";
 import { toUint256Hex } from "../../utils/uint256";
 import { isUserRejection } from "../../utils/transaction";
 import type { Listing } from "../../services/marketplace/types";
 import { executeMarketplaceCalls } from "../../services/marketplace/safety";
+
+import { sameToken, type PayWith } from "../../services/marketplace/swap";
 
 const CartListDialog = lazy(() => import("./CartListDialog"));
 const PurchaseCartDialog = lazy(() => import("./PurchaseCartDialog"));
@@ -56,7 +58,7 @@ export function GlobalCartDialogs() {
    * Handle batch purchase of listings
    */
   const handlePurchaseAll = useCallback(
-    async (validListings?: Listing[]) => {
+    async (validListings?: Listing[], payWith?: PayWith) => {
       const listings = validListings ?? globalCart.purchaseCart;
       if (!account || listings.length === 0) return;
 
@@ -88,8 +90,13 @@ export function GlobalCartDialogs() {
           let totalNeeded = 0n;
           for (const listing of tokenListings) {
             const price = toBigIntSafe(listing.price);
-            const fee = (price * BigInt(CLIENT_FEE_BP)) / 10000n;
+            const fee = (price * BigInt(clientFeeBpFor(listing.collection))) / 10000n;
             totalNeeded += price + fee;
+          }
+
+          // Pay with another token: swap into exactly this total first
+          if (payWith && !sameToken(payWith.token, tokenAddr)) {
+            calls.unshift(...(await getSwapCallsForPurchase(account, payWith, tokenAddr, totalNeeded)));
           }
 
           // Get approval call if needed
@@ -120,7 +127,7 @@ export function GlobalCartDialogs() {
               tokenIdU256[1],
               "0", // quantity: u128 = 0 for ERC721 (non-fungible)
               ROYALTIES_ENABLED ? "1" : "0",
-              CLIENT_FEE_BP.toString(),
+              clientFeeBpFor(listing.collection).toString(),
               CLIENT_FEE_RECEIVER,
             ],
           });
@@ -207,7 +214,7 @@ export function GlobalCartDialogs() {
           listings={globalCart.purchaseCart}
           onRemove={globalCart.removeFromPurchaseCart}
           onClearAll={globalCart.clearPurchaseCart}
-          onPurchaseAll={(validListings) => requireToS(() => handlePurchaseAll(validListings))}
+          onPurchaseAll={(validListings, payWith) => requireToS(() => handlePurchaseAll(validListings, payWith))}
           isProcessing={isPurchasing || !hasAcceptedToS}
         />
       )}

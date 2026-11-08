@@ -14,7 +14,7 @@ import type { Listing } from "../../services/marketplace/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import {
   BEASTS_COLLECTION_ADDRESS,
-  CLIENT_FEE_BP,
+  clientFeeBpFor,
   DEFAULT_PAYMENT_TOKEN,
   MARKETPLACE_ADDRESS,
   ROYALTIES_ENABLED,
@@ -62,6 +62,7 @@ export default function ListDialog({
   notice,
 }: Props) {
   const royalty = sellerRoyaltyFor(collection);
+  const clientFeeBp = clientFeeBpFor(collection);
   const item = itemLabel.toLowerCase();
   const { account } = useAccount();
   const [price, setPrice] = useState("");
@@ -312,7 +313,7 @@ export default function ListDialog({
                 const sellerReceives = priceBigInt - platformFee - creatorRoyalty;
 
                 // Calculate buyer fees (added on top)
-                const clientFee = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
+                const clientFee = (priceBigInt * BigInt(clientFeeBp)) / 10000n;
                 const buyerTotal = priceBigInt + clientFee;
 
                 return (
@@ -347,7 +348,7 @@ export default function ListDialog({
                         <span className="text-white">{fromWei(priceBigInt, tokenDecimals)} {tokenSymbol}</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Client Fee ({CLIENT_FEE_BP / 100}%):</span>
+                        <span className="text-gray-400">Client Fee ({clientFeeBp / 100}%):</span>
                         <span className="text-gray-300">+{fromWei(clientFee, tokenDecimals)} {tokenSymbol}</span>
                       </div>
                       <div className="flex justify-between text-sm font-semibold border-t border-blue-500/30 pt-2">

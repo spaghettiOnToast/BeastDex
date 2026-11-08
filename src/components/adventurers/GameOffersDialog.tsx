@@ -8,6 +8,7 @@ import { getPaymentTokenByAddress } from "../../services/marketplace/constants";
 import { formatPrice } from "../../utils/price";
 import { normaliseStarknetAddress } from "../../utils/address";
 import {
+  ADVENTURER_CLIENT_FEE_BP,
   ADVENTURER_ROYALTY_BP,
   acceptOfferBlocker,
   gameDungeonFor,
@@ -15,7 +16,6 @@ import {
 } from "../../services/adventurers";
 import { formatAgo } from "../../services/adventurers/format";
 import { useArcadeBookConfig } from "../../hooks/useArcadeBookConfig";
-import { CLIENT_FEE_BP } from "../../services/marketplace/constants";
 import { FeeTable, NoticeBox } from "./TxNotices";
 
 type Props = {
@@ -66,7 +66,7 @@ export function GameOffersDialog({ open, onOpenChange, game, offers, acceptingId
             total={["You receive", fmt(price - royalty - platform)]}
           />
           <p className="text-[11px] text-zinc-500">
-            The buyer also pays the {CLIENT_FEE_BP / 100}% BeastDex client fee on top, from their wallet. Network gas is extra.
+            The buyer also pays the {ADVENTURER_CLIENT_FEE_BP / 100}% BeastDex client fee on top, from their wallet. Network gas is extra.
           </p>
           <NoticeBox
             title="Before you accept"

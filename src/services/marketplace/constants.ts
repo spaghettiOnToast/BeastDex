@@ -1,7 +1,7 @@
 import { CONTRACT_ADDRESS as BEASTS_ADDRESS } from "../beast/constants";
 import { FESTIVAL_COLLECTIONS } from "../festivalBeasts";
 import { toTokenIdString } from "../../utils/tokenId";
-import { ADVENTURER_ROYALTY_BP, GAME_CORE_ADDRESS } from "../adventurers/constants";
+import { ADVENTURER_CLIENT_FEE_BP, ADVENTURER_ROYALTY_BP, GAME_CORE_ADDRESS } from "../adventurers/constants";
 
 /**
  * Marketplace kill switch. On by default; set VITE_MARKETPLACE_ENABLED=false
@@ -167,7 +167,24 @@ export function marketplaceTokenKey(collection: string | null | undefined, token
 
 // Client fee configuration (paid by BUYER, added on top of listing price)
 // Fee is in basis points where 10000 = 100%, so 500 = 5%
-export const CLIENT_FEE_BP = 500; // 5% client fee paid by buyer
+export const CLIENT_FEE_BP = 500; // 5% client fee paid by buyer (Beasts / festival)
+
+const isGameCore = (collection?: string | null) => {
+  try {
+    return !!collection && BigInt(collection) === BigInt(GAME_CORE_ADDRESS);
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Client fee (bps) for a collection: 2.5% on Loot Survivor games, 5% otherwise.
+ * Arcade takes it from the buyer on top of the price, at whatever rate the
+ * executing tx passes, so approvals, execute calls and displays must all use this.
+ */
+export function clientFeeBpFor(collection?: string | null): number {
+  return isGameCore(collection) ? ADVENTURER_CLIENT_FEE_BP : CLIENT_FEE_BP;
+}
 export const CLIENT_FEE_RECEIVER = "0x0495fc00f87ab20ae908dd24c763c9553b67955e6301113809320da20e8ecb5b";
 
 // Seller fee constants (for display purposes - handled by contract)
@@ -181,13 +198,7 @@ export const TOTAL_SELLER_FEE_BP = PLATFORM_FEE_BP + CREATOR_ROYALTY_BP; // 5% t
  * (ERC-2981 on each contract). Loot Survivor games charge 20%.
  */
 export function sellerRoyaltyFor(collection?: string | null): { bp: number; label: string } {
-  try {
-    if (collection && BigInt(collection) === BigInt(GAME_CORE_ADDRESS)) {
-      return { bp: ADVENTURER_ROYALTY_BP, label: "Creator Royalty (Loot Survivor)" };
-    }
-  } catch {
-    // fall through to Beasts
-  }
+  if (isGameCore(collection)) return { bp: ADVENTURER_ROYALTY_BP, label: "Creator Royalty (Loot Survivor)" };
   return { bp: CREATOR_ROYALTY_BP, label: "Creator Royalty (Survivor DAO)" };
 }
 

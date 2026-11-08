@@ -17,6 +17,8 @@ import { getOrderValidities, getPublicProvider } from "../../services/marketplac
 import { useEkuboTokens, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
 import { useSoldListings } from "../../contexts/SoldListingsContext";
 import BeastCard from "../beast/BeastCard";
+import { PayWithPicker } from "./PayWithPicker";
+import { DEFAULT_SLIPPAGE_BP, sameToken, type PayWith } from "../../services/marketplace/swap";
 
 type Props = {
   open: boolean;
@@ -24,7 +26,8 @@ type Props = {
   listings: Listing[];
   onRemove: (listingId: string) => void;
   onClearAll: () => void;
-  onPurchaseAll: (validListings?: Listing[]) => void;
+  /** `payWith` is set when the buyer pays in another token (single-currency carts) */
+  onPurchaseAll: (validListings?: Listing[], payWith?: PayWith) => void;
   isProcessing: boolean;
 };
 
@@ -42,6 +45,8 @@ export default function PurchaseCartDialog({
   const [hasValidated, setHasValidated] = useState(false);
   const { tokens } = useEkuboTokens();
   const { markAsSold } = useSoldListings();
+  const [payWith, setPayWith] = useState<PayWith>({ token: "0x0", slippageBp: DEFAULT_SLIPPAGE_BP });
+  const [swapBlocker, setSwapBlocker] = useState<string | null>(null);
 
   // Build a map of token address -> token data for USD calculations
   const tokenDataMap = useMemo(() => {
@@ -124,11 +129,20 @@ export default function PurchaseCartDialog({
   const invalidListings = listings.filter(l => invalidListingIds.has(l.listingId));
   const hasInvalidListings = invalidListings.length > 0;
 
+  // Pay-with-any-token needs one listing currency (one exact amount to swap into)
+  const cartCurrencies = [...new Set(validListings.map((l) => l.paymentToken ?? "0x0"))];
+  const cartCurrency = cartCurrencies.length === 1 ? cartCurrencies[0] : null;
+  useEffect(() => {
+    if (cartCurrency) setPayWith((p) => (sameToken(p.token, cartCurrency) || p.token !== "0x0" ? p : { ...p, token: cartCurrency }));
+  }, [cartCurrency]);
+  const swapping = !!cartCurrency && payWith.token !== "0x0" && !sameToken(payWith.token, cartCurrency);
+
   const handlePurchaseClick = () => {
+    const pw = swapping ? payWith : undefined;
     if (hasInvalidListings) {
-      onPurchaseAll(validListings);
+      onPurchaseAll(validListings, pw);
     } else {
-      onPurchaseAll();
+      onPurchaseAll(undefined, pw);
     }
   };
 
@@ -365,6 +379,21 @@ export default function PurchaseCartDialog({
               <p className="text-[10px] text-gray-500 italic">
                 A {CLIENT_FEE_BP / 100}% client fee is added to each purchase. Each purchase uses the token specified in the listing.
               </p>
+              {validListings.length > 0 &&
+                (cartCurrency && tokenTotals.length === 1 ? (
+                  <PayWithPicker
+                    currency={cartCurrency}
+                    amountOut={tokenTotals[0].total}
+                    value={payWith.token === "0x0" ? { ...payWith, token: cartCurrency } : payWith}
+                    onChange={setPayWith}
+                    onBlockerChange={setSwapBlocker}
+                    disabled={isProcessing}
+                  />
+                ) : (
+                  <p className="text-[10px] text-gray-500">
+                    Paying in another token works when every item in the cart is priced in the same token.
+                  </p>
+                ))}
               {validListings.length > 0 && (
                 <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-3">
                   <p className="text-xs text-yellow-200">
@@ -385,7 +414,7 @@ export default function PurchaseCartDialog({
               </Button>
               <Button
                 onClick={handlePurchaseClick}
-                disabled={isProcessing || validListings.length === 0 || isValidating}
+                disabled={isProcessing || validListings.length === 0 || isValidating || (swapping && !!swapBlocker)}
                 className="flex-1 bg-green-600 text-white hover:bg-green-600/90"
               >
                 {isProcessing

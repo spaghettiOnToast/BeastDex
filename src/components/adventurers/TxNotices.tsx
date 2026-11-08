@@ -7,11 +7,10 @@ import { AlertTriangle, Info, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { cn } from "../../lib/utils";
-import { CLIENT_FEE_BP } from "../../services/marketplace/constants";
-import { ADVENTURER_ROYALTY_BP, IDLE_SECONDS } from "../../services/adventurers";
+import { ADVENTURER_CLIENT_FEE_BP, ADVENTURER_ROYALTY_BP, IDLE_SECONDS } from "../../services/adventurers";
 
 const ROYALTY = `${ADVENTURER_ROYALTY_BP / 100}%`;
-const CLIENT_FEE = `${CLIENT_FEE_BP / 100}%`;
+const CLIENT_FEE = `${ADVENTURER_CLIENT_FEE_BP / 100}%`;
 
 /** A titled box of bullet points. */
 export function NoticeBox({
