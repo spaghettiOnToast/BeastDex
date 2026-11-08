@@ -29,6 +29,7 @@ const BeastDetailPage = lazy(() => import("./pages/BeastDetailPage"));
 const AccountPage = lazy(() => import("./pages/AccountPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const CollectionPage = lazy(() => import("./pages/CollectionPage"));
+const CollectionIndexPage = lazy(() => import("./pages/CollectionIndexPage"));
 const LeaderboardPage = lazy(() => import("./pages/LeaderboardPage"));
 const DungeonsPage = lazy(() => import("./pages/DungeonsPage"));
 const MarketplacePage = lazy(() => import("./pages/MarketplacePage"));
@@ -128,6 +129,7 @@ function App() {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/beasts/:tokenId" element={<BeastDetailPage />} />
                 <Route path="/account/:identifier" element={<AccountPage />} />
+                <Route path="/collection" element={<CollectionIndexPage />} />
                 <Route path="/collection/:identifier" element={<CollectionPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/statistics" element={<LeaderboardPage />} />
