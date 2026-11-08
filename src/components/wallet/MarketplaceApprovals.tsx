@@ -2,12 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import { useAccount } from "@starknet-react/core";
 import { ShieldCheck, ShieldOff } from "lucide-react";
 import { MARKETPLACE_COLLECTIONS } from "../../services/marketplace/constants";
+import { ADVENTURER_MARKET_ENABLED, GAME_CORE_ADDRESS } from "../../services/adventurers/constants";
 import { isMarketplaceApprovedForAll, revokeMarketplaceApprovalCall } from "../../services/marketplace/approvals";
 import { executeMarketplaceCalls } from "../../services/marketplace/safety";
 import { waitForTx } from "../../services/tx";
 
-/** Collections the marketplace may hold blanket approval on. */
-const COLLECTIONS = MARKETPLACE_COLLECTIONS;
+/** Collections the marketplace may hold blanket approval on (Loot Survivor games included). */
+const COLLECTIONS: Array<{ address: string; name: string }> = [
+  ...MARKETPLACE_COLLECTIONS,
+  ...(ADVENTURER_MARKET_ENABLED ? [{ address: GAME_CORE_ADDRESS, name: "Loot Survivor games" }] : []),
+];
 
 /**
  * Wallet-menu section: which collections the marketplace can move tokens from

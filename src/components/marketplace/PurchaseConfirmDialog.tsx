@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +25,14 @@ type Props = {
   priceLabel: string;
   onConfirm: () => void;
   isProcessing: boolean;
+  /** Item copy ("Beast" by default) */
+  itemLabel?: string;
+  /** Display name when the listing has no Beast record */
+  itemName?: string;
+  /** Replaces the Beast card (e.g. a game card plus its live state) */
+  preview?: ReactNode;
+  /** Blocks confirming (e.g. the game changed and needs re-review) */
+  confirmDisabled?: boolean;
 };
 
 export default function PurchaseConfirmDialog({
@@ -33,6 +42,10 @@ export default function PurchaseConfirmDialog({
   priceLabel,
   onConfirm,
   isProcessing,
+  itemLabel = "Beast",
+  itemName,
+  preview,
+  confirmDisabled = false,
 }: Props) {
   const { decimals: tokenDecimals, usdPrice } = useSelectedToken(listing?.paymentToken ?? undefined);
   const { usernames: sellerUsernames } = useControllerUsernames([listing?.seller]);
@@ -69,19 +82,19 @@ export default function PurchaseConfirmDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {listing.beast && (
+          {preview ?? (listing.beast && (
             <div className="flex justify-center">
               <div className="w-[200px]">
                 <BeastCard beast={listing.beast} />
               </div>
             </div>
-          )}
+          ))}
 
           <div className="space-y-2">
             <div className="flex justify-between">
-              <span className="text-sm text-zinc-400">Beast:</span>
+              <span className="text-sm text-zinc-400">{itemLabel}:</span>
               <span className="text-sm font-medium">
-                {listing.beast?.name || `#${listing.tokenId}`}
+                {listing.beast?.name || itemName || `#${listing.tokenId}`}
               </span>
             </div>
 
@@ -160,7 +173,7 @@ export default function PurchaseConfirmDialog({
           </Button>
           <Button
             onClick={onConfirm}
-            disabled={isProcessing}
+            disabled={isProcessing || confirmDisabled}
             className="flex-1 font-bold bg-gold/15 text-gold border border-gold hover:bg-gold/20"
           >
             {isProcessing ? "Processing..." : "Confirm Purchase"}
