@@ -81,12 +81,13 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast, beasts }: 
   const grades = beasts && beasts.length > 0 ? gradeBuckets(beasts) : null;
   const gradeCells = grades
     ? [
-        { key: "g10", label: "Grade 10", value: grades.g10, accent: "text-[#e2b94c]", title: "Perfect condition" },
-        { key: "g9", label: "Grade 9", value: grades.g9, accent: "text-white" },
-        { key: "g8", label: "Grade 8", value: grades.g8, accent: "text-white" },
-        { key: "g7", label: "Grade 7–0", value: grades.g7AndBelow, accent: "text-zinc-300", title: "Grade 7 or lower" },
+        { key: "g10", label: "Grade 10", value: grades.g10, accent: "text-[#e2b94c]", color: "linear-gradient(90deg, #b8941f, #e2b94c)", title: "Perfect condition" },
+        { key: "g9", label: "Grade 9", value: grades.g9, accent: "text-white", color: "#a1a1aa" },
+        { key: "g8", label: "Grade 8", value: grades.g8, accent: "text-white", color: "#71717a" },
+        { key: "g7", label: "Grade 7–0", value: grades.g7AndBelow, accent: "text-zinc-300", color: "#52525b", title: "Grade 7 or lower" },
       ]
     : [];
+  const gradedTotal = grades ? grades.g10 + grades.g9 + grades.g8 + grades.g7AndBelow : 0;
 
   // Rank 0 means "unranked" in the data, not first place
   const rawRank = getBeastRank(stats.highestRanked);
@@ -167,7 +168,13 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast, beasts }: 
         </dl>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+      <div
+        className={`grid gap-3 ${
+          gradeCells.length > 0
+            ? "sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:grid-cols-[minmax(0,4fr)_minmax(0,3fr)_minmax(0,6fr)]"
+            : "lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]"
+        }`}
+      >
         {/* Variant breakdown */}
         <div className={`${panel} p-4 sm:p-5`}>
           <p className={`${eyebrow} mb-3`}>Variants</p>
@@ -191,23 +198,28 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast, beasts }: 
               </li>
             ))}
           </ul>
-          {gradeCells.length > 0 && (
-            <div className="mt-4 border-t border-white/[0.06] pt-3">
-              <p className={`${eyebrow} mb-2`}>Card grades</p>
-              <dl className="grid grid-cols-4 gap-2">
-                {gradeCells.map((g) => (
-                  <div key={g.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2 py-1.5 text-center" title={g.title}>
-                    <dt className="truncate text-[10px] uppercase tracking-wider text-zinc-500">{g.label}</dt>
-                    <dd className={`text-base font-bold tabular-nums ${g.accent}`}>{g.value.toLocaleString()}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          )}
         </div>
 
+        {/* Card grades */}
+        {gradeCells.length > 0 && (
+          <div className={`${panel} p-4 sm:p-5`}>
+            <p className={`${eyebrow} mb-3`}>Card grades</p>
+            <ul className="space-y-3">
+              {gradeCells.map((g) => (
+                <li key={g.key} className="space-y-1.5" title={g.title}>
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="font-medium text-zinc-200">{g.label}</span>
+                    <span className={`ml-auto font-bold tabular-nums ${g.accent}`}>{g.value.toLocaleString()}</span>
+                  </div>
+                  <ProgressBar value={g.value} total={gradedTotal} color={g.color} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Highlights */}
-        <div className={`${panel} p-4 sm:p-5`}>
+        <div className={`${panel} p-4 sm:p-5 ${gradeCells.length > 0 ? "sm:col-span-2 xl:col-span-1" : ""}`}>
           <p className={`${eyebrow} mb-3`}>Highlights</p>
           <div className="grid grid-cols-2 gap-2">
             {highlights.map((h) => {
