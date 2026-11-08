@@ -125,6 +125,9 @@ function matchV3Filter(beast: Beast, trait: string, values: string[]): boolean |
       return Boolean(beast.mega) === isYes(values);
     case "midi":
       return Boolean(beast.midi) === isYes(values);
+    case "festival":
+      // Marketplace-only trait; Beasts are never festival tokens
+      return !isYes(values);
     default:
       return null;
   }

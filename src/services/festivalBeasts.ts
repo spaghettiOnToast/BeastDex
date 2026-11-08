@@ -45,6 +45,20 @@ export const FESTIVAL_COLLECTIONS: FestivalCollection[] = [
   },
 ];
 
+/** Festival collection for a contract address, if it is one. */
+export function festivalCollectionFor(address: string | null | undefined): FestivalCollection | null {
+  if (!address) return null;
+  try {
+    const target = BigInt(address);
+    return FESTIVAL_COLLECTIONS.find((c) => BigInt(c.address) === target) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Marketplace filter trait for festival tokens (Yes = festival only, No = Beasts only). */
+export const FESTIVAL_FILTER_TRAIT = "Festival";
+
 export function getFestivalCollection(slug: string | undefined): FestivalCollection | null {
   return FESTIVAL_COLLECTIONS.find((c) => c.slug === slug) ?? null;
 }

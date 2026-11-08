@@ -1,16 +1,16 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import type { Beast } from "../../../services/beast";
-import { BEASTS_COLLECTION_ADDRESS, getMarketplaceCollection } from "../../../services/marketplace/constants";
+import { MARKETPLACE_COLLECTION_ADDRESSES } from "../../../services/marketplace/constants";
 import type { FestivalListingToken } from "../../../services/marketplace/types";
-import { fetchFestivalTokens, getFestivalCollection, toFestivalListingToken } from "../../../services/festivalBeasts";
-import { useArcadeSalesForCollection, type ArcadeSaleCompat } from "../../../hooks/useArcadeOrders";
+import { festivalCollectionFor } from "../../../services/festivalBeasts";
+import { useFestivalTokens } from "../../../hooks/useFestivalTokens";
+import { useArcadeSalesForCollection, type CollectionArg, type ArcadeSaleCompat } from "../../../hooks/useArcadeOrders";
 import { useBeastLookup } from "../../../hooks/useBeastLookup";
 
 export interface RecentSaleWithBeast {
   sale: ArcadeSaleCompat;
   beast: Beast | null;
-  /** festival collections: token metadata instead of a beast */
+  /** festival tokens: token metadata instead of a beast */
   festival?: FestivalListingToken | null;
   tokenId: string;
   price: string;
@@ -25,8 +25,8 @@ interface UseRecentSalesProps {
   limit?: number;
   page?: number;
   pageSize?: number;
-  /** collection to show sales for (defaults to Beasts) */
-  collection?: string;
+  /** collection(s) to show sales for (defaults to all marketplace collections) */
+  collection?: CollectionArg;
 }
 
 /**
@@ -38,7 +38,7 @@ export function useRecentSales({
   limit = 20,
   page = 1,
   pageSize = 100,
-  collection = BEASTS_COLLECTION_ADDRESS,
+  collection = MARKETPLACE_COLLECTION_ADDRESSES,
 }: UseRecentSalesProps) {
   // Fetch sales via GraphQL
   const { data: sales = [], isLoading, refetch: refetchSales, invalidateAndRefetch } = useArcadeSalesForCollection(
@@ -51,41 +51,30 @@ export function useRecentSales({
     const startIdx = (page - 1) * pageSize;
     const pageSales = sales.slice(startIdx, startIdx + pageSize);
     return {
-      pageTokenIds: pageSales.map(sale => sale.order.tokenId.toString()),
+      // Festival tokens are hydrated separately (no Beast records)
+      pageTokenIds: pageSales
+        .filter(sale => !festivalCollectionFor(sale.order.collection))
+        .map(sale => sale.order.tokenId.toString()),
       totalPages: Math.ceil(sales.length / pageSize),
       totalItems: sales.length,
     };
   }, [sales, page, pageSize]);
 
-  // Festival collections have no Beast records: hydrate from chain metadata.
-  const festivalCollection = getFestivalCollection(getMarketplaceCollection(collection)?.festivalSlug);
-  const { data: festivalTokens } = useQuery({
-    queryKey: ["festivalTokens", festivalCollection?.address],
-    enabled: !!festivalCollection,
-    queryFn: () => fetchFestivalTokens(festivalCollection!),
-    staleTime: 5 * 60_000,
-  });
-  const festivalById = useMemo(
-    () => new Map((festivalTokens ?? []).map((t) => [String(t.tokenId), t])),
-    [festivalTokens],
-  );
+  // Festival tokens have no Beast records: hydrate from chain metadata.
+  const { getFestival } = useFestivalTokens();
 
   // Use shared beast lookup hook — only fetches beasts for the current page
-  const { getBeast } = useBeastLookup(
-    festivalCollection ? [] : listings,
-    festivalCollection ? [] : pageTokenIds,
-  );
+  const { getBeast } = useBeastLookup(listings, pageTokenIds);
 
   // Transform ALL sales but only attach beast data for hydrated tokens
   const recentSales = useMemo((): RecentSaleWithBeast[] => {
     return sales.map(sale => {
       const tokenId = sale.order.tokenId.toString();
-      const ft = festivalCollection ? festivalById.get(tokenId) : undefined;
-      const festival: FestivalListingToken | null =
-        ft && festivalCollection ? toFestivalListingToken(festivalCollection, ft) : null;
+      const isFestival = Boolean(festivalCollectionFor(sale.order.collection));
+      const festival: FestivalListingToken | null = isFestival ? getFestival(sale.order.collection, tokenId) : null;
       return {
         sale,
-        beast: festivalCollection ? null : getBeast(tokenId) ?? null,
+        beast: isFestival ? null : getBeast(tokenId) ?? null,
         festival,
         tokenId,
         price: sale.order.price.toString(),
@@ -95,7 +84,7 @@ export function useRecentSales({
         time: sale.time,
       };
     });
-  }, [sales, getBeast, festivalCollection, festivalById]);
+  }, [sales, getBeast, getFestival]);
 
   return {
     recentSales,

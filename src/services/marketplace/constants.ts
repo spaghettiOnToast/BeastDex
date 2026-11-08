@@ -1,5 +1,6 @@
 import { CONTRACT_ADDRESS as BEASTS_ADDRESS } from "../beast/constants";
 import { FESTIVAL_COLLECTIONS } from "../festivalBeasts";
+import { toTokenIdString } from "../../utils/tokenId";
 
 /**
  * Marketplace kill switch. On by default; set VITE_MARKETPLACE_ENABLED=false
@@ -136,16 +137,16 @@ export function paddedAddress(address: string): string {
   return `0x${BigInt(address).toString(16).padStart(64, "0")}`;
 }
 
-export function getMarketplaceCollection(idOrAddress: string | null | undefined): MarketplaceCollection | null {
-  if (!idOrAddress) return null;
-  const byId = MARKETPLACE_COLLECTIONS.find((c) => c.id === idOrAddress);
-  if (byId) return byId;
-  try {
-    const target = BigInt(idOrAddress);
-    return MARKETPLACE_COLLECTIONS.find((c) => BigInt(c.address) === target) ?? null;
-  } catch {
-    return null;
-  }
+/** Every tradable collection; the marketplace shows them all in one grid. */
+export const MARKETPLACE_COLLECTION_ADDRESSES: readonly string[] = MARKETPLACE_COLLECTIONS.map((c) => c.address);
+
+/**
+ * Collection-qualified token key. Token ids alone aren't unique once Beasts and
+ * festival tokens share one grid, so dedupe/match on this instead.
+ * A missing collection means Beasts (older records carry none).
+ */
+export function marketplaceTokenKey(collection: string | null | undefined, tokenId: string | number | bigint): string {
+  return `${paddedAddress(collection || BEASTS_ADDRESS)}:${toTokenIdString(tokenId) ?? String(tokenId)}`;
 }
 
 // =============================================================================

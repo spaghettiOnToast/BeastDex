@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef, lazy, Suspense } from "react";
+import { useNavigate } from "react-router-dom";
 import { normaliseStarknetAddress } from "../utils/address";
 import { useAccount } from "@starknet-react/core";
-import { useSearchParams } from "react-router-dom";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import { useGlobalCart } from "../contexts/GlobalCartContext";
@@ -14,8 +14,9 @@ import { useOffersForToken, useOffersReceivedForListings, useUserOffers } from "
 import type { FestivalListingToken, Listing } from "../services/marketplace/types";
 import {
   getPaymentTokenByAddress,
-  MARKETPLACE_COLLECTIONS,
-  getMarketplaceCollection,
+  BEASTS_COLLECTION_ADDRESS,
+  MARKETPLACE_COLLECTION_ADDRESSES,
+  marketplaceTokenKey,
   CREATOR_ROYALTY_BP,
   MARKETPLACE_ADDRESS,
 } from "../services/marketplace/constants";
@@ -63,6 +64,7 @@ import { isUserRejection } from "../utils/transaction";
 
 // Import custom hooks and utilities
 import { useMarketplaceData } from "./marketplace/hooks/useMarketplaceData";
+import { festivalItemsMatchFilters } from "./marketplace/utils";
 import { useMarketplaceFilters } from "./marketplace/hooks/useMarketplaceFilters";
 import { useMarketplaceCarts } from "./marketplace/hooks/useMarketplaceCarts";
 import { useMarketplaceActions as useMarketplaceActionsHook } from "./marketplace/hooks/useMarketplaceActions";
@@ -78,7 +80,7 @@ import { executeMarketplaceCalls } from "../services/marketplace/safety";
 import { IndexerStatusBanner } from "../components/marketplace/IndexerStatusBanner";
 import { SUMMIT_ENABLED } from "../services/summitApi/constants";
 import { FestivalHoldingsPanel } from "../components/marketplace/FestivalHoldingsPanel";
-import { festivalPlaceholderBeast, ownedFestivalTokenIds } from "../services/festivalBeasts";
+import { FESTIVAL_COLLECTIONS, FESTIVAL_FILTER_TRAIT, festivalPlaceholderBeast } from "../services/festivalBeasts";
 
 // Storage keys for hidden offers
 const HIDDEN_OFFERS_KEY = "beastdex-hidden-offers";
@@ -159,6 +161,7 @@ export default function MarketplacePage() {
   const [makeOfferOpen, setMakeOfferOpen] = useState(false);
   const [offerBeast, setOfferBeast] = useState<Beast | null>(null);
   const [offerTokenId, setOfferTokenId] = useState<string | undefined>(undefined);
+  const [offerCollection, setOfferCollection] = useState<string>(BEASTS_COLLECTION_ADDRESS);
   const [offersDialogOpen, setOffersDialogOpen] = useState(false);
   const [selectedListingForOffers, setSelectedListingForOffers] = useState<Listing | null>(null);
   const [acceptOfferConfirmOpen, setAcceptOfferConfirmOpen] = useState(false);
@@ -271,25 +274,9 @@ export default function MarketplacePage() {
     });
   }, []);
 
-  // Active collection (Beasts or a festival collection), from ?collection=
-  const [searchParams, setSearchParams] = useSearchParams();
-  const activeCollection =
-    getMarketplaceCollection(searchParams.get("collection")) ?? MARKETPLACE_COLLECTIONS[0];
-  const isFestivalCollection = activeCollection.kind === "festival";
-  const selectCollection = useCallback(
-    (id: string) => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        if (id === "beasts") next.delete("collection");
-        else next.set("collection", id);
-        return next;
-      });
-    },
-    [setSearchParams],
-  );
-
   // Data fetching hook
-  const dataHook = useMarketplaceData(address, activeCollection.address);
+  // Beasts and festival collections share one grid (festival = a filterable trait)
+  const dataHook = useMarketplaceData(address);
 
   /** MakeOfferDialog takes a Beast; festival tokens get a minimal Beast-shaped record. */
   const offerBeastFor = useCallback((listing: Listing): Beast | null => {
@@ -342,7 +329,6 @@ export default function MarketplacePage() {
   const { transactions: userTransactions, refetchOffers, invalidateSales } = useUserTransactions({
     address,
     listings: dataHook.listings,
-    collection: activeCollection.address,
   });
 
   // Recent sales hook (from indexer)
@@ -351,7 +337,6 @@ export default function MarketplacePage() {
     limit: 500,
     page: soldPage,
     pageSize: 100,
-    collection: activeCollection.address,
   });
 
   // Combined invalidation function for all sales data
@@ -404,7 +389,7 @@ export default function MarketplacePage() {
 
   // Fetch offers for selected token when offers dialog is open
   const { data: arcadeOffers, isLoading: offersLoading } = useOffersForToken(
-    selectedListingForOffers?.collection ?? activeCollection.address,
+    selectedListingForOffers?.collection ?? BEASTS_COLLECTION_ADDRESS,
     selectedListingForOffers?.tokenId,
     offersDialogOpen
   );
@@ -428,52 +413,38 @@ export default function MarketplacePage() {
     })) as unknown as OrderModel[];
   }, [arcadeOffers]);
 
-  // Get all user's owned token IDs for offers received query
-  // Offers can be made on any beast the user owns, not just listed ones
-  const userOwnedTokenIds = useMemo(() => {
-    const tokenIds = new Set<string>();
-
-    // Festival collections: owned ids come from the festival tokens, not Beasts
-    if (isFestivalCollection) {
-      for (const id of ownedFestivalTokenIds(dataHook.festivalTokens ?? [], address)) {
-        tokenIds.add(String(id));
-      }
-      for (const listing of filtersHook.myActiveListings) {
-        tokenIds.add(listing.tokenId);
-      }
-      return Array.from(tokenIds);
-    }
+  // Collection-qualified keys of every token the user owns, for the offers received query
+  // Offers can be made on any token the user owns, not just listed ones
+  const { ownedFestivalKeys, getFestival } = dataHook;
+  const userOwnedTokenKeys = useMemo(() => {
+    const keys = new Set<string>(ownedFestivalKeys(address));
 
     // Add token IDs from owned beasts
     for (const beast of dataHook.userBeasts) {
       const rawTokenId = beast.id.split(":").pop() || beast.id;
-      // Convert hex to decimal if needed
-      const tokenId = rawTokenId.startsWith("0x")
-        ? BigInt(rawTokenId).toString()
-        : rawTokenId;
-      tokenIds.add(tokenId);
+      keys.add(marketplaceTokenKey(BEASTS_COLLECTION_ADDRESS, rawTokenId));
     }
 
     // Also add from active listings (in case of any edge cases)
     for (const listing of filtersHook.myActiveListings) {
-      tokenIds.add(listing.tokenId);
+      keys.add(marketplaceTokenKey(listing.collection, listing.tokenId));
     }
 
-    return Array.from(tokenIds);
-  }, [dataHook.userBeasts, dataHook.festivalTokens, filtersHook.myActiveListings, isFestivalCollection, address]);
+    return Array.from(keys);
+  }, [ownedFestivalKeys, dataHook.userBeasts, filtersHook.myActiveListings, address]);
 
   // Fetch offers received on user's owned beasts (not just listed ones)
   // Always enabled when user has tokens - this allows the badge to show count regardless of active tab
   const { data: offersReceived, isLoading: offersReceivedLoading, refetch: refetchOffersReceived } = useOffersReceivedForListings(
-    activeCollection.address,
-    userOwnedTokenIds,
-    !!address && userOwnedTokenIds.length > 0
+    MARKETPLACE_COLLECTION_ADDRESSES,
+    userOwnedTokenKeys,
+    !!address && userOwnedTokenKeys.length > 0
   );
 
   // Fetch user's made offers for display in Offers tab
   const { data: userMadeOffers, isLoading: userMadeOffersLoading, refetch: refetchUserMadeOffers } = useUserOffers(
     address,
-    activeCollection.address
+    MARKETPLACE_COLLECTION_ADDRESSES
   );
 
   // Subscribe to global purchase and offer events (from other pages like HomePage)
@@ -567,37 +538,43 @@ export default function MarketplacePage() {
     }
   }, [account, cancellingOfferId, refetchUserMadeOffers]);
 
-  // Pre-compute lookup maps for O(1) beast name lookups (avoids O(n*m) in enrichment)
-  const beastNameByTokenId = useMemo(() => {
+  // Pre-compute lookup maps for O(1) name lookups (avoids O(n*m) in enrichment)
+  // Keyed by collection + token id (see marketplaceTokenKey)
+  const beastNameByTokenKey = useMemo(() => {
     const map = new Map<string, string>();
 
     // Add from user's beasts
     for (const beast of dataHook.userBeasts) {
       const rawTokenId = beast.id.split(":").pop() || beast.id;
-      const tokenId = rawTokenId.startsWith("0x")
-        ? BigInt(rawTokenId).toString()
-        : rawTokenId;
       if (beast.name) {
-        map.set(tokenId, beast.name);
+        map.set(marketplaceTokenKey(BEASTS_COLLECTION_ADDRESS, rawTokenId), beast.name);
       }
     }
 
     // Add from listings (may override with more accurate data)
     for (const listing of dataHook.listings) {
-      if (listing.beast?.name) {
-        map.set(listing.tokenId, listing.beast.name);
+      const name = listing.beast?.name ?? listing.festival?.name;
+      if (name) {
+        map.set(marketplaceTokenKey(listing.collection, listing.tokenId), name);
       }
     }
 
     return map;
   }, [dataHook.userBeasts, dataHook.listings]);
 
-  // Pre-compute set of listed token IDs for O(1) lookup
-  const listedTokenIds = useMemo(() => {
+  /** Name for an offer's token: Beast / listing name, else festival metadata. */
+  const nameForToken = useCallback(
+    (collection: string | null | undefined, tokenId: string) =>
+      beastNameByTokenKey.get(marketplaceTokenKey(collection, tokenId)) ?? getFestival(collection, tokenId)?.name,
+    [beastNameByTokenKey, getFestival]
+  );
+
+  // Pre-compute set of listed token keys for O(1) lookup
+  const listedTokenKeys = useMemo(() => {
     const set = new Set<string>();
     for (const listing of filtersHook.myActiveListings) {
       if (listing.status === "active") {
-        set.add(listing.tokenId);
+        set.add(marketplaceTokenKey(listing.collection, listing.tokenId));
       }
     }
     return set;
@@ -626,12 +603,12 @@ export default function MarketplacePage() {
 
       return {
         ...offer,
-        beastName: beastNameByTokenId.get(tokenId),
-        isListed: listedTokenIds.has(tokenId),
+        beastName: nameForToken(offer.collection, tokenId),
+        isListed: listedTokenKeys.has(marketplaceTokenKey(offer.collection, tokenId)),
         isHidden: hiddenOfferIds.has(offer.id.toString()),
       };
     });
-  }, [offersReceived, beastNameByTokenId, listedTokenIds, hiddenOfferIds, address]);
+  }, [offersReceived, nameForToken, listedTokenKeys, hiddenOfferIds, address]);
 
   // Filter offers based on visibility
   const visibleOffersReceived = useMemo(() => {
@@ -641,11 +618,11 @@ export default function MarketplacePage() {
     return enrichedOffersReceived.filter(offer => !offer.isHidden);
   }, [enrichedOffersReceived, showHiddenOffers]);
 
-  // Pre-compute listing status by tokenId for O(1) lookup
-  const listingStatusByTokenId = useMemo(() => {
+  // Pre-compute listing status by token key for O(1) lookup
+  const listingStatusByTokenKey = useMemo(() => {
     const map = new Map<string, boolean>();
     for (const listing of dataHook.listings) {
-      map.set(listing.tokenId, listing.status === "active");
+      map.set(marketplaceTokenKey(listing.collection, listing.tokenId), listing.status === "active");
     }
     return map;
   }, [dataHook.listings]);
@@ -666,8 +643,8 @@ export default function MarketplacePage() {
       const isInactive = isCancelled || isExecuted;
 
       // Use pre-computed lookup (O(1) instead of O(n))
-      const beastName = beastNameByTokenId.get(tokenId) || `Beast #${tokenId}`;
-      const listingActive = listingStatusByTokenId.get(tokenId) ?? false;
+      const beastName = nameForToken(offer.collection, tokenId) || `Beast #${tokenId}`;
+      const listingActive = listingStatusByTokenKey.get(marketplaceTokenKey(offer.collection, tokenId)) ?? false;
 
       return {
         ...offer,
@@ -680,7 +657,7 @@ export default function MarketplacePage() {
         isHidden: hiddenMadeOfferIds.has(offer.id.toString()) || isExpired || isInactive,
       };
     });
-  }, [userMadeOffers, beastNameByTokenId, listingStatusByTokenId, hiddenMadeOfferIds]);
+  }, [userMadeOffers, nameForToken, listingStatusByTokenKey, hiddenMadeOfferIds]);
 
   // Filter made offers based on visibility
   const visibleMadeOffers = useMemo(() => {
@@ -765,9 +742,15 @@ export default function MarketplacePage() {
   /**
    * Handle clicking on a listing card to open detail modal
    */
+  const navigate = useNavigate();
   const handleCardClick = useCallback((listing: Listing) => {
+    // Festival tokens have no Beast record for the modal: open their own page
+    if (listing.festival) {
+      navigate(`/festival/${listing.festival.slug}/${listing.festival.tokenId}`);
+      return;
+    }
     setDetailModalListing(listing);
-  }, []);
+  }, [navigate]);
 
   /**
    * Handle closing the detail modal
@@ -919,30 +902,27 @@ export default function MarketplacePage() {
     [floorPriceParts, filtersHook.myActiveListings.length, totalListingsCount, visibleOffersReceived.length, uniqueSellers]
   );
 
+  // Beast filter options plus the marketplace-only Festival (Yes/No/Any) trait
+  const marketplaceFilterOptions = useMemo(
+    () => ({ [FESTIVAL_FILTER_TRAIT]: ["0", "1"], ...dataHook.availableFilters }),
+    [dataHook.availableFilters]
+  );
+
   /**
    * Filter controls for toolbar
    */
   const filterControls = useMemo(
     () => (
       <div className="flex items-center gap-3">
-        {/* Beast attribute filters don't apply to festival collections */}
-        {!isFestivalCollection && (
-          <FiltersButton
-            attributeFilters={filtersHook.attributeFilters}
-            onClick={() => setFiltersOpen(true)}
-          />
-        )}
+        <FiltersButton
+          attributeFilters={filtersHook.attributeFilters}
+          onClick={() => setFiltersOpen(true)}
+        />
         <SortDropdown value={filtersHook.sortOption} onChange={filtersHook.setSortOption} />
       </div>
     ),
-    [filtersHook.attributeFilters, filtersHook.sortOption, isFestivalCollection]
+    [filtersHook.attributeFilters, filtersHook.sortOption]
   );
-
-  // Beast filters can't match festival tokens: clear them when switching there.
-  const resetFilters = filtersHook.handleResetFilters;
-  useEffect(() => {
-    if (isFestivalCollection) resetFilters();
-  }, [isFestivalCollection, resetFilters]);
 
   /**
    * Handle cancel listing
@@ -958,7 +938,7 @@ export default function MarketplacePage() {
           { cancel: actionsHook.cancel },
           {
             account: account as any,
-            collectionAddress: listing.collection ?? activeCollection.address,
+            collectionAddress: listing.collection ?? BEASTS_COLLECTION_ADDRESS,
             tokenId: listing.tokenId,
             orderId: listing.orderId ?? 0,
           }
@@ -1029,7 +1009,7 @@ export default function MarketplacePage() {
           account as any,
           cartsHook.cancelCart.map((listing) => ({
             orderId: listing.orderId ?? 0,
-            collection: listing.collection ?? activeCollection.address,
+            collection: listing.collection ?? BEASTS_COLLECTION_ADDRESS,
             tokenId: listing.tokenId,
           }))
         );
@@ -1142,6 +1122,7 @@ export default function MarketplacePage() {
             handleCloseDetailModal();
             setOfferBeast(offerBeastFor(listing));
             setOfferTokenId(listing.tokenId);
+            setOfferCollection(listing.collection ?? BEASTS_COLLECTION_ADDRESS);
             setMakeOfferOpen(true);
           }}
           className="w-full sm:w-auto font-semibold tracking-wide cursor-pointer"
@@ -1156,25 +1137,6 @@ export default function MarketplacePage() {
     <AppLayout topBar={<TopBar />}>
       <IndexerStatusBanner />
       <div className="space-y-4">
-        {/* Collection switcher */}
-        <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Collection">
-          {MARKETPLACE_COLLECTIONS.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              role="tab"
-              aria-selected={c.id === activeCollection.id}
-              onClick={() => selectCollection(c.id)}
-              className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
-                c.id === activeCollection.id
-                  ? "border-gold bg-gold/15 text-gold"
-                  : "border-white/10 text-zinc-400 hover:border-white/25 hover:text-zinc-200"
-              }`}
-            >
-              {c.name}
-            </button>
-          ))}
-        </div>
           {/* Stats cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
           {heroStats.map((stat) => (
@@ -1219,7 +1181,7 @@ export default function MarketplacePage() {
           <ViewToggle
             value={filtersHook.activeTab}
             onChange={filtersHook.setActiveTab}
-            myBeastsLabel={isFestivalCollection ? "My Items" : undefined}
+            myBeastsLabel="My Items"
           />
           <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
             {filterControls}
@@ -1342,7 +1304,7 @@ export default function MarketplacePage() {
               </div>
               </div>
               {/* Sweep Control - on same row as sub-tabs, right side */}
-              {exploreSubTab === "browse" && !isFestivalCollection && (
+              {exploreSubTab === "browse" && (
                 <SweepControl
                   listings={(exploreSubTab === "browse" ? filtersHook.sortedListings : filtersHook.namedRecentListings).filter(l => address?.toLowerCase() !== l.seller?.toLowerCase())}
                   onSweep={(listings) => requireToS(() => handleSweep(listings))}
@@ -1447,6 +1409,7 @@ export default function MarketplacePage() {
                               onMakeOffer={() => requireToS(() => {
                                 setOfferBeast(offerBeastFor(listing));
                                 setOfferTokenId(listing.tokenId);
+                                setOfferCollection(listing.collection ?? BEASTS_COLLECTION_ADDRESS);
                                 setMakeOfferOpen(true);
                               })}
                               onViewOffers={() => {
@@ -1583,6 +1546,7 @@ export default function MarketplacePage() {
                                               onClick={() => requireToS(() => {
                                                 setOfferBeast(offerBeastFor(listing));
                                                 setOfferTokenId(listing.tokenId);
+                                                setOfferCollection(listing.collection ?? BEASTS_COLLECTION_ADDRESS);
                                                 setMakeOfferOpen(true);
                                               })}
                                             >
@@ -1676,6 +1640,7 @@ export default function MarketplacePage() {
                             onMakeOffer={() => requireToS(() => {
                               setOfferBeast(offerBeastFor(listing));
                               setOfferTokenId(listing.tokenId);
+                              setOfferCollection(listing.collection ?? BEASTS_COLLECTION_ADDRESS);
                               setMakeOfferOpen(true);
                             })}
                             onViewOffers={() => {
@@ -1803,6 +1768,7 @@ export default function MarketplacePage() {
                                             onClick={() => {
                                               setOfferBeast(offerBeastFor(listing));
                                               setOfferTokenId(listing.tokenId);
+                                              setOfferCollection(listing.collection ?? BEASTS_COLLECTION_ADDRESS);
                                               setMakeOfferOpen(true);
                                             }}
                                           >
@@ -2178,18 +2144,22 @@ export default function MarketplacePage() {
           </section>
         )}
 
-        {filtersHook.activeTab === "my-beasts" && isFestivalCollection && activeCollection.festivalSlug && (
-          <section className="space-y-4">
-            <FestivalHoldingsPanel
-              slug={activeCollection.festivalSlug}
-              address={address}
-              listings={dataHook.listings}
-              onListed={() => dataHook.refetchOrders()}
-            />
-          </section>
-        )}
+        {/* My Items: festival tokens held (each section hides itself when empty) */}
+        {filtersHook.activeTab === "my-beasts" &&
+          festivalItemsMatchFilters(filtersHook.attributeFilters) &&
+          FESTIVAL_COLLECTIONS.map((c) => (
+            <section key={c.slug} className="space-y-3">
+              <FestivalHoldingsPanel
+                slug={c.slug}
+                address={address}
+                listings={dataHook.listings}
+                onListed={() => dataHook.refetchOrders()}
+                asSection
+              />
+            </section>
+          ))}
 
-        {filtersHook.activeTab === "my-beasts" && !isFestivalCollection && (
+        {filtersHook.activeTab === "my-beasts" && (
           <section className="space-y-4">
             {dataHook.userBeastsLoading && filtersHook.sortedUserBeasts.length === 0 ? (
               // Show skeleton cards while initially loading
@@ -2979,7 +2949,7 @@ export default function MarketplacePage() {
               onOpenChange={setMakeOfferOpen}
               beast={offerBeast}
               tokenId={offerTokenId}
-              collection={activeCollection.address}
+              collection={offerCollection}
               onOfferMade={() => {
                 setMakeOfferOpen(false);
                 // Refetch offers after making one
@@ -3125,7 +3095,7 @@ export default function MarketplacePage() {
           open={filtersOpen}
           onClose={() => setFiltersOpen(false)}
           attributeFilters={filtersHook.attributeFilters}
-          availableFilters={dataHook.availableFilters}
+          availableFilters={marketplaceFilterOptions}
           filtersLoading={dataHook.filtersLoading}
           filtersError={dataHook.filtersError}
           onFilterChange={filtersHook.handleFilterChange}

@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   fetchFestivalTokens,
+  festivalCollectionFor,
   getFestivalCollection,
   festivalPlaceholderBeast,
   ownedFestivalTokenIds,
@@ -17,13 +18,18 @@ type Props = {
   /** festival collection slug (services/festivalBeasts) */
   slug: string;
   address: string | undefined;
-  /** active listings in this collection (to mark tokens already listed) */
+  /** active marketplace listings (any collection; used to mark tokens already listed) */
   listings: Listing[];
   onListed?: () => void;
+  /**
+   * Section of the combined "My Items" tab: titled, and renders nothing when
+   * there's nothing to show (no wallet, loading, or no tokens held).
+   */
+  asSection?: boolean;
 };
 
 /** Marketplace "My Items" for a festival collection: the tokens you hold, with List buttons. */
-export function FestivalHoldingsPanel({ slug, address, listings, onListed }: Props) {
+export function FestivalHoldingsPanel({ slug, address, listings, onListed, asSection = false }: Props) {
   const collection = getFestivalCollection(slug);
   const [tokens, setTokens] = useState<FestivalToken[] | null>(null);
   const [listing, setListing] = useState<FestivalToken | null>(null);
@@ -46,11 +52,17 @@ export function FestivalHoldingsPanel({ slug, address, listings, onListed }: Pro
   }, [tokens, address]);
 
   const listedIds = useMemo(
-    () => new Set(listings.filter((l) => l.active).map((l) => l.tokenId)),
-    [listings],
+    () =>
+      new Set(
+        listings
+          .filter((l) => l.active && collection && festivalCollectionFor(l.collection)?.slug === collection.slug)
+          .map((l) => l.tokenId),
+      ),
+    [listings, collection],
   );
 
   if (!collection) return null;
+  if (asSection && (!address || tokens === null || owned.length === 0)) return null;
   if (!address) {
     return <p className="py-10 text-center text-sm text-zinc-500">Connect your wallet to see your {collection.name}.</p>;
   }
@@ -76,6 +88,14 @@ export function FestivalHoldingsPanel({ slug, address, listings, onListed }: Pro
 
   return (
     <>
+      {asSection && (
+        <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
+          {collection.name}
+          <span className="rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-[9px] tracking-wider text-gold">
+            Festival
+          </span>
+        </h3>
+      )}
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
         {owned.map((t) => {
           const isListed = listedIds.has(String(t.tokenId));

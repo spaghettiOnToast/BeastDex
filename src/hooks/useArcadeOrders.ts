@@ -5,6 +5,7 @@ import { CategoryType, StatusType } from "../services/marketplace/arcadeTypes";
 import { compareStarknetAddresses, padStarknetAddress } from "../utils/address";
 import { TORII_PRODUCTION_BASE } from "../services/shared/toriiEndpoint";
 import { toTokenIdString, toTokenIdHex } from "../utils/tokenId";
+import { marketplaceTokenKey } from "../services/marketplace/constants";
 
 const ARCADE_GRAPHQL_ENDPOINT = import.meta.env.VITE_ARCADE_TORII_BASE
   ? `${import.meta.env.VITE_ARCADE_TORII_BASE}/graphql`
@@ -230,6 +231,17 @@ function parseGraphQLSale(node: any): ArcadeSaleCompat | null {
   };
 }
 
+/** One collection address, or several merged (the unified marketplace grid). */
+export type CollectionArg = string | readonly string[];
+
+const collectionList = (c: CollectionArg): string[] => (typeof c === "string" ? [c] : [...c]).filter(Boolean);
+const collectionKey = (c: CollectionArg): string => collectionList(c).join(",");
+
+/** Run a per-collection fetch for each collection and concatenate the results. */
+async function forCollections<T>(c: CollectionArg, fetchOne: (address: string) => Promise<T[]>): Promise<T[]> {
+  return (await Promise.all(collectionList(c).map(fetchOne))).flat();
+}
+
 async function fetchArcadeSalesGraphQL(
   collectionAddress: string,
   limit: number = 100,
@@ -284,17 +296,21 @@ async function fetchArcadeSalesGraphQL(
   return sales.sort((a, b) => b.time - a.time);
 }
 
-export function useArcadeSalesForCollection(collectionAddress: string, limit: number = 100) {
+export function useArcadeSalesForCollection(collections: CollectionArg, limit: number = 100) {
   const queryClient = useQueryClient();
-  const queryKey = useMemo(() => ["arcadeSales", collectionAddress, limit], [collectionAddress, limit]);
+  const key = collectionKey(collections);
+  const queryKey = useMemo(() => ["arcadeSales", key, limit], [key, limit]);
 
   const query = useQuery({
     queryKey,
-    enabled: !!collectionAddress,
+    enabled: !!key,
     staleTime: 60_000, // Consider data fresh for 60 seconds
     refetchOnWindowFocus: false, // Prevent refetch on tab switch
     refetchOnMount: false, // Don't refetch if data exists
-    queryFn: ({ signal }) => fetchArcadeSalesGraphQL(collectionAddress, limit, signal),
+    queryFn: async ({ signal }) => {
+      const sales = await forCollections(collections, (c) => fetchArcadeSalesGraphQL(c, limit, signal));
+      return sales.sort((a, b) => b.time - a.time).slice(0, limit);
+    },
   });
 
   // Force invalidate and refetch (bypasses staleTime)
@@ -372,22 +388,20 @@ async function fetchUserOffersGraphQL(
     .filter(Boolean) as ArcadeOrderModelCompat[];
 }
 
-export function useUserOffers(userAddress: string | undefined, collectionAddress: string) {
-  const queryKey = useMemo(
-    () => ["arcadeUserOffers", userAddress, collectionAddress],
-    [userAddress, collectionAddress]
-  );
+export function useUserOffers(userAddress: string | undefined, collections: CollectionArg) {
+  const key = collectionKey(collections);
+  const queryKey = useMemo(() => ["arcadeUserOffers", userAddress, key], [userAddress, key]);
 
   const query = useQuery({
     queryKey,
-    enabled: !!userAddress && !!collectionAddress,
+    enabled: !!userAddress && !!key,
     staleTime: 2 * 60_000, // Consider data fresh for 2 minutes
     gcTime: 10 * 60_000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false, // Don't refetch on window focus (prevents flicker)
     refetchOnMount: false, // Don't refetch if data exists (prevents tab switch reload)
     queryFn: async ({ signal }) => {
       if (!userAddress) return [];
-      return fetchUserOffersGraphQL(userAddress, collectionAddress, 100, signal);
+      return forCollections(collections, (c) => fetchUserOffersGraphQL(userAddress, c, 100, signal));
     },
   });
 
@@ -547,46 +561,45 @@ export type OfferWithBeastInfo = ArcadeOrderModelCompat & {
   beastName?: string;
 };
 
+/**
+ * Offers on the user's tokens across `collections`.
+ * `userTokenKeys` are collection-qualified keys (see `marketplaceTokenKey`).
+ */
 export function useOffersReceivedForListings(
-  collectionAddress: string,
-  userListedTokenIds: string[],
+  collections: CollectionArg,
+  userTokenKeys: string[],
   enabled: boolean = true
 ) {
-  // Use stable query key - just the collection address
+  // Use stable query key - just the collections
   // This prevents cache invalidation when token IDs change
   // Filtering happens client-side via select
-  const queryKey = useMemo(
-    () => ["arcadeAllOffers", collectionAddress],
-    [collectionAddress]
-  );
+  const key = collectionKey(collections);
+  const queryKey = useMemo(() => ["arcadeAllOffers", key], [key]);
 
-  // Memoize token IDs set for client-side filtering
-  const tokenIdSet = useMemo(
-    () => new Set(userListedTokenIds.map(id => String(id))),
-    [userListedTokenIds]
-  );
+  // Memoize token keys set for client-side filtering
+  const tokenKeySet = useMemo(() => new Set(userTokenKeys), [userTokenKeys]);
 
   const query = useQuery({
     queryKey,
     // Only require collection address - don't depend on token IDs for enabling
     // This allows cache to persist across tab switches
-    enabled: enabled && !!collectionAddress,
+    enabled: enabled && !!key,
     staleTime: 2 * 60_000, // Consider data fresh for 2 minutes
     gcTime: 10 * 60_000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false,
     refetchOnMount: false, // Don't refetch if data exists (prevents tab switch reload)
     queryFn: async ({ signal }) => {
-      // Fetch all offers for the collection (stable cache)
-      return fetchAllOffersForCollectionGraphQL(collectionAddress, 500, signal);
+      // Fetch all offers for the collections (stable cache)
+      return forCollections(collections, (c) => fetchAllOffersForCollectionGraphQL(c, 500, signal));
     },
     // Client-side filtering based on user's token IDs
     // This updates instantly when token IDs change without refetching
     select: useCallback((allOffers: ArcadeOrderModelCompat[]) => {
-      if (tokenIdSet.size === 0) return [];
+      if (tokenKeySet.size === 0) return [];
 
       // Filter to only offers on user's tokens
       const offersReceived = allOffers.filter(offer =>
-        tokenIdSet.has(String(offer.tokenId))
+        tokenKeySet.has(marketplaceTokenKey(offer.collection, offer.tokenId))
       );
 
       // Sort by price descending (highest first) - compare as BigInt for precision
@@ -597,7 +610,7 @@ export function useOffersReceivedForListings(
         if (priceB < priceA) return -1;
         return 0;
       });
-    }, [tokenIdSet]),
+    }, [tokenKeySet]),
   });
 
   return {
@@ -611,18 +624,16 @@ export function useOffersReceivedForListings(
  */
 export function useUserSales(
   userAddress: string | undefined,
-  collectionAddress: string,
+  collections: CollectionArg,
   enabled: boolean = true
 ) {
   const queryClient = useQueryClient();
-  const queryKey = useMemo(
-    () => ["arcadeUserSales", userAddress, collectionAddress],
-    [userAddress, collectionAddress]
-  );
+  const key = collectionKey(collections);
+  const queryKey = useMemo(() => ["arcadeUserSales", userAddress, key], [userAddress, key]);
 
   const query = useQuery({
     queryKey,
-    enabled: enabled && !!userAddress && !!collectionAddress,
+    enabled: enabled && !!userAddress && !!key,
     staleTime: 30_000, // Consider data fresh for 30 seconds
     refetchOnWindowFocus: false,
     refetchOnMount: true,
@@ -630,7 +641,7 @@ export function useUserSales(
       if (!userAddress) return [];
 
       // Fetch recent sales for the collection
-      const sales = await fetchArcadeSalesGraphQL(collectionAddress, 200, signal);
+      const sales = await forCollections(collections, (c) => fetchArcadeSalesGraphQL(c, 200, signal));
 
       // Filter to only sales where user is buyer or seller
       const userSales = sales.filter(sale =>

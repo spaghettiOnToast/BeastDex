@@ -9,6 +9,7 @@ import { fetchUnclaimedSkullsBatch } from "../../../services/summit";
 import type { MarketplaceView } from "../types";
 import { toSafeTokenNumber } from "../../../utils/tokenId";
 import { SUMMIT_ENABLED } from "../../../services/summitApi/constants";
+import { marketplaceTokenKey } from "../../../services/marketplace/constants";
 
 /**
  * Legacy numeric beast id (Summit/skull data is keyed by it), or NaN for v3
@@ -201,8 +202,8 @@ export function useMarketplaceFilters({
       // Skip expired if hideExpired is on
       if (hideExpired && listing.status === "expired") continue;
 
-      // Only apply attribute filters if beast data is loaded
-      if (listing.beast && !matchesAttributeFilters(listing as Listing & { beast: Beast }, attributeFilters)) continue;
+      // Only apply attribute filters once beast / festival data is loaded
+      if ((listing.beast || listing.festival) && !matchesAttributeFilters(listing, attributeFilters)) continue;
 
       // Hide listings without beast data (or festival token data, for festival
       // collections, which have no Beast records)
@@ -217,7 +218,8 @@ export function useMarketplaceFilters({
       // Only consider active listings
       if (listing.status !== "active") continue;
 
-      const tokenId = String(listing.tokenId).trim();
+      // Collection-qualified: token ids repeat across Beasts and festival collections
+      const tokenId = marketplaceTokenKey(listing.collection, String(listing.tokenId).trim());
       const existing = listingsByTokenId.get(tokenId);
 
       if (!existing) {

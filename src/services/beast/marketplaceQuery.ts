@@ -12,6 +12,7 @@ import { toTokenIdString } from "../../utils/tokenId";
 
 type ListingRow = {
   order_id: string;
+  collection: string;
   token_id: string;
   price: string;
   seller: string;
@@ -23,15 +24,19 @@ type ListingRow = {
   listing_time: string | null;
 };
 
-/** Active listings (Sell orders) for one collection; defaults to Beasts. */
+/** Active listings (Sell orders) for one or more collections; defaults to Beasts. */
 export async function fetchListingsWithMetadataSingleQuery(
-  collectionAddress: string = BEASTS_COLLECTION_ADDRESS,
+  collectionAddresses: string | readonly string[] = BEASTS_COLLECTION_ADDRESS,
 ): Promise<Listing[]> {
   // Torii stores felts as lowercase 0x + 64 hex; BigInt-normalise to avoid SQL injection too.
-  const collection = paddedAddress(collectionAddress);
+  const collections = (typeof collectionAddresses === "string" ? [collectionAddresses] : collectionAddresses).map(
+    paddedAddress,
+  );
+  if (collections.length === 0) return [];
   const query = `
     SELECT
       o.id as order_id,
+      o.collection,
       o.token_id,
       o.price,
       o.owner as seller,
@@ -43,7 +48,7 @@ export async function fetchListingsWithMetadataSingleQuery(
       l.time as listing_time
     FROM "ARCADE-Order" o
     LEFT JOIN "ARCADE-Listing" l ON l.order_id = o.id
-    WHERE o.collection = '${collection}'
+    WHERE o.collection IN (${collections.map((c) => `'${c}'`).join(", ")})
       AND o.status = 1
       AND o.category = 2
     ORDER BY o.id DESC
@@ -96,7 +101,7 @@ export async function fetchListingsWithMetadataSingleQuery(
         status: isExpired ? "expired" : "active",
         createdAt,
         beast: null,
-        collection,
+        collection: paddedAddress(row.collection),
       });
     }
 
