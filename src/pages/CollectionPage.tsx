@@ -1074,6 +1074,7 @@ function CollectionPage() {
 
         {/* Collection hero: species progress, headline numbers, variants, highlights */}
         <CollectionHero
+          beasts={ownedBeasts}
           stats={displayStats}
           overviewCards={overviewCards}
           onSelectBeast={handleBeastSelect}

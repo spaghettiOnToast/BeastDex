@@ -2,6 +2,7 @@ import type { Beast } from "../../services/beast";
 import type { BeastCollectionStats } from "../../utils/beastCollection";
 import { getBeastRank, unrankedReason, UNRANKED_LABELS } from "../../utils/beast";
 import { useSpeciesCount } from "../../hooks/useBeastQueries";
+import { gradeBuckets } from "../../utils/gradeFilter";
 
 /** A headline number in the hero (beasts, combined power/health, summit rank). */
 export type OverviewCard = {
@@ -19,6 +20,8 @@ type CollectionHeroProps = {
   /** Headline numbers (beasts, combined power/health, summit rank) */
   overviewCards: OverviewCard[];
   onSelectBeast?: (beast: Beast) => void;
+  /** The owner's beasts, for the card-grade counts (omitted: no grade row). */
+  beasts?: Beast[];
 };
 
 const pct = (n: number, total: number) => (total > 0 ? Math.min(100, Math.round((n / total) * 100)) : 0);
@@ -57,7 +60,7 @@ const eyebrow = "text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-
  * Collection page hero: species progress + headline numbers, then the variant
  * breakdown and the collection's highlight beasts.
  */
-export function CollectionHero({ stats, overviewCards, onSelectBeast }: CollectionHeroProps) {
+export function CollectionHero({ stats, overviewCards, onSelectBeast, beasts }: CollectionHeroProps) {
   const totalSpecies = useSpeciesCount();
   const complete = stats.uniqueBeastTypes >= totalSpecies && totalSpecies > 0;
 
@@ -74,6 +77,16 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast }: Collecti
       dot: "#ec4899",
     },
   ];
+
+  const grades = beasts && beasts.length > 0 ? gradeBuckets(beasts) : null;
+  const gradeCells = grades
+    ? [
+        { key: "g10", label: "Grade 10", value: grades.g10, accent: "text-[#e2b94c]", title: "Perfect condition" },
+        { key: "g9", label: "Grade 9", value: grades.g9, accent: "text-white" },
+        { key: "g8", label: "Grade 8", value: grades.g8, accent: "text-white" },
+        { key: "g7", label: "Grade 7–0", value: grades.g7AndBelow, accent: "text-zinc-300", title: "Grade 7 or lower" },
+      ]
+    : [];
 
   // Rank 0 means "unranked" in the data, not first place
   const rawRank = getBeastRank(stats.highestRanked);
@@ -178,6 +191,19 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast }: Collecti
               </li>
             ))}
           </ul>
+          {gradeCells.length > 0 && (
+            <div className="mt-4 border-t border-white/[0.06] pt-3">
+              <p className={`${eyebrow} mb-2`}>Card grades</p>
+              <dl className="grid grid-cols-4 gap-2">
+                {gradeCells.map((g) => (
+                  <div key={g.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2 py-1.5 text-center" title={g.title}>
+                    <dt className="truncate text-[10px] uppercase tracking-wider text-zinc-500">{g.label}</dt>
+                    <dd className={`text-base font-bold tabular-nums ${g.accent}`}>{g.value.toLocaleString()}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
         </div>
 
         {/* Highlights */}

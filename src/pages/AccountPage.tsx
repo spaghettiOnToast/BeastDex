@@ -594,6 +594,7 @@ function AccountPage() {
         ) : null}
 
         <CollectionHero
+          beasts={ownedBeasts}
           stats={displayStats}
           overviewCards={overviewCards}
           onSelectBeast={handleSelectBeast}
