@@ -36,7 +36,7 @@ function rarityStat(beast: Beast): string | null {
   const parts = [
     beast.visual && beast.visual !== "Regular" ? `✨ ${beast.visual}` : null,
     beast.cardGrade != null ? `💎 Grade ${beast.cardGrade}` : null,
-    rank != null && rank > 0 ? `👑 #${rank}` : null,
+    rank != null && rank > 0 ? `👑 ${beast.rankEstimated ? "~" : ""}#${rank}` : null,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
 }
@@ -89,7 +89,7 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast }: Collecti
       key: "highestRanked",
       label: "Highest Rank",
       beast: stats.highestRanked,
-      stat: highestRank != null ? `👑 Rank #${highestRank}` : null,
+      stat: highestRank != null ? `👑 Rank ${stats.highestRanked?.rankEstimated ? "~" : ""}#${highestRank}` : null,
       accent: "text-gold",
     },
     {

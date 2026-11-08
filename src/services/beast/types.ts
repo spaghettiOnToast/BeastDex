@@ -31,6 +31,8 @@ export type Beast = {
   power: number | null;
   /** species id (v3 registry species, may exceed 75) */
   speciesId?: number;
+  /** rank was estimated client-side (the API reports 0 = not ranked yet) */
+  rankEstimated?: boolean;
   shiny?: boolean;
   /** v3: derived from `visualEffects` (presets 2/3), not the always-true SDK flag */
   animated?: boolean;

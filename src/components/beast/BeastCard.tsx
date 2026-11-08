@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
   beastImageUrl,
@@ -11,6 +12,7 @@ import type { Beast, BeastAttribute } from "../../services/beast";
 import { CONTRACT_ADDRESS } from "../../services/beast/constants";
 import { readRpcUrls } from "../../services/tx";
 import { fetchV3CardImgSrc, spriteSpeciesName } from "../../services/beast/cardImage";
+import { estimateSpeciesRank } from "../../services/beast/rankEstimate";
 
 // On-chain card images for beasts without a bundled sprite (v3 species past the
 // bundled set), keyed by token id. Shared across cards to avoid repeat RPC reads.
@@ -85,6 +87,26 @@ const BeastCard = memo(function BeastCard({
 }: Props) {
   const { image, owner, attributes, power } = beast;
 
+  // Rank: the API reports 0 for beasts it hasn't ranked yet. Show an estimate
+  // (marked "~") instead — either already filled in (beast.rankEstimated) or
+  // looked up here — and keep it out of the card art, which only draws real ranks.
+  const attrRank = toNumber(getAttr(attributes, "Rank"));
+  const needsRankEstimate =
+    !missing &&
+    !beast.rankEstimated &&
+    attrRank < 1 &&
+    Boolean(beast.tokenId) &&
+    beast.visualEffects !== undefined &&
+    beast.speciesId != null &&
+    power != null;
+  const { data: queriedRankEstimate } = useQuery({
+    queryKey: ["rankEstimate", beast.speciesId, power],
+    enabled: needsRankEstimate,
+    queryFn: () => estimateSpeciesRank(beast.speciesId as number, power as number),
+    staleTime: 30 * 60_000,
+  });
+  const estimatedRank = beast.rankEstimated ? attrRank : needsRankEstimate ? queriedRankEstimate ?? null : null;
+
   const cardInput: BeastCardInput = useMemo(() => {
     const speciesName = getAttr(attributes, "Beast");
     const prefixName = getAttr(attributes, "Prefix");
@@ -99,10 +121,10 @@ const BeastCard = memo(function BeastCard({
       level: toNumber(getAttr(attributes, "Level")),
       health: toNumber(getAttr(attributes, "Health")),
       power: power ?? 0,
-      rank: toNumber(getAttr(attributes, "Rank")),
+      rank: beast.rankEstimated ? 0 : attrRank,
       shiny: isTruthy(getAttr(attributes, "Shiny")),
     };
-  }, [attributes, beast.name, power]);
+  }, [attributes, beast.name, beast.rankEstimated, attrRank, power]);
 
   // Render the canonical on-chain card SVG (same generator as the token_uri) with
   // our hosted sprite as the art — no more hand-built DOM/CSS card layout.
@@ -232,6 +254,20 @@ const BeastCard = memo(function BeastCard({
             </div>
           );
         })()}
+        {estimatedRank != null && estimatedRank > 0 && (
+          <div
+            title="Estimated rank — this beast hasn't been ranked yet"
+            style={{
+              position: "absolute", top: 5, right: 5, zIndex: 20, lineHeight: 1,
+              background: "#0b0b0d", color: "#e2b94c", fontWeight: "bold", letterSpacing: 0.5,
+              border: "1px dashed rgba(226,185,76,0.6)", borderRadius: 4,
+              boxShadow: "0 1px 4px rgba(0,0,0,0.6)",
+            }}
+            className="px-[3px] py-[2px] text-[7px] @min-[150px]:px-[5px] @min-[150px]:py-[3px] @min-[150px]:text-[9px]"
+          >
+            ~#{estimatedRank}
+          </div>
+        )}
         {missing && (
           <div style={{
             position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
