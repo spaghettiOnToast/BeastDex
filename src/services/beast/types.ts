@@ -122,4 +122,6 @@ export type FetchLeaderboardOptions = {
   offset?: number;
   /** "desc" = most first (default) */
   order?: "asc" | "desc";
+  /** Slayer: include the 75 Genesis beasts (default false) */
+  includeGenesis?: boolean;
 };

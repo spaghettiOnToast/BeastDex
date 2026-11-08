@@ -446,19 +446,24 @@ export async function fetchBeastSlayerLeaderboard({
   limit = 10,
   offset = 0,
   order = "desc",
+  includeGenesis = false,
 }: FetchLeaderboardOptions = {}): Promise<BeastSlayerEntry[]> {
   const now = Date.now();
-  let pool = _slayerPools.get(order);
+  const poolKey = `${order}|${includeGenesis ? "all" : "named"}`;
+  let pool = _slayerPools.get(poolKey);
   if (!pool || now - pool.timestamp > SLAYER_CACHE_TTL_MS) {
     const result = await legacyCollectablesClient.beasts.list({
       sort: "adventurers_killed",
       order,
       adventurersKilledGte: 1,
+      // Genesis beasts (one per species, all held by one wallet) dominate the
+      // all-time kills; hidden unless asked for
+      ...(includeGenesis ? {} : { genesis: false }),
       limit: SLAYER_POOL_SIZE,
       includeOwner: true,
     });
     pool = { timestamp: now, items: result.items };
-    _slayerPools.set(order, pool);
+    _slayerPools.set(poolKey, pool);
   }
 
   const slice = pool.items.slice(offset, offset + limit);

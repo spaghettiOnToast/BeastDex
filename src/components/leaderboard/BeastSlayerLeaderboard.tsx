@@ -15,11 +15,20 @@ export function BeastSlayerLeaderboard() {
   const [reloadNonce, setReloadNonce] = useState(0);
   // "desc" = most kills first
   const [order, setOrder] = useState<"asc" | "desc">("desc");
-  const toggleOrder = () => {
-    setOrder((o) => (o === "desc" ? "asc" : "desc"));
+  // Genesis beasts dominate all-time kills: hidden by default
+  const [showGenesis, setShowGenesis] = useState(false);
+  const resetList = () => {
     setPage(1);
     setEntries([]);
     setHasMore(true);
+  };
+  const toggleOrder = () => {
+    setOrder((o) => (o === "desc" ? "asc" : "desc"));
+    resetList();
+  };
+  const toggleGenesis = () => {
+    setShowGenesis((v) => !v);
+    resetList();
   };
 
   const ownerAddresses = useMemo(
@@ -37,7 +46,7 @@ export function BeastSlayerLeaderboard() {
         setError(null);
 
         const offset = (page - 1) * PAGE_SIZE;
-        const data = await fetchBeastSlayerLeaderboard({ limit: PAGE_SIZE, offset, order });
+        const data = await fetchBeastSlayerLeaderboard({ limit: PAGE_SIZE, offset, order, includeGenesis: showGenesis });
         if (cancelled) return;
 
         if (page === 1) {
@@ -63,7 +72,7 @@ export function BeastSlayerLeaderboard() {
     return () => {
       cancelled = true;
     };
-  }, [page, reloadNonce, order]);
+  }, [page, reloadNonce, order, showGenesis]);
 
   const handleLoadMore = () => {
     if (!loading && hasMore) {
@@ -131,15 +140,31 @@ export function BeastSlayerLeaderboard() {
         <p className="text-xs text-zinc-500">
           All-time adventurer kills across all beasts — pre-v3 (legacy) kills plus kills since the v3 migration.
         </p>
-        <button
-          type="button"
-          onClick={toggleOrder}
-          disabled={loading}
-          className="inline-flex shrink-0 items-center gap-1.5 self-start rounded-lg border border-white/[0.06] bg-white/[0.04] px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-zinc-300 transition-all hover:bg-white/[0.08] hover:text-white disabled:opacity-60 sm:self-auto"
-          title="Toggle sort order"
-        >
-          {order === "desc" ? "💀 Most kills first" : "🕊️ Fewest kills first"}
-        </button>
+        <div className="flex shrink-0 gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={toggleGenesis}
+            disabled={loading}
+            aria-pressed={showGenesis}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-60 ${
+              showGenesis
+                ? "border-[#e2b94c]/50 bg-[#e2b94c]/10 text-[#e2b94c]"
+                : "border-white/[0.06] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08] hover:text-white"
+            }`}
+            title="Genesis beasts (one per species, held by one wallet) are hidden by default"
+          >
+            {showGenesis ? "✓ Genesis shown" : "Show Genesis"}
+          </button>
+          <button
+            type="button"
+            onClick={toggleOrder}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.04] px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-zinc-300 transition-all hover:bg-white/[0.08] hover:text-white disabled:opacity-60"
+            title="Toggle sort order"
+          >
+            {order === "desc" ? "💀 Most kills first" : "🕊️ Fewest kills first"}
+          </button>
+        </div>
       </div>
       <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-surface-raised">
         <div className="grid grid-cols-[90px_minmax(0,2fr)_minmax(0,1.4fr)_minmax(0,1fr)] gap-4 border-b border-white/[0.06] bg-white/[0.04] px-6 py-3 text-xs font-bold uppercase tracking-wider text-zinc-300">
