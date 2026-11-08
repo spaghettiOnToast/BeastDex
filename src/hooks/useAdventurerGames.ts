@@ -4,6 +4,7 @@ import type { Listing } from "../services/marketplace/types";
 import { useMarketplaceListings } from "../pages/marketplace/hooks/useMarketplaceListings";
 import {
   GAME_CORE_ADDRESS,
+  fetchGame,
   fetchGamesForListings,
   fetchOwnerGames,
   type AdventurerGame,
@@ -51,4 +52,14 @@ export function useAdventurerListings() {
     gamesLoading: gamesQuery.isLoading && items.length > 0,
     refetchGames: gamesQuery.refetch,
   };
+}
+
+/** One game's full state (gear, bag, stats), fetched only when `enabled` (e.g. on hover). */
+export function useGameDetail(tokenId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["adventurerGameDetail", tokenId],
+    enabled,
+    staleTime: 60_000,
+    queryFn: ({ signal }) => fetchGame(tokenId, signal),
+  });
 }

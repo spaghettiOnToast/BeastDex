@@ -15,6 +15,13 @@ import {
   playedSince,
   secondsUntilIdle,
   IDLE_SECONDS,
+  gameFromDetail,
+  itemName,
+  itemSlot,
+  itemType,
+  itemTier,
+  itemGreatness,
+  itemImageUrl,
 } from "../src/services/adventurers";
 
 // A real Beast Mode game (lootsurvivor.io/play?id=…&dungeon=beastmode)
@@ -152,5 +159,45 @@ describe("trading rules", () => {
     expect(acceptOfferBlocker(live, lastAction + 60, lastAction + 3600)).toBeNull();
     expect(acceptOfferBlocker(live, lastAction - 60, lastAction + 3600)).toMatch(/played since this offer/);
     expect(acceptOfferBlocker(live, lastAction + 60, lastAction + 120)).toMatch(/Wait/);
+  });
+});
+
+describe("gear", () => {
+  it("names, slots, types and tiers items", () => {
+    expect([itemName(9), itemSlot(9), itemType(9), itemTier(9)]).toEqual(["Ghost Wand", "Weapon", "Magic", 1]);
+    expect([itemName(21), itemSlot(21), itemType(21), itemTier(21)]).toEqual(["Shirt", "Chest", "Cloth", 5]);
+    expect([itemName(42), itemSlot(42), itemType(42), itemTier(42)]).toEqual(["Katana", "Weapon", "Blade", 1]);
+    expect([itemName(101), itemSlot(101), itemType(101), itemTier(101)]).toEqual(["Heavy Gloves", "Hand", "Metal", 5]);
+    expect([itemSlot(4), itemTier(4), itemTier(5), itemTier(8)]).toEqual(["Ring", 2, 3, 1]);
+    expect(itemImageUrl(53)).toBe("https://www.lootsurvivor.io/images/loot/dragons_crown.png");
+  });
+
+  it("caps greatness at 20", () => {
+    expect([itemGreatness(0), itemGreatness(28), itemGreatness(400), itemGreatness(10_000)]).toEqual([1, 5, 20, 20]);
+  });
+
+  it("parses the single-game payload", () => {
+    const g = gameFromDetail({
+      tokenId: "0x000000000000000000000100000000020000000001c84854010d862100172621",
+      owner: "0xabc",
+      adventurer: {
+        xp: 22,
+        gold: 8,
+        health: 128,
+        beast_health: 0,
+        stats: { luck: 2, wisdom: 2, charisma: 2, strength: 2, vitality: 2, dexterity: 2, intelligence: 5 },
+        equipment: { weapon: { id: 9, xp: 28 }, chest: { id: 21, xp: 28 }, neck: { id: 0, xp: 0 } },
+        stat_upgrades_available: 1,
+      },
+      bag: [{ id: 12, xp: 0 }, { id: 0, xp: 0 }],
+      actionCount: 7,
+      started: true,
+      gameOver: false,
+    })!;
+    expect(g.gear?.equipment.Weapon).toEqual({ id: 9, xp: 28 });
+    expect(g.gear?.equipment.Neck).toBeUndefined();
+    expect(g.gear?.bag).toEqual([{ id: 12, xp: 0 }]);
+    expect(g.gear?.stats.intelligence).toBe(5);
+    expect(g.gear?.statUpgrades).toBe(1);
   });
 });

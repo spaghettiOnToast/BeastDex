@@ -5,6 +5,7 @@
 import { GAMES_API_URL, GAME_CORE_ADDRESS, GAME_DUNGEONS } from "./constants";
 import { decodeGameTokenId, gameExpiresAt, type DecodedGameToken } from "./tokenId";
 import { withReadProvider } from "../tx";
+import type { ItemSlot } from "./items";
 
 /** One game as returned by `GET /games?owner=…` */
 type ApiGameRow = {
@@ -29,13 +30,42 @@ type ApiGameDetail = {
   tokenId: string;
   minterId?: number;
   owner?: string;
-  adventurer?: { xp?: number; gold?: number; health?: number; beast_health?: number } | null;
+  adventurer?: {
+    xp?: number;
+    gold?: number;
+    health?: number;
+    beast_health?: number;
+    stats?: Partial<Record<keyof AdventurerStats, number>>;
+    equipment?: Record<string, { id?: number; xp?: number } | undefined>;
+    stat_upgrades_available?: number;
+  } | null;
+  bag?: Array<{ id?: number; xp?: number }>;
   actionCount?: number;
   started?: boolean;
   gameOver?: boolean;
   settled?: boolean;
   stuck?: boolean;
   lastActionBlock?: number | null;
+};
+
+export type AdventurerStats = {
+  strength: number;
+  dexterity: number;
+  vitality: number;
+  intelligence: number;
+  wisdom: number;
+  charisma: number;
+  luck: number;
+};
+
+export type GearItem = { id: number; xp: number };
+
+/** Equipped items by slot, bag contents and stats (single-game reads only). */
+export type AdventurerGear = {
+  equipment: Partial<Record<ItemSlot, GearItem>>;
+  bag: GearItem[];
+  stats: AdventurerStats;
+  statUpgrades: number;
 };
 
 export type GameStatus = "unplayed" | "in-progress" | "dead" | "expired" | "stuck";
@@ -61,6 +91,8 @@ export type AdventurerGame = {
   /** unix seconds, null = never expires */
   expiresAt: number | null;
   owner?: string;
+  /** present when read from the single-game endpoint */
+  gear?: AdventurerGear;
 };
 
 /** Loot Survivor level from XP (level 1 until 4 XP, then floor(sqrt(xp))). */
@@ -141,8 +173,45 @@ export function gameFromRow(row: ApiGameRow, owner?: string): AdventurerGame | n
   });
 }
 
+const SLOT_KEYS: Record<string, ItemSlot> = {
+  weapon: "Weapon",
+  head: "Head",
+  chest: "Chest",
+  waist: "Waist",
+  hand: "Hand",
+  foot: "Foot",
+  neck: "Neck",
+  ring: "Ring",
+};
+
+export function gearFromDetail(detail: ApiGameDetail): AdventurerGear | undefined {
+  const a = detail.adventurer;
+  if (!a) return undefined;
+  const equipment: Partial<Record<ItemSlot, GearItem>> = {};
+  for (const [key, item] of Object.entries(a.equipment ?? {})) {
+    const slot = SLOT_KEYS[key];
+    if (slot && item?.id) equipment[slot] = { id: item.id, xp: item.xp ?? 0 };
+  }
+  const st = a.stats ?? {};
+  return {
+    equipment,
+    bag: (detail.bag ?? []).filter((i) => !!i?.id).map((i) => ({ id: i.id!, xp: i.xp ?? 0 })),
+    stats: {
+      strength: st.strength ?? 0,
+      dexterity: st.dexterity ?? 0,
+      vitality: st.vitality ?? 0,
+      intelligence: st.intelligence ?? 0,
+      wisdom: st.wisdom ?? 0,
+      charisma: st.charisma ?? 0,
+      luck: st.luck ?? 0,
+    },
+    statUpgrades: a.stat_upgrades_available ?? 0,
+  };
+}
+
 export function gameFromDetail(detail: ApiGameDetail): AdventurerGame | null {
   return buildGame(detail.tokenId, {
+    gear: gearFromDetail(detail),
     xp: detail.adventurer?.xp ?? 0,
     health: detail.adventurer?.health ?? 0,
     gold: detail.adventurer?.gold ?? 0,
