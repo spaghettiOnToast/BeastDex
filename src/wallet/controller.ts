@@ -5,11 +5,24 @@ import { mainnet } from "@starknet-react/chains";
 export const controllerConnector = new ControllerConnector({
   chains: [{ rpcUrl: mainnet.rpcUrls.cartridge.http[0] }],
   defaultChainId: "0x534e5f4d41494e",
-  slot: "pg-mainnet-10",
   // Sign-in methods offered inside Controller. The EVM wallets (MetaMask,
   // Rabby, WalletConnect) sign in to a Starknet Controller account.
   signupOptions: ["webauthn", "google", "discord", "password", "metamask", "rabby", "walletconnect"],
 });
+
+// Cartridge's RPC now refuses calls from other sites (401 "Unauthorized"; it only
+// serves requests from its own keychain origin), yet the Controller answers
+// `wallet_requestChainId` by asking that RPC from our page, which breaks connect.
+// BeastDex is mainnet-only and Controller only allows Cartridge's RPC, so answer
+// the chain id locally. (Signing and execution still go through the keychain.)
+const SN_MAIN = "0x534e5f4d41494e";
+type ControllerRequest = (call: { type: string; params?: unknown }) => Promise<unknown>;
+const controllerProvider = (controllerConnector as unknown as { controller: { request: ControllerRequest; account?: unknown } }).controller;
+const originalRequest = controllerProvider.request.bind(controllerProvider);
+controllerProvider.request = async (call) => {
+  if (call?.type === "wallet_requestChainId" && controllerProvider.account) return SN_MAIN;
+  return originalRequest(call);
+};
 
 // The current @starknet-react release expects additional methods.
 // Add them if they don't exist
