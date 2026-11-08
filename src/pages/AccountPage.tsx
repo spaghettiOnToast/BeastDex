@@ -43,6 +43,8 @@ import { useSpeciesCount } from "../hooks/useBeastQueries";
 import { normaliseStarknetAddress } from "../utils/address";
 import { fetchOwnerSummitRankFromApi, type OwnerSummitRank } from "../services/summitApi";
 import { useFollowConnectedWallet } from "../hooks/useFollowConnectedWallet";
+import { ResultCount } from "../components/common/ResultCount";
+import { describeAttributeFilters } from "../utils/filterSummary";
 
 function isValidHexAddress(value: string): boolean {
   if (!value.startsWith("0x") || value.length < 3) {
@@ -403,6 +405,12 @@ function AccountPage() {
 
   const topBar = <TopBar />;
 
+  // Active filters (and ?q= search) as labels for the result count.
+  const activeFilterLabels = useMemo(
+    () => describeAttributeFilters(attributeFilters, searchParams.get("q")),
+    [attributeFilters, searchParams]
+  );
+
   const filtersControl = (
     <FiltersButton
       attributeFilters={attributeFilters}
@@ -612,11 +620,15 @@ function AccountPage() {
 
         {/* Beasts Section Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <h2 className="text-lg font-bold text-white">
-            {loading && total === 0
-              ? "Loading..."
-              : `${total.toLocaleString()} Beasts Collected`}
-          </h2>
+          {activeFilterLabels.length > 0 ? (
+            <ResultCount count={total} noun="beast" filters={activeFilterLabels} loading={loading && total === 0} />
+          ) : (
+            <h2 className="text-lg font-bold text-white">
+              {loading && total === 0
+                ? "Loading..."
+                : `${total.toLocaleString()} Beasts Collected`}
+            </h2>
+          )}
           <div className="flex items-center gap-2">
             <SortDropdown value={sortOption} onChange={setSortOption} />
             {filtersControl}

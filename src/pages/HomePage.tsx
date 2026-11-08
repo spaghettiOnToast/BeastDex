@@ -44,6 +44,8 @@ import { executePurchaseWithApproval, getOrderValidity, getPublicProvider } from
 import { toast } from "sonner";
 import { isUserRejection } from "../utils/transaction";
 import { useSoldListings } from "../contexts/SoldListingsContext";
+import { ResultCount } from "../components/common/ResultCount";
+import { describeAttributeFilters } from "../utils/filterSummary";
 
 const HIDDEN_FILTER_TRAITS = new Set<string>([
   "adventurerkilledcount",
@@ -531,6 +533,9 @@ function HomePage() {
 
   const topBar = <TopBar onLogoClick={handleResetFilters} />;
 
+  // Active filters / search as labels for the result count.
+  const activeFilterLabels = useMemo(() => describeAttributeFilters(attributeFilters, search), [attributeFilters, search]);
+
   const filtersControl = (
     <FiltersButton
       attributeFilters={attributeFilters}
@@ -569,6 +574,10 @@ function HomePage() {
           <span className="hidden sm:inline">Refresh</span>
         </Button>
       </div>
+
+      {activeFilterLabels.length > 0 && (
+        <ResultCount className="mb-3" count={total ?? 0} filters={activeFilterLabels} loading={fullLoading && !total} />
+      )}
 
       <BeastGrid
         beasts={beasts}

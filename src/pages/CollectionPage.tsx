@@ -63,6 +63,7 @@ import FestivalBeastsStrip from "../components/profile/FestivalBeastsStrip";
 import { useFollowConnectedWallet } from "../hooks/useFollowConnectedWallet";
 import { GradeFilterDropdown } from "../components/filters/GradeFilterDropdown";
 import { matchesGradeFilter, gradeFilterLabel, type GradeFilter } from "../utils/gradeFilter";
+import { ResultCount } from "../components/common/ResultCount";
 
 const TABS = [
   { key: "all", label: "All" },
@@ -623,6 +624,25 @@ function CollectionPage() {
     return index;
   }, [gradeFilteredBeasts]);
 
+  // Beasts per variant tab (after the grade filter), shown on the tab pills.
+  const tabCounts = useMemo(() => {
+    const counts = {} as Record<TabKey, number>;
+    for (const key of Object.keys(beastsByTypeAndCategory) as TabKey[]) {
+      let n = 0;
+      for (const list of beastsByTypeAndCategory[key].values()) n += list.length;
+      counts[key] = n;
+    }
+    return counts;
+  }, [beastsByTypeAndCategory]);
+
+  // What the current tab + grade + duplicates selection adds up to.
+  const resultSummary = useMemo(() => {
+    let lists = [...beastsByTypeAndCategory[activeTab].values()];
+    if (showDuplicatesOnly) lists = lists.filter((l) => l.length > 1);
+    return { beasts: lists.reduce((n, l) => n + l.length, 0), species: lists.length };
+  }, [beastsByTypeAndCategory, activeTab, showDuplicatesOnly]);
+
+
   // Use template-based placeholders - much faster!
   const placeholderCache = useMemo(() => {
     const cache = new Map<string, Beast | null>();
@@ -1174,6 +1194,9 @@ function CollectionPage() {
                   }`}
                 >
                   {tab.label}
+                  {ownedBeasts.length > 0 && (
+                    <span className="ml-1.5 tabular-nums opacity-70">{tabCounts[tab.key].toLocaleString()}</span>
+                  )}
                 </button>
               );
             })}
@@ -1250,7 +1273,20 @@ function CollectionPage() {
           </div>
         </div>
 
-        {catalogLoading ? (
+        {/* The table view breaks down every variant itself, so the count is for the grid. */}
+        {!catalogLoading && ownedBeasts.length > 0 && viewMode === "grid" && (
+          <ResultCount
+            className="mb-3"
+            count={resultSummary.beasts}
+            extra={`${resultSummary.species.toLocaleString()} species`}
+            filters={[
+              ...(activeTab !== "all" ? [TABS.find((t) => t.key === activeTab)?.label ?? ""] : []),
+              ...(gradeFilter !== "all" ? [gradeFilterLabel(gradeFilter)] : []),
+              ...(showDuplicatesOnly ? ["Duplicates"] : []),
+            ]}
+          />
+        )}
+                {catalogLoading ? (
           <p className="text-xs text-zinc-400">Loading collection...</p>
         ) : viewMode === "table" ? (
           <BeastTableView
