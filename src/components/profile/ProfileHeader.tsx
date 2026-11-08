@@ -64,6 +64,8 @@ export function ProfileHeader({
   };
   // Addresses: the first two hex digits after "0x"; usernames: first letter
   const isHexName = /^0x[0-9a-f]/i.test(displayName);
+  // Title and name share one size; addresses (monospace) run a step smaller.
+  const nameSize = nameIsAddress || isHexName ? "text-lg sm:text-xl" : "text-2xl sm:text-3xl";
   const initial = (isHexName ? displayName.slice(2, 4) : displayName.slice(0, 1)).toUpperCase();
 
   return (
@@ -95,17 +97,17 @@ export function ProfileHeader({
               initial
             )}
           </div>
-          <div className="min-w-0 space-y-1">
-            {title && (
-              <p className="truncate bg-gradient-to-r from-pink-400 via-cyan-300 to-green-300 bg-clip-text text-[11px] font-semibold uppercase tracking-[0.2em] text-transparent sm:text-xs">
-                “{title}”
-              </p>
-            )}
+          <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              {title && (
+                <span className={`max-w-full truncate bg-gradient-to-r from-pink-400 via-cyan-300 to-green-300 bg-clip-text font-bold uppercase leading-tight tracking-wide text-transparent ${nameSize}`}>
+                  “{title}”
+                </span>
+              )}
               <h1
                 className={`truncate font-bold leading-tight text-white ${
-                  nameIsAddress || isHexName ? "font-mono text-base sm:text-lg" : "text-xl sm:text-2xl"
-                }`}
+                  nameIsAddress || isHexName ? "font-mono" : ""
+                } ${nameSize}`}
                 title={address || undefined}
               >
                 {displayName}
