@@ -18,6 +18,11 @@ const VIEWS = {
     blurb: "The #1 ranked beast of every species.",
     filters: { Rank: ["1"] },
   },
+  midi: {
+    label: "MIDI beasts",
+    blurb: "Beasts whose card plays a MIDI track — drawn with the music-notes background.",
+    filters: { MIDI: ["1"] },
+  },
 } as const;
 type View = keyof typeof VIEWS;
 
@@ -42,7 +47,7 @@ export function HallOfFame() {
           <div className="text-xs uppercase tracking-[0.35em] text-zinc-500">Hall of Fame</div>
           <p className="mt-1 text-sm text-zinc-300">{VIEWS[view].blurb}</p>
         </div>
-        <div className="flex gap-1.5" role="tablist" aria-label="Hall of Fame view">
+        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Hall of Fame view">
           {(Object.keys(VIEWS) as View[]).map((v) => (
             <button
               key={v}
