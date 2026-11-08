@@ -59,6 +59,8 @@ import { useAccount } from "@starknet-react/core";
 import { ClaimCorpseButton } from "../components/collection/ClaimCorpseButton";
 import FestivalBeastsStrip from "../components/profile/FestivalBeastsStrip";
 import { useFollowConnectedWallet } from "../hooks/useFollowConnectedWallet";
+import { GradeFilterDropdown } from "../components/filters/GradeFilterDropdown";
+import { matchesGradeFilter, gradeFilterLabel, type GradeFilter } from "../utils/gradeFilter";
 
 const TABS = [
   { key: "all", label: "All" },
@@ -218,6 +220,7 @@ function CollectionPage() {
 
   const totalSpecies = useSpeciesCount();
   const [activeTab, setActiveTab] = useState<TabKey>("all");
+  const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
@@ -535,14 +538,20 @@ function CollectionPage() {
     setCatalogLoading(false);
   }, [beastTypes, genesisCache]); // Build catalog when beast types or Genesis cache change
 
+  // Beasts the grid, table and duplicate counts work from: all owned, or one card grade.
+  const gradeFilteredBeasts = useMemo(
+    () => (gradeFilter === "all" ? ownedBeasts : ownedBeasts.filter((b) => matchesGradeFilter(b, gradeFilter))),
+    [ownedBeasts, gradeFilter]
+  );
+
   const categoryMaps = useMemo(
-    () => buildCategoryMaps(ownedBeasts),
-    [ownedBeasts]
+    () => buildCategoryMaps(gradeFilteredBeasts),
+    [gradeFilteredBeasts]
   );
 
   const categoryDuplicateCounts = useMemo(
-    () => calculateCategoryDuplicateCounts(ownedBeasts),
-    [ownedBeasts]
+    () => calculateCategoryDuplicateCounts(gradeFilteredBeasts),
+    [gradeFilteredBeasts]
   );
 
   // Build index of beasts by type and category for O(1) duplicate lookups
@@ -555,7 +564,7 @@ function CollectionPage() {
       animatedShiny: new Map(),
     };
 
-    ownedBeasts.forEach((beast) => {
+    gradeFilteredBeasts.forEach((beast) => {
       const typeKey = getBeastTypeKey(beast);
       if (!typeKey) return;
 
@@ -591,7 +600,7 @@ function CollectionPage() {
     });
 
     return index;
-  }, [ownedBeasts]);
+  }, [gradeFilteredBeasts]);
 
   // Use template-based placeholders - much faster!
   const placeholderCache = useMemo(() => {
@@ -1145,6 +1154,7 @@ function CollectionPage() {
           <div className="flex items-center justify-between gap-2 min-w-0">
             <div className="flex items-center gap-2 min-w-0">
               <SortDropdown value={sortOption} onChange={setSortOption} />
+              <GradeFilterDropdown value={gradeFilter} onChange={setGradeFilter} beasts={ownedBeasts} />
               <Button
                 variant="outline"
                 size="sm"
@@ -1213,13 +1223,20 @@ function CollectionPage() {
           <p className="text-xs text-zinc-400">Loading collection...</p>
         ) : viewMode === "table" ? (
           <BeastTableView
-            beasts={ownedBeasts}
+            beasts={gradeFilteredBeasts}
             onBeastSelect={handleBeastSelect}
             ownerUsernames={ownerUsernames}
           />
         ) : (
+          <>
+          {gradeFilter !== "all" && !tabEntries[activeTab].some((entry) => !entry.missing) && (
+            <p className="py-8 text-center text-sm text-zinc-500">
+              No {gradeFilterLabel(gradeFilter).toLowerCase()} beasts{activeTab !== "all" ? " in this tab" : ""}.
+            </p>
+          )}
           <div className="grid grid-cols-3 gap-1.5 sm:gap-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-            {tabEntries[activeTab].map((entry) => (
+            {/* A grade filter shows only matching owned beasts, not "Need to hunt" slots. */}
+            {tabEntries[activeTab].filter((entry) => gradeFilter === "all" || !entry.missing).map((entry) => (
               <BeastCard
                 key={entry.id}
                 beast={
@@ -1245,6 +1262,7 @@ function CollectionPage() {
               />
             ))}
           </div>
+          </>
         )}
 
         <BeastModal
