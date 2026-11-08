@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { normaliseStarknetAddress } from "../utils/address";
-import { lookupControllerAddresses } from "../services/controller";
+import { lookupProfileAddresses } from "../services/walletNames";
 import { config } from "../config";
 import { toTokenIdString } from "../utils/tokenId";
 
@@ -59,7 +59,7 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
 
       // Try to resolve as Cartridge username
       try {
-        const addresses = await lookupControllerAddresses([searchQuery]);
+        const addresses = await lookupProfileAddresses([searchQuery]);
         const userAddresses = addresses[searchQuery.toLowerCase()] ?? [];
         if (userAddresses.length > 0) {
           navigate(`/collection/${encodeURIComponent(searchQuery)}`);

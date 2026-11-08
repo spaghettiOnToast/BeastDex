@@ -44,7 +44,7 @@ import {
   calculateCategoryDuplicateCounts,
 } from "../utils/beastCollection";
 import { normaliseStarknetAddress } from "../utils/address";
-import { lookupControllerAddresses } from "../services/controller";
+import { lookupProfileAddresses } from "../services/walletNames";
 import { getUserFriendlyErrorMessage, isSqlEndpointError } from "../utils/error";
 import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
 import { Button } from "../components/ui/button";
@@ -262,7 +262,7 @@ function CollectionPage() {
 
     const usernameKey = trimmedIdentifier.toLowerCase();
     setResolvingIdentifier(true);
-    lookupControllerAddresses([trimmedIdentifier])
+    lookupProfileAddresses([trimmedIdentifier])
       .then((result) => {
         if (cancelled) return;
         const addresses = result[usernameKey] ?? [];

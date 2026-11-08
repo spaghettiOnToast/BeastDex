@@ -8,7 +8,7 @@
  */
 import { RegExpMatcher, englishDataset, englishRecommendedTransformers } from "obscenity";
 import { starknetId } from "starknet";
-import { lookupControllerUsernames } from "./controller";
+import { lookupControllerAddresses, lookupControllerUsernames } from "./controller";
 import { withReadProvider } from "./tx";
 import { normaliseStarknetAddresses } from "../utils/address";
 
@@ -84,5 +84,57 @@ export async function lookupWalletNames(addresses: Array<string | null | undefin
   for (const [address, name] of Object.entries(brother)) {
     if (isCleanName(name)) out[address] = name;
   }
+  return out;
+}
+
+const BROTHER_LABEL = /^[a-z0-9-]{1,48}$/;
+
+/**
+ * Wallet for a `name.brother` (null if unregistered, expired or unverified).
+ * The domain's resolver must also have it as its primary name, so a name
+ * pointed at someone else's wallet never resolves to it.
+ */
+export async function resolveBrotherName(name: string): Promise<string | null> {
+  const label = name.trim().toLowerCase().replace(/\.brother$/, "");
+  if (!BROTHER_LABEL.test(label)) return null;
+  try {
+    const encoded = `0x${starknetId.useEncoded(label).toString(16)}`;
+    const details = await withReadProvider((p) =>
+      p.callContract({ contractAddress: BROTHER_ID_ADDRESS, entrypoint: "get_details_by_domain", calldata: [encoded] }, "latest")
+    );
+    // DomainDetails: handler, resolver, token_id (u256: low, high), expiry_date, last_transfer_time
+    const resolver = details[1];
+    const expiry = Number(BigInt(details[4] ?? "0x0"));
+    if (!resolver || BigInt(resolver) === 0n || expiry * 1000 < Date.now()) return null;
+    const primary = await withReadProvider((p) =>
+      p.callContract({ contractAddress: BROTHER_ID_ADDRESS, entrypoint: "getPrimary", calldata: [resolver] }, "latest")
+    );
+    if (decodeBrotherDomain(primary[0] ?? "0x0") !== `${label}.brother`) return null;
+    return normaliseStarknetAddresses([resolver])[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Addresses for profile identifiers (lowercased name -> addresses): `.brother`
+ * names on-chain, everything else via Controller usernames.
+ */
+export async function lookupProfileAddresses(names: string[]): Promise<Record<string, string[]>> {
+  const out: Record<string, string[]> = {};
+  const controllerNames: string[] = [];
+  await Promise.all(
+    names.map(async (raw) => {
+      const name = raw.trim();
+      if (!name) return;
+      if (/\.brother$/i.test(name)) {
+        const address = await resolveBrotherName(name);
+        out[name.toLowerCase()] = address ? [address] : [];
+      } else {
+        controllerNames.push(name);
+      }
+    })
+  );
+  if (controllerNames.length > 0) Object.assign(out, await lookupControllerAddresses(controllerNames));
   return out;
 }

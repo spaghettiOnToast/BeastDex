@@ -29,7 +29,7 @@ import {
   type BeastCollectionStats,
 } from "../utils/beastCollection";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
-import { lookupControllerAddresses } from "../services/controller";
+import { lookupProfileAddresses } from "../services/walletNames";
 import { getUserFriendlyErrorMessage } from "../utils/error";
 import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
 import { CollectionHero, type OverviewCard } from "../components/collection/CollectionHero";
@@ -126,7 +126,7 @@ function AccountPage() {
     setResolvingIdentifier(true);
 
     // First try Cartridge username resolution
-    lookupControllerAddresses([trimmedIdentifier])
+    lookupProfileAddresses([trimmedIdentifier])
       .then(async (result) => {
         if (cancelled) return;
         const addresses = result[usernameKey] ?? [];
