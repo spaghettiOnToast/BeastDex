@@ -50,7 +50,7 @@ export type Beast = {
 export type AttributeFilterInput = Record<string, Array<string | number>>;
 export type BeastAttributeFilters = Record<string, string[]>;
 
-export type BeastSortField = "default" | "beast" | "tier" | "health" | "rank" | "last-death";
+export type BeastSortField = "default" | "beast" | "tier" | "health" | "rank" | "rank-desc" | "last-death";
 
 export type FetchBeastsOptions = {
   limit?: number;

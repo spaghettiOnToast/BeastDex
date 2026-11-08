@@ -57,6 +57,7 @@ function _mapSort(sort: string): { sort: BeastQuery["sort"]; order: "asc" | "des
     case "tier": return { sort: "tier", order: "asc" };
     case "health": return { sort: "health", order: "desc" };
     case "rank": return { sort: "rank", order: "asc" };
+    case "rank-desc": return { sort: "rank", order: "desc" };
     case "last-death": return { sort: "last_death_timestamp", order: "desc" };
     default: return { sort: "power", order: "desc" };
   }
@@ -191,17 +192,85 @@ export async function fetchBeasts({
     includeOwner: true,
   };
 
+  // Rank sort: the API orders rank 0 (not ranked yet) before rank 1, so page
+  // through ranked beasts first and append the unranked ones after them.
+  if (sdkSort === "rank") {
+    return _fetchRankSorted(ownerAddress, baseQuery, page);
+  }
+
+  const result = await _fetchPage(ownerAddress, baseQuery, page);
+  return {
+    beasts: result.items.map(mapSdkBeast),
+    total: result.total,
+  };
+}
+
+/** One emulated page of a query (cursor chained from the previous page). */
+async function _fetchPage(ownerAddress: string | null, baseQuery: BeastQuery, page: number) {
   const cursor = _getCursor(baseQuery, page);
   const sdkQuery: BeastQuery = cursor ? { ...baseQuery, cursor } : baseQuery;
-
   const result = ownerAddress
     ? await collectablesClient.beasts.byOwner(ownerAddress, sdkQuery)
     : await collectablesClient.beasts.list(sdkQuery);
   _setCursor(baseQuery, page, result.nextCursor);
+  return result;
+}
+
+/** Most unranked beasts appended to a rank-sorted list (there are ~100 in total). */
+const MAX_UNRANKED_APPENDED = 2000;
+
+/** Every unranked (rank 0) beast matching `baseQuery`, strongest first. */
+function _fetchAllUnranked(ownerAddress: string | null, baseQuery: BeastQuery) {
+  const query: BeastQuery = { ...baseQuery, rank: 0, sort: "power", order: "desc" };
+  delete query.rankGte;
+  delete query.rankLte;
+  return apiCache.get("beast-query", { unranked: true, ownerAddress, query }, async () => {
+    const items: Awaited<ReturnType<typeof collectablesClient.beasts.list>>["items"] = [];
+    let cursor: string | undefined;
+    do {
+      const q: BeastQuery = cursor ? { ...query, cursor } : query;
+      const r = ownerAddress
+        ? await collectablesClient.beasts.byOwner(ownerAddress, q)
+        : await collectablesClient.beasts.list(q);
+      items.push(...r.items);
+      cursor = r.nextCursor ?? undefined;
+    } while (cursor && items.length < MAX_UNRANKED_APPENDED);
+    return items;
+  });
+}
+
+/** Ranked-beast totals per query, so pages past the ranked set skip that request. */
+const _rankedTotals = new Map<string, number>();
+
+async function _fetchRankSorted(
+  ownerAddress: string | null,
+  baseQuery: BeastQuery,
+  page: number
+): Promise<FetchBeastsResponse> {
+  const limit = baseQuery.limit ?? 20;
+  const start = (page - 1) * limit;
+  // A rank filter (always >= 1) already excludes unranked beasts.
+  const rankFiltered = baseQuery.rankGte != null && baseQuery.rankGte >= 1;
+  const rankedQuery: BeastQuery = { ...baseQuery, rankGte: Math.max(1, baseQuery.rankGte ?? 1) };
+  const rankedKey = _sdkQueryKey(rankedQuery) + (ownerAddress ?? "");
+
+  let rankedItems: Awaited<ReturnType<typeof collectablesClient.beasts.list>>["items"] = [];
+  let rankedTotal = _rankedTotals.get(rankedKey);
+  if (rankedTotal === undefined || start < rankedTotal) {
+    const r = await _fetchPage(ownerAddress, rankedQuery, page);
+    rankedItems = r.items;
+    rankedTotal = r.total;
+    _rankedTotals.set(rankedKey, rankedTotal);
+  }
+
+  const unranked = rankFiltered ? [] : await _fetchAllUnranked(ownerAddress, baseQuery);
+  const need = limit - rankedItems.length;
+  const unrankedStart = Math.max(0, start - rankedTotal);
+  const unrankedItems = need > 0 ? unranked.slice(unrankedStart, unrankedStart + need) : [];
 
   return {
-    beasts: result.items.map(mapSdkBeast),
-    total: result.total,
+    beasts: [...rankedItems, ...unrankedItems].map(mapSdkBeast),
+    total: rankedTotal + unranked.length,
   };
 }
 

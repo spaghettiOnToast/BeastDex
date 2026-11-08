@@ -785,11 +785,27 @@ function CollectionPage() {
                 const rankAttr = entry.beast.attributes.find(
                   (attr) => attr.trait_type?.toLowerCase() === "rank"
                 );
-                return rankAttr?.value ? Number(rankAttr.value) : 999999;
+                const rank = Number(rankAttr?.value);
+                // rank 0 = not ranked yet: after ranked beasts, before missing slots
+                return Number.isFinite(rank) && rank >= 1 ? rank : 999998;
               };
               const rankA = getRank(a);
               const rankB = getRank(b);
               return rankA - rankB; // Low to high
+            });
+            break;
+          case "rank-desc":
+            tabEntries.sort((a, b) => {
+              // High to low; unranked (0) after ranked, missing slots last
+              const getRank = (entry: (typeof tabEntries)[0]) => {
+                if (!entry.beast || entry.missing) return -2;
+                const rankAttr = entry.beast.attributes.find(
+                  (attr) => attr.trait_type?.toLowerCase() === "rank"
+                );
+                const rank = Number(rankAttr?.value);
+                return Number.isFinite(rank) && rank >= 1 ? rank : -1;
+              };
+              return getRank(b) - getRank(a);
             });
             break;
           case "last-death":
