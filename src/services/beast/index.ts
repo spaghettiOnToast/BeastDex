@@ -482,6 +482,30 @@ export type OwnerBeastHighlights = {
   lastCollectedName: string | null;
 };
 
+/** Card grades checked for "Rarest", best first, a batch at a time (stops at the first hit). */
+const RAREST_GRADE_BATCHES = [
+  [10, 9, 8],
+  [7, 6, 5],
+  [4, 3, 2, 1],
+];
+
+/**
+ * Rarest owned beast: highest card grade, ties broken by highest power.
+ * The API can filter by grade but not sort by it, so query grades from the top.
+ */
+async function fetchRarestOwnedBeast(addr: string) {
+  for (const grades of RAREST_GRADE_BATCHES) {
+    const results = await Promise.all(
+      grades.map((cardGrade) =>
+        collectablesClient.beasts.byOwner(addr, { cardGrade, sort: "power", order: "desc", limit: 1 })
+      )
+    );
+    const hit = results.find((r) => r.items.length > 0);
+    if (hit) return hit.items[0];
+  }
+  return null;
+}
+
 export async function fetchOwnerBeastHighlights(
   ownerAddress: string
 ): Promise<OwnerBeastHighlights> {
@@ -498,17 +522,13 @@ export async function fetchOwnerBeastHighlights(
   return apiCache.get("owner-beast-highlights", { address: normalised }, async () => {
     const addr = normalizeAddress(normalised);
 
-    const [animatedShiny, shinyOnly, animatedOnly, highestRanked, lastCollected] =
-      await Promise.all([
-        collectablesClient.beasts.byOwner(addr, { visualEffects: VISUAL_TO_EFFECTS["Shiny Animated"], sort: "power", order: "desc", limit: 1 }),
-        collectablesClient.beasts.byOwner(addr, { visualEffects: VISUAL_TO_EFFECTS.Shiny, sort: "power", order: "desc", limit: 1 }),
-        collectablesClient.beasts.byOwner(addr, { visualEffects: VISUAL_TO_EFFECTS.Animated, sort: "power", order: "desc", limit: 1 }),
-        collectablesClient.beasts.byOwner(addr, { sort: "rank", order: "asc", limit: 1 }),
-        collectablesClient.beasts.byOwner(addr, { sort: "last_death_timestamp", order: "desc", limit: 1 }),
-      ]);
+    const [rarestItem, highestRanked, lastCollected] = await Promise.all([
+      fetchRarestOwnedBeast(addr),
+      // rank 0 means unranked, so start at 1
+      collectablesClient.beasts.byOwner(addr, { rankGte: 1, sort: "rank", order: "asc", limit: 1 }),
+      collectablesClient.beasts.byOwner(addr, { sort: "last_death_timestamp", order: "desc", limit: 1 }),
+    ]);
 
-    // Rarest: animated+shiny > shiny-only > animated-only > null
-    const rarestItem = animatedShiny.items[0] ?? shinyOnly.items[0] ?? animatedOnly.items[0] ?? null;
     const highestRankedItem = highestRanked.items[0] ?? null;
     const lastCollectedItem = lastCollected.items[0] ?? null;
 

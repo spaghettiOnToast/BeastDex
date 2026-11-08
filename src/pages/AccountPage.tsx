@@ -33,10 +33,10 @@ import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { lookupControllerAddresses } from "../services/controller";
 import { getUserFriendlyErrorMessage } from "../utils/error";
 import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
-import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
+import { CollectionHero, type OverviewCard } from "../components/collection/CollectionHero";
 import { Grid, Table } from "lucide-react";
 import { Button } from "../components/ui/button";
-import type { OverviewCard } from "@/components/account/OverviewCards";
+
 import { useSpeciesCount } from "../hooks/useBeastQueries";
 import { normaliseStarknetAddress } from "../utils/address";
 import { fetchOwnerSummitRankFromApi, type OwnerSummitRank } from "../services/summitApi";
@@ -67,11 +67,11 @@ function AccountPage() {
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
-  const [_ownerStats, setOwnerStats] = useState<OwnerBeastStats | null>(null);
+  const [ownerStats, setOwnerStats] = useState<OwnerBeastStats | null>(null);
   const [ownedBeasts, setOwnedBeasts] = useState<Beast[]>([]);
   const [collectionStats, setCollectionStats] = useState<BeastCollectionStats>(EMPTY_BEAST_COLLECTION_STATS);
   const [beastHighlights, setBeastHighlights] = useState<OwnerBeastHighlights | null>(null);
-  const [_summitRank, setSummitRank] = useState<OwnerSummitRank | null>(null);
+  const [summitRank, setSummitRank] = useState<OwnerSummitRank | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const summaryRequestRef = useRef(0);
@@ -516,7 +516,23 @@ function AccountPage() {
     totalHealth: collectionStats.totalHealth,
   }), [collectionStats, mostPowerfulBeast, mostPowerfulTitle, beastHighlights]);
 
-  const overviewCards: OverviewCard[] = [];
+  const overviewCards: OverviewCard[] = useMemo(
+    () => [
+      {
+        key: "beasts",
+        icon: "🐾",
+        label: "Beasts Collected",
+        shortLabel: "Beasts",
+        value: (ownerStats?.totalBeasts ?? ownedBeasts.length).toLocaleString(),
+      },
+      { key: "power", icon: "🔮", label: "Combined Power", shortLabel: "Power", value: collectionStats.totalPower.toLocaleString() },
+      { key: "health", icon: "❤️", label: "Combined Health", shortLabel: "Health", value: collectionStats.totalHealth.toLocaleString() },
+      ...(summitRank?.rank != null
+        ? [{ key: "summit", icon: "⛰️", label: "Summit Rank", shortLabel: "Summit", value: `#${summitRank.rank}`, sub: `of ${summitRank.total_owners}` }]
+        : []),
+    ],
+    [ownerStats, ownedBeasts.length, collectionStats, summitRank]
+  );
 
   if (!trimmedIdentifier) {
     return (
@@ -625,9 +641,10 @@ function AccountPage() {
           </div>
         ) : null}
 
-        <ThreeColumnStatsLayout
-          collectionStats={displayStats}
+        <CollectionHero
+          stats={displayStats}
           overviewCards={overviewCards}
+          onSelectBeast={handleSelectBeast}
         />
 
         {/* Summary Error */}

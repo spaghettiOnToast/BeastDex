@@ -1,8 +1,18 @@
 import type { Beast } from "../../services/beast";
-import type { OverviewCard } from "../account/OverviewCards";
 import type { BeastCollectionStats } from "../../utils/beastCollection";
 import { getBeastRank } from "../../utils/beast";
 import { useSpeciesCount } from "../../hooks/useBeastQueries";
+
+/** A headline number in the hero (beasts, combined power/health, summit rank). */
+export type OverviewCard = {
+  key: string;
+  icon: string;
+  label: string;
+  /** shown on phones instead of `label` */
+  shortLabel?: string;
+  value: string;
+  sub?: string;
+};
 
 type CollectionHeroProps = {
   stats: BeastCollectionStats;
@@ -71,7 +81,21 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast }: Collecti
       stat: highestRank != null ? `👑 Rank #${highestRank}` : null,
       accent: "text-gold",
     },
-    { key: "rarest", label: "Rarest", beast: stats.rarest, accent: "text-purple-300" },
+    {
+      key: "rarest",
+      label: "Rarest",
+      beast: stats.rarest,
+      // highest card grade, then highest power (see fetchOwnerBeastHighlights)
+      stat: stats.rarest
+        ? [
+            stats.rarest.cardGrade != null && `💎 Grade ${stats.rarest.cardGrade}`,
+            stats.rarest.power != null && `⚡ ${stats.rarest.power.toLocaleString()}`,
+          ]
+            .filter(Boolean)
+            .join(" · ") || null
+        : null,
+      accent: "text-purple-300",
+    },
     {
       key: "lastCollected",
       label: "Last Collected",
@@ -97,17 +121,24 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast }: Collecti
           <ProgressBar value={stats.uniqueBeastTypes} total={totalSpecies} color="linear-gradient(90deg, #b8941f, #e2b94c)" />
         </div>
         <dl
-          className={`grid grid-cols-2 gap-3 lg:border-l lg:border-white/[0.06] lg:pl-5 ${
-            overviewCards.length >= 4 ? "sm:grid-cols-4" : "sm:grid-cols-3"
+          className={`grid gap-3 border-t border-white/[0.06] pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0 ${
+            overviewCards.length >= 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"
           }`}
         >
           {overviewCards.map((card) => (
             <div key={card.key} className="min-w-0">
-              <dt className={`${eyebrow} truncate`}>
+              <dt className={`${eyebrow} truncate`} title={card.label}>
                 <span className="mr-1" aria-hidden>
                   {card.icon}
                 </span>
-                {card.label}
+                {card.shortLabel ? (
+                  <>
+                    <span className="sm:hidden">{card.shortLabel}</span>
+                    <span className="hidden sm:inline">{card.label}</span>
+                  </>
+                ) : (
+                  card.label
+                )}
               </dt>
               <dd className="mt-1 flex items-baseline gap-1">
                 <span className="text-xl font-bold leading-none text-white sm:text-2xl">{card.value}</span>
@@ -147,18 +178,18 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast }: Collecti
         {/* Highlights */}
         <div className={`${panel} p-4 sm:p-5`}>
           <p className={`${eyebrow} mb-3`}>Highlights</p>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-2 gap-2">
             {highlights.map((h) => {
               const { title, species } = splitBeastName(h.name ?? h.beast?.name);
               const clickable = Boolean(h.beast && onSelectBeast);
               const body = (
                 <>
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black/60">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black/60 sm:h-12 sm:w-12">
                     {h.beast?.image ? (
                       <img
                         src={h.beast.image}
                         alt=""
-                        className="h-11 w-11 object-contain"
+                        className="h-9 w-9 object-contain sm:h-11 sm:w-11"
                         style={{ imageRendering: "pixelated" }}
                         loading="lazy"
                       />
@@ -168,14 +199,17 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast }: Collecti
                       </span>
                     )}
                   </div>
-                  <div className="min-w-0 flex-1 text-left">
+                  <div className="w-full min-w-0 flex-1 text-left">
                     <p className={eyebrow}>{h.label}</p>
                     {species ? (
                       <>
                         <p className={`truncate text-sm font-bold leading-tight ${h.accent}`} title={h.name ?? h.beast?.name}>
                           {species}
                         </p>
-                        <p className="truncate text-[11px] text-zinc-400">
+                        {/* phones: title and stat on their own lines; wider: one line */}
+                        <p className="truncate text-[11px] text-zinc-400 sm:hidden">{title ? `“${title}”` : " "}</p>
+                        {h.stat && <p className="truncate text-[11px] text-zinc-500 sm:hidden">{h.stat}</p>}
+                        <p className="hidden truncate text-[11px] text-zinc-400 sm:block">
                           {[title && `“${title}”`, h.stat].filter(Boolean).join(" · ") || " "}
                         </p>
                       </>
@@ -190,12 +224,12 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast }: Collecti
                   key={h.key}
                   type="button"
                   onClick={() => h.beast && onSelectBeast?.(h.beast)}
-                  className="flex items-center gap-3 rounded-lg border border-white/[0.04] bg-white/[0.02] p-2.5 transition-colors hover:border-white/[0.12] hover:bg-white/[0.05]"
+                  className="flex min-w-0 flex-col items-start gap-2 rounded-lg border border-white/[0.04] bg-white/[0.02] p-2.5 transition-colors hover:border-white/[0.12] hover:bg-white/[0.05] sm:flex-row sm:items-center sm:gap-3"
                 >
                   {body}
                 </button>
               ) : (
-                <div key={h.key} className="flex items-center gap-3 rounded-lg border border-white/[0.04] bg-white/[0.02] p-2.5">
+                <div key={h.key} className="flex min-w-0 flex-col items-start gap-2 rounded-lg border border-white/[0.04] bg-white/[0.02] p-2.5 sm:flex-row sm:items-center sm:gap-3">
                   {body}
                 </div>
               );

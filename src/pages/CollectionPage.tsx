@@ -25,7 +25,7 @@ import { AppLayout } from "../components/layout/AppLayout";
 import BeastCard from "../components/beast/BeastCard";
 import BeastModal from "../components/beast/BeastModal";
 import { BeastTableView } from "../components/beast/BeastTableView";
-import { Grid, Table } from "lucide-react";
+import { Grid, RefreshCw, Table } from "lucide-react";
 import {
   fetchBeastAttributeFilters,
   fetchBeasts,
@@ -50,8 +50,8 @@ import { Button } from "../components/ui/button";
 import { getBeastTemplate } from "../data/beastTemplates";
 import { apiCache } from "../services/apiCache";
 import { fetchOwnerSummitRankFromApi, type OwnerSummitRank } from "../services/summitApi";
-import { CollectionHero } from "../components/collection/CollectionHero";
-import type { OverviewCard } from "../components/account/OverviewCards";
+import { CollectionHero, type OverviewCard } from "../components/collection/CollectionHero";
+
 import { ClaimCorpseButton } from "../components/collection/ClaimCorpseButton";
 import FestivalBeastsStrip from "../components/profile/FestivalBeastsStrip";
 
@@ -919,18 +919,21 @@ function CollectionPage() {
         key: "beasts",
         icon: "🐾",
         label: "Beasts Collected",
+        shortLabel: "Beasts",
         value: (ownerStats?.totalBeasts ?? ownedBeasts.length).toLocaleString(),
       },
       {
         key: "power",
         icon: "🔮",
         label: "Combined Power",
+        shortLabel: "Power",
         value: collectionStats.totalPower.toLocaleString(),
       },
       {
         key: "health",
         icon: "❤️",
         label: "Combined Health",
+        shortLabel: "Health",
         value: collectionStats.totalHealth.toLocaleString(),
       },
       ...(summitRank?.rank != null
@@ -939,6 +942,7 @@ function CollectionPage() {
               key: "summit",
               icon: "⛰️",
               label: "Summit Rank",
+              shortLabel: "Summit",
               value: `#${summitRank.rank}`,
               sub: `of ${summitRank.total_owners}`,
             },
@@ -1020,12 +1024,12 @@ function CollectionPage() {
           )}
           <div className="flex flex-col items-center text-center">
             {collectionStats.mostPowerfulTitle ? (
-              <span className="bg-gradient-to-r from-[#ff7cf7] via-[#7dfbff] to-[#8bff72] bg-clip-text text-3xl font-semibold uppercase tracking-[0.35em] text-transparent">
+              <span className="bg-gradient-to-r from-[#ff7cf7] via-[#7dfbff] to-[#8bff72] bg-clip-text text-lg font-semibold uppercase tracking-[0.2em] text-transparent sm:text-3xl sm:tracking-[0.35em]">
                 "{collectionStats.mostPowerfulTitle}"
               </span>
             ) : null}
             <span
-              className="bg-gradient-to-r from-[#f9e08a] via-[#fbdc5e] to-[#39ff14] bg-clip-text text-4xl font-semibold uppercase tracking-[0.35em]"
+              className="bg-gradient-to-r from-[#f9e08a] via-[#fbdc5e] to-[#39ff14] bg-clip-text text-2xl font-semibold uppercase tracking-[0.25em] sm:text-4xl sm:tracking-[0.35em]"
               style={{ WebkitTextFillColor: "#fbeaa0" }}
             >
               <span className={`${displayNameClass} uppercase`}>
@@ -1146,14 +1150,21 @@ function CollectionPage() {
                     : "border-white/[0.06] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08]"
                 }`}
               >
-                {showDuplicatesOnly ? "Dupes Only" : "Duplicates"}
+                {showDuplicatesOnly ? (
+                  "Dupes Only"
+                ) : (
+                  <>
+                    <span className="sm:hidden">Dupes</span>
+                    <span className="hidden sm:inline">Duplicates</span>
+                  </>
+                )}
               </Button>
               <div className="flex items-center border border-white/[0.06] rounded-lg bg-white/[0.04]">
                 <Button
                   variant={viewMode === "grid" ? "default" : "ghost"}
                   size="sm"
                   onClick={() => setViewMode("grid")}
-                  className="rounded-r-none border-0 h-8"
+                  className="rounded-r-none border-0 h-8 px-2 sm:px-3"
                 >
                   <Grid className="h-4 w-4" />
                 </Button>
@@ -1161,13 +1172,13 @@ function CollectionPage() {
                   variant={viewMode === "table" ? "default" : "ghost"}
                   size="sm"
                   onClick={() => setViewMode("table")}
-                  className="rounded-l-none border-0 h-8"
+                  className="rounded-l-none border-0 h-8 px-2 sm:px-3"
                 >
                   <Table className="h-4 w-4" />
                 </Button>
               </div>
             </div>
-            <div className="hidden sm:flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -1178,32 +1189,21 @@ function CollectionPage() {
                 disabled={anyLoading || !resolvedAddress}
                 className="inline-flex items-center gap-2 rounded-lg border border-white/[0.06] px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
                 title="Force refresh collection data"
+                aria-label="Refresh collection data"
               >
                 {anyLoading ? (
                   <span className="h-3 w-3 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
-                ) : null}
-                <span>Refresh</span>
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5 sm:hidden" aria-hidden />
+                )}
+                <span className="hidden sm:inline">Refresh</span>
               </button>
-              <ClaimCorpseButton ownerAddress={resolvedAddress} />
+              <div className="hidden sm:block">
+                <ClaimCorpseButton ownerAddress={resolvedAddress} />
+              </div>
             </div>
           </div>
-          <div className="flex sm:hidden items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                apiCache.clearEndpoint("beast-query");
-                apiCache.clearEndpoint("beast-by-id");
-                void loadSummary();
-              }}
-              disabled={anyLoading || !resolvedAddress}
-              className="inline-flex items-center gap-2 rounded-lg border border-white/[0.06] px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
-              title="Force refresh collection data"
-            >
-              {anyLoading ? (
-                <span className="h-3 w-3 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
-              ) : null}
-              <span>Refresh</span>
-            </button>
+          <div className="flex sm:hidden items-center gap-2 empty:hidden">
             <ClaimCorpseButton ownerAddress={resolvedAddress} />
           </div>
         </div>
