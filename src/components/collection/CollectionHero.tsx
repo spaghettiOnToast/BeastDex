@@ -20,8 +20,10 @@ type CollectionHeroProps = {
   /** Headline numbers (beasts, combined power/health, summit rank) */
   overviewCards: OverviewCard[];
   onSelectBeast?: (beast: Beast) => void;
-  /** The owner's beasts, for the card-grade counts (omitted: no grade row). */
+  /** The owner's beasts, for the card-grade counts (omitted: no grade panel). */
   beasts?: Beast[];
+  /** Game-wide count of the rarest beast's species. */
+  rarestSpeciesCollected?: number | null;
 };
 
 const pct = (n: number, total: number) => (total > 0 ? Math.min(100, Math.round((n / total) * 100)) : 0);
@@ -33,14 +35,18 @@ function splitBeastName(name: string | null | undefined): { title: string | null
   return m ? { title: m[1], species: m[2] } : { title: null, species: trimmed };
 }
 
-/** What the rarity score is made of: visual, card grade and species rank. */
-function rarityStat(beast: Beast): string | null {
+/** Why it's the rarest: visual, card grade, then how few of its species are collected (else its rank). */
+function rarityStat(beast: Beast, speciesCollected?: number | null): string | null {
   const rank = getBeastRank(beast);
   const parts = [
     beast.visual && beast.visual !== "Regular" ? `✨ ${beast.visual}` : null,
     beast.cardGrade != null ? `💎 Grade ${beast.cardGrade}` : null,
-    // rank 0: Genesis / New / Unranked
-    rank != null && rank > 0 ? `👑 #${rank}` : UNRANKED_LABELS[unrankedReason(beast) ?? "unranked"],
+    speciesCollected != null
+      ? `${speciesCollected.toLocaleString()} collected`
+      : // rank 0: Genesis / New / Unranked
+        rank != null && rank > 0
+        ? `👑 #${rank}`
+        : UNRANKED_LABELS[unrankedReason(beast) ?? "unranked"],
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
 }
@@ -60,7 +66,7 @@ const eyebrow = "text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-
  * Collection page hero: species progress + headline numbers, then the variant
  * breakdown and the collection's highlight beasts.
  */
-export function CollectionHero({ stats, overviewCards, onSelectBeast, beasts }: CollectionHeroProps) {
+export function CollectionHero({ stats, overviewCards, onSelectBeast, beasts, rarestSpeciesCollected }: CollectionHeroProps) {
   const totalSpecies = useSpeciesCount();
   const complete = stats.uniqueBeastTypes >= totalSpecies && totalSpecies > 0;
 
@@ -112,8 +118,8 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast, beasts }: 
       key: "rarest",
       label: "Rarest",
       beast: stats.rarest,
-      // combined rank + card grade + visual score (see fetchOwnerBeastHighlights)
-      stat: stats.rarest ? rarityStat(stats.rarest) : null,
+      // Shiny MIDI > grade > least collected species (see compareOwnedRarity)
+      stat: stats.rarest ? rarityStat(stats.rarest, rarestSpeciesCollected) : null,
       accent: "text-purple-300",
     },
     {

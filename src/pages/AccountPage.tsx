@@ -595,6 +595,7 @@ function AccountPage() {
 
         <CollectionHero
           beasts={ownedBeasts}
+          rarestSpeciesCollected={beastHighlights?.rarestSpeciesCollected ?? null}
           stats={displayStats}
           overviewCards={overviewCards}
           onSelectBeast={handleSelectBeast}
