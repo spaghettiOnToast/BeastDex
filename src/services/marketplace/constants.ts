@@ -2,13 +2,12 @@ import { CONTRACT_ADDRESS as BEASTS_ADDRESS } from "../beast/constants";
 import { FESTIVAL_COLLECTIONS } from "../festivalBeasts";
 
 /**
- * Marketplace on/off switch. Off (tab, /marketplace route, buy/offer/cart UI
- * and wallet approvals hidden; the route redirects home) until the v3
- * marketplace is verified end-to-end; set VITE_MARKETPLACE_ENABLED=true to
- * enable (e.g. in .env.local for testing, then in production to unhide).
+ * Marketplace kill switch. On by default; set VITE_MARKETPLACE_ENABLED=false
+ * to hide it (tab, /marketplace route, buy/offer/cart UI and wallet approvals;
+ * the route redirects home).
  */
 export const MARKETPLACE_ENABLED =
-  (import.meta.env.VITE_MARKETPLACE_ENABLED as string | undefined)?.trim().toLowerCase() === "true";
+  (import.meta.env.VITE_MARKETPLACE_ENABLED as string | undefined)?.trim().toLowerCase() !== "false";
 
 // Marketplace contract address from environment
 export const MARKETPLACE_ADDRESS =
