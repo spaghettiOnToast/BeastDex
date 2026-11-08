@@ -33,10 +33,12 @@ import {
   fetchGenesisBeasts,
   fetchOwnerBeastStats,
   fetchOwnerBeastHighlights,
+  compareOwnedRarity,
   type Beast,
   type OwnerBeastStats,
   type OwnerBeastHighlights,
 } from "../services/beast";
+import { getBeastRank } from "../utils/beast";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import {
   computeBeastCollectionStats,
@@ -130,6 +132,29 @@ function isAnimated(attrValue: unknown): boolean {
   );
 }
 
+/** The rarity inputs of one of the owner's beasts (same rule as the Rarest highlight). */
+function rarityInput(beast: Beast) {
+  const attr = (t: string) => beast.attributes.find((a) => a.trait_type?.toLowerCase() === t)?.value;
+  return {
+    shiny: isAnimated(attr("shiny")),
+    animated: isAnimated(attr("animated")),
+    cardGrade: beast.cardGrade ?? null,
+    rank: getBeastRank(beast),
+    power: beast.power ?? null,
+  };
+}
+
+/** Rarest first: Shiny MIDI > Shiny > MIDI > Standard, then grade, rank and power. */
+function compareBeastRarity(a: Beast, b: Beast): number {
+  return compareOwnedRarity(rarityInput(a), rarityInput(b));
+}
+
+/** Each card shows the owner's rarest copy of that species. */
+function keepRarest(map: Map<string, Beast>, key: string, beast: Beast) {
+  const current = map.get(key);
+  if (!current || compareBeastRarity(beast, current) < 0) map.set(key, beast);
+}
+
 function buildCategoryMaps(beasts: Beast[]): CategoryMaps {
   const maps: CategoryMaps = {
     animatedShiny: new Map(),
@@ -152,26 +177,18 @@ function buildCategoryMaps(beasts: Beast[]): CategoryMaps {
     const shiny = isAnimated(shinyAttr);
 
     if (animated && shiny) {
-      if (!maps.animatedShiny.has(typeKey)) {
-        maps.animatedShiny.set(typeKey, beast);
-      }
+      keepRarest(maps.animatedShiny, typeKey, beast);
       return;
     }
     if (animated) {
-      if (!maps.animated.has(typeKey)) {
-        maps.animated.set(typeKey, beast);
-      }
+      keepRarest(maps.animated, typeKey, beast);
       return;
     }
     if (shiny) {
-      if (!maps.shiny.has(typeKey)) {
-        maps.shiny.set(typeKey, beast);
-      }
+      keepRarest(maps.shiny, typeKey, beast);
       return;
     }
-    if (!maps.standard.has(typeKey)) {
-      maps.standard.set(typeKey, beast);
-    }
+    keepRarest(maps.standard, typeKey, beast);
   });
 
   return maps;
@@ -599,6 +616,10 @@ function CollectionPage() {
       index[category].set(typeKey, categoryList);
     });
 
+    // Rarest first, so the modal's first duplicate is the card's beast.
+    for (const map of Object.values(index)) {
+      for (const list of map.values()) list.sort(compareBeastRarity);
+    }
     return index;
   }, [gradeFilteredBeasts]);
 
@@ -719,11 +740,11 @@ function CollectionPage() {
           hasAllVariants,
         });
 
-        // All tab → pick *one* (any rarity)
+        // All tab → the rarest variant owned (Shiny MIDI > Shiny > MIDI > Standard)
         const anyOwned =
           animatedShinyOwned ??
-          animatedOwned ??
           shinyOwned ??
+          animatedOwned ??
           standardOwned ??
           null;
 
@@ -1040,8 +1061,16 @@ function CollectionPage() {
   // Handle beast selection - find the index in duplicates
   const handleBeastSelect = (beast: Beast) => {
     setSelectedBeast(beast);
-    setCurrentDuplicateIndex(0); // Start at first duplicate
+    setCurrentDuplicateIndex(0); // corrected below once its duplicates are known
   };
+
+  // Open on the beast that was clicked (e.g. the Rarest highlight), not just the
+  // first duplicate of its species.
+  useEffect(() => {
+    if (!selectedBeast) return;
+    const i = selectedBeastDuplicates.findIndex((b) => b.id === selectedBeast.id);
+    setCurrentDuplicateIndex(i >= 0 ? i : 0);
+  }, [selectedBeast, selectedBeastDuplicates]);
 
   const topBar = <TopBar />;
 
@@ -1075,6 +1104,7 @@ function CollectionPage() {
         {/* Collection hero: species progress, headline numbers, variants, highlights */}
         <CollectionHero
           beasts={ownedBeasts}
+          rarestSpeciesCollected={beastHighlights?.rarestSpeciesCollected ?? null}
           stats={displayStats}
           overviewCards={overviewCards}
           onSelectBeast={handleBeastSelect}

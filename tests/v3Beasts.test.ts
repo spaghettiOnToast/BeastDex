@@ -8,7 +8,7 @@ import {
   shortTokenId,
 } from "../src/utils/tokenId";
 import { matchesBeastFilters } from "../src/utils/beast";
-import { beastVisual, beastRarityScore } from "../src/services/beast/helpers";
+import { beastVisual } from "../src/services/beast/helpers";
 import type { Beast } from "../src/services/beast";
 
 // A v3-sized (251-bit) token id, well past Number.MAX_SAFE_INTEGER.
@@ -67,12 +67,6 @@ describe("v3 visual presets", () => {
 
   it("falls back to legacy flags without visualEffects", () => {
     expect(beastVisual({ shiny: true, animated: false }).visual).toBe("Shiny");
-  });
-
-  it("scores rarity", () => {
-    expect(beastRarityScore({ shiny: true, animated: true })).toBe(3);
-    expect(beastRarityScore({ shiny: true, animated: false })).toBe(2);
-    expect(beastRarityScore({})).toBe(1);
   });
 });
 

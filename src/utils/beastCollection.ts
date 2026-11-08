@@ -142,13 +142,11 @@ export function computeBeastCollectionStats(beasts: Beast[]): BeastCollectionSta
   let totalPower = 0;
   let totalHealth = 0;
   let mostPowerful: Beast | null = null;
-  let rarest: Beast | null = null;
   let highestRanked: Beast | null = null;
   let mostPowerfulTitle: string | null = null;
   let lastKilled: Beast | null = null;
   let lastKilledName: string | null = null;
   let lastDeathTimestamp = -Infinity;
-  let bestRarityScore = -1;
   let bestRankValue = Number.POSITIVE_INFINITY;
   let lowestNumericId: Beast | null = null;
   const allTypes = new Set<string>();
@@ -175,37 +173,21 @@ export function computeBeastCollectionStats(beasts: Beast[]): BeastCollectionSta
 
     if (shiny && animated) {
       animatedShiny += 1;
-      if (bestRarityScore < 3) {
-        rarest = beast;
-        bestRarityScore = 3;
-      }
       if (beastTypeKey) {
         animatedShinyTypes.add(beastTypeKey);
       }
     } else if (animated) {
       animatedOnly += 1;
-      if (bestRarityScore < 2) {
-        rarest = beast;
-        bestRarityScore = 2;
-      }
       if (beastTypeKey) {
         animatedTypes.add(beastTypeKey);
       }
     } else if (shiny) {
       shinyOnly += 1;
-      if (bestRarityScore < 2) {
-        rarest = beast;
-        bestRarityScore = 2;
-      }
       if (beastTypeKey) {
         shinyTypes.add(beastTypeKey);
       }
     } else {
       standard += 1;
-      if (bestRarityScore < 1) {
-        rarest = beast;
-        bestRarityScore = 1;
-      }
       if (beastTypeKey) {
         standardTypes.add(beastTypeKey);
       }
@@ -276,7 +258,8 @@ export function computeBeastCollectionStats(beasts: Beast[]): BeastCollectionSta
     totalHealth,
     mostPowerful,
     mostPowerfulTitle,
-    rarest,
+    // Set by the pages from fetchOwnerBeastHighlights (compareOwnedRarity).
+    rarest: null,
     highestRanked: highestRanked ?? lowestNumericId,
     lastBeastKilled: lastKilled,
     lastBeastKilledName: lastKilledName,

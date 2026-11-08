@@ -2,10 +2,9 @@ import {
   mapSdkBeast,
   hasCompleteMetadata,
   beastVisual,
-  beastRarityScore,
   VISUAL_TO_EFFECTS,
 } from "./helpers";
-export { hasCompleteMetadata, beastVisual, beastRarityScore };
+export { hasCompleteMetadata, beastVisual };
 import { collectablesClient, legacyCollectablesClient } from "./collectablesClient";
 import {
   ITEM_NAME_PREFIXES,
@@ -603,6 +602,8 @@ export async function fetchTierCollectionStats(): Promise<TierCollectionStats[]>
  */
 export type OwnerBeastHighlights = {
   rarest: Beast | null;
+  /** How many of the rarest beast's species are collected game-wide. */
+  rarestSpeciesCollected?: number | null;
   highestRanked: Beast | null;
   lastCollected: Beast | null;
   lastCollectedName: string | null;
@@ -610,28 +611,41 @@ export type OwnerBeastHighlights = {
 
 type SdkOwnedBeast = Awaited<ReturnType<typeof collectablesClient.beasts.byOwner>>["items"][number];
 
-/** Worst per-species rank in the v3 data (rank 1 = best of its species, 0 = unranked). */
-const MAX_SPECIES_RANK = 1243;
-
 /**
- * Rarity score (0–3): rank, card grade and visual each contribute 0–1.
- * - rank 1 scores 1, falling linearly to 0 at MAX_SPECIES_RANK; unranked (0) scores 0
- * - card grade 10 scores 1, grade 1 scores 0
- * - Animated Shiny 1, Shiny 2/3, Animated 1/3, Standard 0
+ * Rarest-first comparison for an owner's beasts (negative = `a` is rarer):
+ * 1. visual: Shiny MIDI > Shiny > MIDI > Standard
+ * 2. higher card grade
+ * 3. least collected species game-wide (`collectedBySpecies`, by species name)
+ * 4. better species rank (1 best; unranked last), then higher power
  */
-export function ownedBeastRarityScore(b: {
+export function compareOwnedRarity(
+  a: OwnedRarityInput,
+  b: OwnedRarityInput,
+  collectedBySpecies: ReadonlyMap<string, number> = new Map()
+): number {
+  const visual = (x: OwnedRarityInput) => (x.shiny && x.animated ? 3 : x.shiny ? 2 : x.animated ? 1 : 0);
+  const collected = (x: OwnedRarityInput) => collectedBySpecies.get(x.name ?? "") ?? Number.POSITIVE_INFINITY;
+  const rank = (x: OwnedRarityInput) => (x.rank != null && x.rank >= 1 ? x.rank : Number.POSITIVE_INFINITY);
+  return (
+    visual(b) - visual(a) ||
+    (b.cardGrade ?? -1) - (a.cardGrade ?? -1) ||
+    cmp(collected(a), collected(b)) ||
+    cmp(rank(a), rank(b)) ||
+    (b.power ?? 0) - (a.power ?? 0)
+  );
+}
+
+export type OwnedRarityInput = {
+  name?: string | null;
   rank?: number | null;
   cardGrade?: number | null;
   shiny?: boolean | null;
   animated?: boolean | null;
-}): number {
-  const rank = b.rank ?? 0;
-  const rankScore = rank >= 1 ? Math.max(0, (MAX_SPECIES_RANK - rank) / (MAX_SPECIES_RANK - 1)) : 0;
-  const grade = b.cardGrade ?? 0;
-  const gradeScore = grade >= 1 ? Math.min(1, (grade - 1) / 9) : 0;
-  const visualScore = b.shiny && b.animated ? 1 : b.shiny ? 2 / 3 : b.animated ? 1 / 3 : 0;
-  return rankScore + gradeScore + visualScore;
-}
+  power?: number | null;
+};
+
+/** Ascending compare that copes with Infinity. */
+const cmp = (x: number, y: number) => (x === y ? 0 : x < y ? -1 : 1);
 
 /** Highest of `items` by `key`, ties broken by higher power. */
 function maxBy<T extends { power?: number | null }>(items: T[], key: (t: T) => number): T | null {
@@ -648,11 +662,17 @@ function maxBy<T extends { power?: number | null }>(items: T[], key: (t: T) => n
 }
 
 /** Owner highlights computed from their full holding (one owner-scoped query). */
-export function pickOwnerHighlights(items: SdkOwnedBeast[]) {
+export function pickOwnerHighlights(items: SdkOwnedBeast[], collectedBySpecies: ReadonlyMap<string, number> = new Map()) {
   const ranked = items.filter((b) => (b.rank ?? 0) >= 1);
+  // v3 shiny/animated live in visualEffects; beastVisual normalises both formats
+  let rarest: SdkOwnedBeast | null = null;
+  for (const item of items) {
+    if (!rarest || compareOwnedRarity({ ...item, ...beastVisual(item) }, { ...rarest, ...beastVisual(rarest) }, collectedBySpecies) < 0) {
+      rarest = item;
+    }
+  }
   return {
-    // v3 shiny/animated live in visualEffects; beastVisual normalises both formats
-    rarest: maxBy(items, (b) => ownedBeastRarityScore({ ...b, ...beastVisual(b) })),
+    rarest,
     // rank 1 is the best; unranked (0) beasts can't be "highest ranked"
     highestRanked: maxBy(ranked, (b) => -(b.rank ?? 0)),
     lastCollected: maxBy(items, (b) => Number(b.lastDeathTimestamp ?? 0)),
@@ -675,15 +695,22 @@ export async function fetchOwnerBeastHighlights(
   return apiCache.get("owner-beast-highlights", { address: normalised }, async () => {
     const addr = normalizeAddress(normalised);
 
-    // Owner-scoped queries return the whole holding by default
-    const { items } = await collectablesClient.beasts.byOwner(addr, {});
+    // Owner-scoped queries return the whole holding by default. Species
+    // collected counts rank equally rare beasts (least collected wins); without
+    // them the pick falls back to species rank.
+    const [{ items }, collectedCounts] = await Promise.all([
+      collectablesClient.beasts.byOwner(addr, {}),
+      fetchBeastCollectedByName().catch(() => []),
+    ]);
+    const collectedBySpecies = new Map(collectedCounts.map((c) => [c.name, c.collected]));
     const { rarest: rarestItem, highestRanked: highestRankedItem, lastCollected: lastCollectedItem } =
-      pickOwnerHighlights(items);
+      pickOwnerHighlights(items, collectedBySpecies);
 
     const lastCollectedBeast = lastCollectedItem ? mapSdkBeast(lastCollectedItem) : null;
 
     return {
       rarest: rarestItem ? mapSdkBeast(rarestItem) : null,
+      rarestSpeciesCollected: rarestItem ? collectedBySpecies.get(rarestItem.name) ?? null : null,
       highestRanked: highestRankedItem ? mapSdkBeast(highestRankedItem) : null,
       lastCollected: lastCollectedBeast,
       lastCollectedName: lastCollectedBeast?.name ?? null,
