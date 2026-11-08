@@ -31,11 +31,16 @@ export function HallOfFame() {
   const [view, setView] = useState<View>("perfect");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Beast | null>(null);
+  // Genesis beasts (the original 75, one per species) can be left out of any view.
+  const [hideGenesis, setHideGenesis] = useState(false);
 
-  const attributeFilters = useMemo(
-    () => Object.fromEntries(Object.entries(VIEWS[view].filters).map(([k, v]) => [k, [...v]])),
-    [view]
-  );
+  const attributeFilters = useMemo(() => {
+    const filters: Record<string, string[]> = Object.fromEntries(
+      Object.entries(VIEWS[view].filters).map(([k, v]) => [k, [...v]])
+    );
+    if (hideGenesis) filters.Genesis = ["0"];
+    return filters;
+  }, [view, hideGenesis]);
   const { beasts, total, loading, error } = useBeasts({ limit: PAGE_SIZE, attributeFilters, page });
   const { usernames } = useControllerUsernames(beasts.map((b) => b.owner), { delayMs: 200 });
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -47,6 +52,7 @@ export function HallOfFame() {
           <div className="text-xs uppercase tracking-[0.35em] text-zinc-500">Hall of Fame</div>
           <p className="mt-1 text-sm text-zinc-300">{VIEWS[view].blurb}</p>
         </div>
+        <div className="flex flex-wrap items-center gap-1.5">
         <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Hall of Fame view">
           {(Object.keys(VIEWS) as View[]).map((v) => (
             <button
@@ -68,6 +74,23 @@ export function HallOfFame() {
               {v === view && total > 0 && <span className="ml-1.5 text-zinc-400">{total.toLocaleString()}</span>}
             </button>
           ))}
+        </div>
+          <button
+            type="button"
+            onClick={() => {
+              setHideGenesis((h) => !h);
+              setPage(1);
+            }}
+            aria-pressed={hideGenesis}
+            title="Genesis beasts are the original 75, one per species"
+            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition-colors ${
+              hideGenesis
+                ? "border-[#e2b94c]/50 bg-[#e2b94c]/10 text-[#e2b94c]"
+                : "border-white/[0.08] bg-white/[0.03] text-zinc-300 hover:bg-white/[0.06]"
+            }`}
+          >
+            {hideGenesis ? "✓ Genesis hidden" : "Hide Genesis"}
+          </button>
         </div>
       </div>
 
