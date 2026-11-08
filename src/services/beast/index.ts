@@ -558,7 +558,7 @@ export async function fetchCollectionGlance(): Promise<CollectionGlance> {
   return apiCache.get("collection-glance", {}, async () => {
     const [stats, perfect, strongest, names, prefixes] = await Promise.all([
       collectablesClient.beasts.stats(),
-      collectablesClient.beasts.list({ cardGrade: 10, visualEffects: VISUAL_TO_EFFECTS["Shiny Animated"], limit: 1 }),
+      collectablesClient.beasts.list({ cardGrade: 10, visualEffects: VISUAL_TO_EFFECTS["Shiny MIDI"], limit: 1 }),
       collectablesClient.beasts.list({ sort: "power", order: "desc", limit: 1, includeOwner: true }),
       collectablesClient.beasts.groups({ groupBy: "full_name", limit: 5 }),
       collectablesClient.beasts.groups({ groupBy: "prefix", limit: 5 }),

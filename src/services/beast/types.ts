@@ -13,7 +13,7 @@ export type BeastAttribute = {
 };
 
 /** Original-art visual preset (Beasts v3 `visualEffects` 0-3). */
-export type BeastVisual = "Regular" | "Shiny" | "Animated" | "Shiny Animated";
+export type BeastVisual = "Regular" | "Shiny" | "MIDI" | "Shiny MIDI";
 
 export type Beast = {
   /** `beasts_nft:0x<hex>` */

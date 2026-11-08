@@ -27,6 +27,9 @@ const UNIX_TIMESTAMP_ATTRIBUTES = new Set(["last death timestamp", "minted", "tr
 // v3 attributes hidden from the grid: raw preset selectors (shown as "Visual")
 // and the 76-digit token id (shown in the header / URL).
 const HIDDEN_ATTRIBUTES = new Set(["visual effects", "token id"]);
+// Display names for legacy trait keys. "Animated" is the V2 name for presets 2/3; in v3 every
+// original is animated and those presets mean the MIDI effect.
+const ATTRIBUTE_LABELS: Record<string, string> = { animated: "MIDI" };
 
 type RightPanelTab = "summit" | "metadata" | "condition" | "music";
 
@@ -379,7 +382,7 @@ export function BeastDetailContent({
                             className={`rounded border ${style.border} ${style.bg} px-2 py-1.5`}
                           >
                             <p className="text-[8px] uppercase tracking-wide text-zinc-500 font-medium">
-                              {attr.trait_type}
+                              {ATTRIBUTE_LABELS[String(attr.trait_type ?? "").toLowerCase()] ?? attr.trait_type}
                             </p>
                             <p
                               className={`text-[11px] font-bold ${style.text} truncate`}

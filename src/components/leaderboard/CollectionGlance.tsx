@@ -51,7 +51,7 @@ export function CollectionGlance() {
     {
       label: "Perfect cards",
       value: v(glance?.perfectCards),
-      sub: "Grade 10 · Animated Shiny",
+      sub: "Grade 10 · Shiny MIDI",
       accent: "text-pink-400",
     },
     {

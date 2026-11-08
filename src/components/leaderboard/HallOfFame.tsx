@@ -10,8 +10,8 @@ const PAGE_SIZE = 24;
 const VIEWS = {
   perfect: {
     label: "Perfect cards",
-    blurb: "Grade 10, Animated Shiny — the rarest cards in the collection.",
-    filters: { "Card Grade": ["10", "10"], Visual: ["Shiny Animated"] },
+    blurb: "Grade 10, Shiny MIDI — the rarest cards in the collection.",
+    filters: { "Card Grade": ["10", "10"], Visual: ["Shiny MIDI"] },
   },
   champions: {
     label: "Species champions",

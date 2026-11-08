@@ -61,8 +61,8 @@ describe("v3 visual presets", () => {
   it("derives shiny/animated from visualEffects, ignoring the always-true v3 animated flag", () => {
     expect(beastVisual({ shiny: false, animated: true, visualEffects: 0 })).toEqual({ shiny: false, animated: false, visual: "Regular" });
     expect(beastVisual({ shiny: true, animated: true, visualEffects: 1 })).toEqual({ shiny: true, animated: false, visual: "Shiny" });
-    expect(beastVisual({ shiny: false, animated: true, visualEffects: 2 }).visual).toBe("Animated");
-    expect(beastVisual({ shiny: true, animated: true, visualEffects: 3 }).visual).toBe("Shiny Animated");
+    expect(beastVisual({ shiny: false, animated: true, visualEffects: 2 }).visual).toBe("MIDI");
+    expect(beastVisual({ shiny: true, animated: true, visualEffects: 3 }).visual).toBe("Shiny MIDI");
   });
 
   it("falls back to legacy flags without visualEffects", () => {
@@ -95,7 +95,7 @@ describe("client-side v3 filter matching", () => {
   };
 
   it("matches visual presets", () => {
-    expect(matchesBeastFilters(beast, { Visual: ["Shiny", "Shiny Animated"] })).toBe(true);
+    expect(matchesBeastFilters(beast, { Visual: ["Shiny", "Shiny MIDI"] })).toBe(true);
     expect(matchesBeastFilters(beast, { Visual: ["Regular"] })).toBe(false);
   });
 

@@ -394,10 +394,10 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
                       Shy
                     </th>
                     <th className="px-1 py-0.5 text-center font-semibold bg-gradient-to-b from-sky-400/90 to-sky-500/90 text-black text-[10px] tracking-wide uppercase backdrop-blur-sm">
-                      Ani
+                      MIDI
                     </th>
                     <th className="px-1 py-0.5 text-center font-semibold bg-gradient-to-br from-pink-400/90 via-purple-400/90 to-blue-400/90 text-white text-[9px] tracking-wide uppercase backdrop-blur-sm">
-                      SA
+                      S·M
                     </th>
                   </tr>
                 </thead>
@@ -555,7 +555,7 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
                       {overallTotals.animated}
                     </span>
                     <span className="text-[9px] text-white/70 uppercase tracking-wide">
-                      Animated
+                      MIDI
                     </span>
                   </div>
                 </td>
@@ -565,7 +565,7 @@ export function BeastTableView({ beasts }: BeastTableViewProps) {
                       {overallTotals.shinyAnimated}
                     </span>
                     <span className="text-[8px] text-white/70 uppercase tracking-wide">
-                      Shiny Anim
+                      Shiny MIDI
                     </span>
                   </div>
                 </td>

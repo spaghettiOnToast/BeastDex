@@ -64,10 +64,10 @@ export function CollectionHero({ stats, overviewCards, onSelectBeast }: Collecti
   const variants = [
     { key: "standard", label: "Standard", count: stats.standardCount, unique: stats.uniqueStandardTypes, color: "#22c55e" },
     { key: "shiny", label: "Shiny", count: stats.shinyCount, unique: stats.uniqueShinyTypes, color: "#fde047" },
-    { key: "animated", label: "Animated", count: stats.animatedCount, unique: stats.uniqueAnimatedTypes, color: "#7dd3fc" },
+    { key: "animated", label: "MIDI", count: stats.animatedCount, unique: stats.uniqueAnimatedTypes, color: "#7dd3fc" },
     {
       key: "animatedShiny",
-      label: "Animated Shiny",
+      label: "Shiny MIDI",
       count: stats.animatedShinyCount,
       unique: stats.uniqueAnimatedShinyTypes,
       color: "linear-gradient(90deg, #ec4899, #a855f7, #38bdf8)",

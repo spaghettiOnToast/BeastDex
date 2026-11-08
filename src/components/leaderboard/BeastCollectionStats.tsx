@@ -30,9 +30,9 @@ export function BeastCollectionStats() {
 
 
   const summaryTiles = [
-    { label: "Animated Shinies", value: highlights?.animatedShinyCount ?? 0, gradient: "from-pink-400/20 via-purple-400/10 to-accent/20", accent: "text-pink-400" },
+    { label: "Shiny MIDI Beasts", value: highlights?.animatedShinyCount ?? 0, gradient: "from-pink-400/20 via-purple-400/10 to-accent/20", accent: "text-pink-400" },
     { label: "Shiny Beasts", value: highlights?.shinyCount ?? 0, gradient: "from-yellow-400/20 via-amber-400/10 to-orange-400/20", accent: "text-amber-400" },
-    { label: "Animated Beasts", value: highlights?.animatedCount ?? 0, gradient: "from-sky-400/20 via-accent/10 to-teal-400/20", accent: "text-accent" },
+    { label: "MIDI Beasts", value: highlights?.animatedCount ?? 0, gradient: "from-sky-400/20 via-accent/10 to-teal-400/20", accent: "text-accent" },
     { label: "Standard Beasts", value: highlights?.standardCount ?? 0, gradient: "from-zinc-500/20 via-zinc-700/10 to-zinc-900/20", accent: "text-zinc-300" },
   ];
 

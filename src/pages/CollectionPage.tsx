@@ -63,8 +63,8 @@ const TABS = [
   { key: "all", label: "All" },
   { key: "standard", label: "Standard" },
   { key: "shiny", label: "Shiny" },
-  { key: "animated", label: "Animated" },
-  { key: "animatedShiny", label: "Animated Shiny" },
+  { key: "animated", label: "MIDI" },
+  { key: "animatedShiny", label: "Shiny MIDI" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];

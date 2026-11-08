@@ -63,7 +63,7 @@ export const StatsPanel = memo(function StatsPanel({
 
   const summaryTiles = [
     {
-      label: "Animated Shinies",
+      label: "Shiny MIDI Beasts",
       value: highlights?.animatedShinyCount ?? 0,
       gradient: "from-pink-400/20 via-purple-400/10 to-accent/20",
       accent: "text-pink-400",
@@ -75,7 +75,7 @@ export const StatsPanel = memo(function StatsPanel({
       accent: "text-amber-400",
     },
     {
-      label: "Animated Beasts",
+      label: "MIDI Beasts",
       value: highlights?.animatedCount ?? 0,
       gradient: "from-sky-400/20 via-accent/10 to-teal-400/20",
       accent: "text-accent",
