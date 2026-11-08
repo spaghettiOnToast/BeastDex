@@ -13,7 +13,10 @@ type ProfileHeaderProps = {
   address?: string | null;
   /** owns every species */
   complete?: boolean;
-  collectionHref?: string | null;
+  /** avatar art (the owner's rarest beast); falls back to an address gradient */
+  avatarImage?: string | null;
+  /** primary button, e.g. View collection / View profile */
+  action?: { label: string; href: string } | null;
   onRefresh: () => void;
   refreshing?: boolean;
   refreshDisabled?: boolean;
@@ -37,7 +40,8 @@ export function ProfileHeader({
   nameIsAddress = false,
   address,
   complete = false,
-  collectionHref,
+  avatarImage,
+  action,
   onRefresh,
   refreshing = false,
   refreshDisabled = false,
@@ -73,11 +77,20 @@ export function ProfileHeader({
       <div className="flex flex-col gap-4 rounded-xl border border-white/[0.06] bg-surface-raised/70 p-4 sm:flex-row sm:items-center sm:p-5">
         <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
           <div
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white/90 shadow-inner sm:h-14 sm:w-14"
-            style={{ background: avatarGradient(address || displayName) }}
+            className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl text-sm font-bold text-white/90 shadow-inner sm:h-14 sm:w-14"
+            style={{ background: avatarImage ? "#000" : avatarGradient(address || displayName) }}
             aria-hidden
           >
-            {initial}
+            {avatarImage ? (
+              <img
+                src={avatarImage}
+                alt=""
+                className="h-[85%] w-[85%] object-contain"
+                style={{ imageRendering: "pixelated" }}
+              />
+            ) : (
+              initial
+            )}
           </div>
           <div className="min-w-0 space-y-1">
             {title && (
@@ -87,7 +100,9 @@ export function ProfileHeader({
             )}
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
               <h1
-                className={`truncate text-xl font-bold leading-tight text-white sm:text-2xl ${nameIsAddress || isHexName ? "font-mono" : ""}`}
+                className={`truncate font-bold leading-tight text-white ${
+                  nameIsAddress || isHexName ? "font-mono text-base sm:text-lg" : "text-xl sm:text-2xl"
+                }`}
                 title={address || undefined}
               >
                 {displayName}
@@ -114,12 +129,12 @@ export function ProfileHeader({
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          {collectionHref && (
+          {action && (
             <Link
-              to={collectionHref}
+              to={action.href}
               className="inline-flex flex-1 items-center justify-center rounded-lg bg-[#a855f7] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition-colors hover:bg-[#9333ea] sm:flex-none"
             >
-              View collection
+              {action.label}
             </Link>
           )}
           <button

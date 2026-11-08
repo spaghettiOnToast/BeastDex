@@ -551,8 +551,11 @@ function AccountPage() {
           nameIsAddress={!accountUsername && !identifierIsUsername}
           address={normalisedAccountAddress || null}
           complete={totalSpecies > 0 && displayStats.uniqueBeastTypes >= totalSpecies}
-          collectionHref={
-            collectionRouteIdentifier ? `/collection/${encodeURIComponent(collectionRouteIdentifier)}` : null
+          avatarImage={displayStats.rarest?.image || null}
+          action={
+            collectionRouteIdentifier
+              ? { label: "View collection", href: `/collection/${encodeURIComponent(collectionRouteIdentifier)}` }
+              : null
           }
           onRefresh={handleRefresh}
           refreshing={anyLoading}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { useSpeciesCount } from "../hooks/useBeastQueries";
 
 // CSS injection for shimmer animation
 const shimmerStyles = `
@@ -51,6 +52,7 @@ import { getBeastTemplate } from "../data/beastTemplates";
 import { apiCache } from "../services/apiCache";
 import { fetchOwnerSummitRankFromApi, type OwnerSummitRank } from "../services/summitApi";
 import { CollectionHero, type OverviewCard } from "../components/collection/CollectionHero";
+import { ProfileHeader } from "../components/profile/ProfileHeader";
 
 import { ClaimCorpseButton } from "../components/collection/ClaimCorpseButton";
 import FestivalBeastsStrip from "../components/profile/FestivalBeastsStrip";
@@ -211,6 +213,7 @@ function CollectionPage() {
     new Map()
   );
 
+  const totalSpecies = useSpeciesCount();
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
@@ -886,8 +889,13 @@ function CollectionPage() {
     trimmedIdentifier,
   ]);
 
-  const displayNameClass =
-    accountUsername || identifierIsUsername ? "" : "font-mono";
+  // Force refresh: clear cached beast queries and reload the collection
+  const handleRefreshCollection = useCallback(() => {
+    apiCache.clearEndpoint("beast-query");
+    apiCache.clearEndpoint("beast-by-id");
+    apiCache.clearEndpoint("owner-beast-highlights");
+    void loadSummary();
+  }, [loadSummary]);
 
   // Most powerful beast is the first beast (sorted by default power)
   const mostPowerfulBeast = useMemo(
@@ -1028,51 +1036,18 @@ function CollectionPage() {
   return (
     <AppLayout topBar={topBar}>
       <div className="flex flex-col gap-2">
-        <div className="relative pt-3 sm:pt-4">
-          {summitRank?.rank != null && (
-            <div className="absolute top-3 left-0 text-left">
-              <p className="text-[10px] uppercase tracking-wider text-zinc-500">Summit Rank</p>
-              <p className="text-sm font-bold text-[#fbcb4a]">
-                #{summitRank.rank}
-                <span className="text-zinc-500 font-normal text-xs ml-1">of {summitRank.total_owners}</span>
-              </p>
-            </div>
-          )}
-          <div className="flex flex-col items-center text-center">
-            {collectionStats.mostPowerfulTitle ? (
-              <span className="bg-gradient-to-r from-[#ff7cf7] via-[#7dfbff] to-[#8bff72] bg-clip-text text-lg font-semibold uppercase tracking-[0.2em] text-transparent sm:text-3xl sm:tracking-[0.35em]">
-                "{collectionStats.mostPowerfulTitle}"
-              </span>
-            ) : null}
-            <span
-              className="bg-gradient-to-r from-[#f9e08a] via-[#fbdc5e] to-[#39ff14] bg-clip-text text-2xl font-semibold uppercase tracking-[0.25em] sm:text-4xl sm:tracking-[0.35em]"
-              style={{ WebkitTextFillColor: "#fbeaa0" }}
-            >
-              <span className={`${displayNameClass} uppercase`}>
-                {displayName}
-              </span>
-            </span>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-zinc-500 mt-1">
-              Collection Overview
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-1.5 rounded border border-lsGold px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-lsGold transition-colors hover:bg-[rgba(208,201,141,0.2)]"
-          >
-            ← Back to Home
-          </Link>
-
-          <Link
-            to={`/account/${encodeURIComponent(trimmedIdentifier)}`}
-            className="inline-flex items-center gap-1.5 rounded border border-lsGold px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-lsGold transition-colors hover:bg-[rgba(208,201,141,0.2)]"
-          >
-            Go to Profile
-          </Link>
-        </div>
+        <ProfileHeader
+          title={collectionStats.mostPowerfulTitle}
+          displayName={displayName}
+          nameIsAddress={!accountUsername && !identifierIsUsername}
+          address={normalisedAccountAddress || null}
+          avatarImage={displayStats.rarest?.image || null}
+          complete={totalSpecies > 0 && collectionStats.uniqueBeastTypes >= totalSpecies}
+          action={{ label: "View profile", href: `/account/${encodeURIComponent(trimmedIdentifier)}` }}
+          onRefresh={handleRefreshCollection}
+          refreshing={anyLoading}
+          refreshDisabled={anyLoading || !resolvedAddress}
+        />
 
         {/* Collection hero: species progress, headline numbers, variants, highlights */}
         <CollectionHero
@@ -1197,11 +1172,7 @@ function CollectionPage() {
             <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  apiCache.clearEndpoint("beast-query");
-                  apiCache.clearEndpoint("beast-by-id");
-                  void loadSummary();
-                }}
+                onClick={handleRefreshCollection}
                 disabled={anyLoading || !resolvedAddress}
                 className="inline-flex items-center gap-2 rounded-lg border border-white/[0.06] px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
                 title="Force refresh collection data"
