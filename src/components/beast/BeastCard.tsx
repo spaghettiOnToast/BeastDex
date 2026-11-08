@@ -233,6 +233,22 @@ const BeastCard = memo(function BeastCard({
             </div>
           );
         })()}
+        {/* MIDI: the card plays a MIDI track. Its notes background only exists on
+            the player page (detail view), not the static card, so flag it here. */}
+        {!missing && beast.tokenId && beast.midi && (
+          <div
+            title="MIDI beast — its card plays a music track (notes background on the player page)"
+            style={{
+              position: "absolute", top: "16.5%", right: "8%", zIndex: 20, lineHeight: 1,
+              background: "rgba(11,11,13,0.85)", color: "#c4b5fd", fontWeight: "bold", letterSpacing: 0.5,
+              border: "1px solid rgba(196,181,253,0.5)", borderRadius: 4,
+              boxShadow: "0 1px 4px rgba(0,0,0,0.6)",
+            }}
+            className="px-[3px] py-[2px] text-[7px] @min-[150px]:px-[5px] @min-[150px]:py-[3px] @min-[150px]:text-[9px]"
+          >
+            ♪<span className="hidden @min-[150px]:inline"> MIDI</span>
+          </div>
+        )}
         {/* Rank 0: label why (Genesis / New / Unranked) rather than leaving
             the corner blank (the card art draws no rank for 0). */}
         {!missing && beast.tokenId && beast.visualEffects !== undefined && cardInput.rank < 1 && (() => {
