@@ -1,11 +1,9 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import {
-  BEASTS_COLLECTION_ADDRESS,
-  getMarketplaceCollection,
-} from "../../../services/marketplace/constants";
-import { fetchFestivalTokens, getFestivalCollection, toFestivalListingToken } from "../../../services/festivalBeasts";
-import type { FestivalListingToken } from "../../../services/marketplace/types";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { apiCache } from "../../../services/apiCache";
+import { MARKETPLACE_COLLECTION_ADDRESSES, marketplaceTokenKey } from "../../../services/marketplace/constants";
+import { festivalCollectionFor } from "../../../services/festivalBeasts";
+import { useFestivalTokens } from "../../../hooks/useFestivalTokens";
 import { useMarketplaceListings } from "./useMarketplaceListings";
 import { useUserBeasts } from "../../../hooks/useUserBeasts";
 import { useBeastFilters } from "../../../hooks/useBeastFilters";
@@ -19,42 +17,34 @@ import { useBeastLookup } from "../../../hooks/useBeastLookup";
  * - useUserBeasts: Handles user's owned beasts (deferred loading)
  * - useBeastFilters: Handles available filter options
  */
-export function useMarketplaceData(address: string | undefined, collectionAddress: string = BEASTS_COLLECTION_ADDRESS) {
-  const collection = getMarketplaceCollection(collectionAddress);
-  const isFestival = collection?.kind === "festival";
+/** Re-check delays after a trade (the beasts / festival indexers lag the chain). */
+const MY_ITEMS_POLL_DELAYS_MS = [4_000, 8_000, 15_000];
 
-  // Marketplace listings (orders + hydration)
-  const listingsHook = useMarketplaceListings(collectionAddress);
+export function useMarketplaceData(address: string | undefined) {
+  // Marketplace listings (orders + hydration) for Beasts and every festival
+  // collection, shown together in one grid.
+  const listingsHook = useMarketplaceListings(MARKETPLACE_COLLECTION_ADDRESSES);
 
-  // fetchListingsWithMetadataSingleQuery only fetches order data (beast: null) —
-  // hydrate beast metadata here via the SDK, same as the Sold tab does.
-  // Festival collections have no Beast records: hydrate from chain metadata.
-  const listingTokenIds = useMemo(
-    () => (isFestival ? [] : listingsHook.listings.map((l) => l.tokenId)),
-    [listingsHook.listings, isFestival]
+  // fetchListingsWithMetadataSingleQuery only fetches order data (beast: null).
+  // Beasts are hydrated via the SDK (same as the Sold tab); festival tokens have
+  // no Beast records and are hydrated from chain metadata instead.
+  const beastListings = useMemo(
+    () => listingsHook.listings.filter((l) => !festivalCollectionFor(l.collection)),
+    [listingsHook.listings]
   );
-  const { getBeast } = useBeastLookup(isFestival ? [] : listingsHook.listings, listingTokenIds);
+  const listingTokenIds = useMemo(() => beastListings.map((l) => l.tokenId), [beastListings]);
+  const { getBeast } = useBeastLookup(beastListings, listingTokenIds);
+  const { getFestival, ownedKeys: ownedFestivalKeys } = useFestivalTokens();
 
-  const festivalCollection = isFestival ? getFestivalCollection(collection?.festivalSlug) : null;
-  const { data: festivalTokens } = useQuery({
-    queryKey: ["festivalTokens", festivalCollection?.address],
-    enabled: !!festivalCollection,
-    queryFn: () => fetchFestivalTokens(festivalCollection!),
-    staleTime: 5 * 60_000,
-  });
-
-  const listings = useMemo(() => {
-    if (!isFestival) {
-      return listingsHook.listings.map((l) => ({ ...l, beast: getBeast(l.tokenId) ?? null }));
-    }
-    const byId = new Map((festivalTokens ?? []).map((t) => [String(t.tokenId), t]));
-    return listingsHook.listings.map((l) => {
-      const t = byId.get(l.tokenId);
-      const festival: FestivalListingToken | null =
-        t && festivalCollection ? toFestivalListingToken(festivalCollection, t) : null;
-      return { ...l, beast: null, festival };
-    });
-  }, [listingsHook.listings, getBeast, isFestival, festivalTokens, festivalCollection]);
+  const listings = useMemo(
+    () =>
+      listingsHook.listings.map((l) =>
+        festivalCollectionFor(l.collection)
+          ? { ...l, beast: null, festival: getFestival(l.collection, l.tokenId) }
+          : { ...l, beast: getBeast(l.tokenId) ?? null }
+      ),
+    [listingsHook.listings, getBeast, getFestival]
+  );
 
   // User's owned beasts - defer loading until "My Listings" tab is opened
   // This reduces initial load by avoiding pagination queries upfront
@@ -62,6 +52,38 @@ export function useMarketplaceData(address: string | undefined, collectionAddres
 
   // Beast attribute filters
   const filtersHook = useBeastFilters();
+
+  /**
+   * Refresh "My Items" (owned beasts + festival holdings) after the user buys
+   * or sells. The indexers lag the chain by a few seconds, so re-check a few
+   * times after the immediate refresh. A newer call supersedes older polls.
+   */
+  const queryClient = useQueryClient();
+  const reloadUserBeasts = userBeastsHook.reload;
+  const refreshGeneration = useRef(0);
+  useEffect(() => () => void (refreshGeneration.current += 1), []); // stop polling on unmount
+  const refreshMyItems = useCallback(
+    async ({ poll = true }: { poll?: boolean } = {}) => {
+      const generation = ++refreshGeneration.current;
+      const refreshOnce = async () => {
+        apiCache.clearEndpoint("festival-tokens");
+        await Promise.all([
+          reloadUserBeasts(),
+          queryClient.invalidateQueries({ queryKey: ["festivalTokens"] }),
+        ]);
+      };
+      await refreshOnce();
+      if (!poll) return;
+      void (async () => {
+        for (const delayMs of MY_ITEMS_POLL_DELAYS_MS) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          if (generation !== refreshGeneration.current) return;
+          await refreshOnce();
+        }
+      })();
+    },
+    [reloadUserBeasts, queryClient]
+  );
 
   /**
    * Recent listings - automatically derived from main listings
@@ -76,7 +98,8 @@ export function useMarketplaceData(address: string | undefined, collectionAddres
     for (const listing of listings) {
       if (!listing.active) continue;
 
-      const tokenId = String(listing.tokenId).trim();
+      // Collection-qualified: token ids repeat across Beasts and festival collections
+      const tokenId = marketplaceTokenKey(listing.collection, String(listing.tokenId).trim());
       const existing = listingsByTokenId.get(tokenId);
 
       if (!existing) {
@@ -131,8 +154,9 @@ export function useMarketplaceData(address: string | undefined, collectionAddres
     // Recent data (auto-updates when listings change)
     recentListings,
 
-    // Festival collection tokens (with owners); undefined on the Beasts collection
-    festivalTokens,
+    // Festival token lookups (collection-qualified)
+    ownedFestivalKeys,
+    getFestival,
 
     // User beasts
     userBeasts: userBeastsHook.beasts,
@@ -140,6 +164,8 @@ export function useMarketplaceData(address: string | undefined, collectionAddres
     userBeastsHasLoaded: userBeastsHook.hasLoaded,
     userBeastsError: userBeastsHook.error,
     reloadUserBeasts: userBeastsHook.reload,
+    /** Reload owned beasts + festival holdings now, then poll while indexers catch up */
+    refreshMyItems,
 
     // Filters
     availableFilters: filtersHook.filters,

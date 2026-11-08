@@ -63,6 +63,20 @@ function getComparablePrice(listing: Listing): { currency: string; value: bigint
  * @param option - Sort option to apply
  * @returns Sorted array of listings (new array, original not mutated)
  */
+/** Sentinel magnitude for unranked beasts (finite so comparisons never produce NaN). */
+const UNRANKED_SORT_KEY = 1e9;
+
+/**
+ * Rank sort key. Rank 1 is the best; rank 0 (or missing) means the beast hasn't
+ * been ranked yet, and those always sort last — in either direction (desc
+ * negates the comparison, so the sentinel's sign flips with it).
+ */
+function rankSortKey(beast: Beast | null, option: SortOption): number {
+  const rank = getNumericAttribute(beast, "Rank");
+  if (rank != null && rank >= 1) return rank;
+  return option === "rank-desc" ? -UNRANKED_SORT_KEY : UNRANKED_SORT_KEY;
+}
+
 export function sortListings(
   listings: Listing[],
   option: SortOption,
@@ -122,7 +136,7 @@ export function sortListings(
       case "rank-asc":
       case "rank-desc":
         return {
-          primary: getNumericAttribute(beast ?? null, "Rank") ?? Number.POSITIVE_INFINITY,
+          primary: rankSortKey(beast ?? null, option),
           secondary: tokenId,
         };
 
@@ -239,7 +253,7 @@ export function sortBeasts(beasts: Beast[], option: SortOption, unclaimedSkullsM
         return getNumericAttribute(beast, "Health") ?? -Infinity;
       case "rank-asc":
       case "rank-desc":
-        return getNumericAttribute(beast, "Rank") ?? Number.POSITIVE_INFINITY;
+        return rankSortKey(beast, option);
       case "last-death-asc":
       case "last-death-desc":
         return getBeastLastDeathTimestamp(beast) ?? 0;

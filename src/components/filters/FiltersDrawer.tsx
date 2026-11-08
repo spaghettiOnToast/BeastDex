@@ -52,7 +52,7 @@ const MULTI_SELECT_TRAITS = new Set([
 ]);
 
 // Traits rendered as boolean toggles (Yes/No/Any)
-const BOOLEAN_FILTER_TRAITS = new Set(["shiny", "animated", "soulbound", "genesis", "mega", "midi"]);
+const BOOLEAN_FILTER_TRAITS = new Set(["festival", "shiny", "animated", "soulbound", "genesis", "mega", "midi"]);
 
 // Traits rendered as free-text search
 const SEARCH_FIELD_TRAITS = new Set([
@@ -76,6 +76,7 @@ const REMOVED_TRAITS = new Set([
 
 // Sort priority for filter sections
 const FILTER_SORT_ORDER = [
+  "festival",
   "visual",
   "shiny",
   "animated",

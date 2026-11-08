@@ -13,6 +13,23 @@ export function BeastSlayerLeaderboard() {
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [reloadNonce, setReloadNonce] = useState(0);
+  // "desc" = most kills first
+  const [order, setOrder] = useState<"asc" | "desc">("desc");
+  // Genesis beasts dominate all-time kills: hidden by default
+  const [showGenesis, setShowGenesis] = useState(false);
+  const resetList = () => {
+    setPage(1);
+    setEntries([]);
+    setHasMore(true);
+  };
+  const toggleOrder = () => {
+    setOrder((o) => (o === "desc" ? "asc" : "desc"));
+    resetList();
+  };
+  const toggleGenesis = () => {
+    setShowGenesis((v) => !v);
+    resetList();
+  };
 
   const ownerAddresses = useMemo(
     () => entries.map((entry) => entry.owner).filter((owner): owner is string => Boolean(owner)),
@@ -29,7 +46,7 @@ export function BeastSlayerLeaderboard() {
         setError(null);
 
         const offset = (page - 1) * PAGE_SIZE;
-        const data = await fetchBeastSlayerLeaderboard({ limit: PAGE_SIZE, offset });
+        const data = await fetchBeastSlayerLeaderboard({ limit: PAGE_SIZE, offset, order, includeGenesis: showGenesis });
         if (cancelled) return;
 
         if (page === 1) {
@@ -55,7 +72,7 @@ export function BeastSlayerLeaderboard() {
     return () => {
       cancelled = true;
     };
-  }, [page, reloadNonce]);
+  }, [page, reloadNonce, order, showGenesis]);
 
   const handleLoadMore = () => {
     if (!loading && hasMore) {
@@ -115,8 +132,40 @@ export function BeastSlayerLeaderboard() {
     );
   }
 
+  const medals = order === "desc";
+
   return (
     <div className="space-y-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-zinc-500">
+          All-time adventurer kills across all beasts — pre-v3 (legacy) kills plus kills since the v3 migration.
+        </p>
+        <div className="flex shrink-0 gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={toggleGenesis}
+            disabled={loading}
+            aria-pressed={showGenesis}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-60 ${
+              showGenesis
+                ? "border-[#e2b94c]/50 bg-[#e2b94c]/10 text-[#e2b94c]"
+                : "border-white/[0.06] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08] hover:text-white"
+            }`}
+            title="Genesis beasts (one per species, held by one wallet) are hidden by default"
+          >
+            {showGenesis ? "✓ Genesis shown" : "Show Genesis"}
+          </button>
+          <button
+            type="button"
+            onClick={toggleOrder}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.04] px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-zinc-300 transition-all hover:bg-white/[0.08] hover:text-white disabled:opacity-60"
+            title="Toggle sort order"
+          >
+            {order === "desc" ? "💀 Most kills first" : "🕊️ Fewest kills first"}
+          </button>
+        </div>
+      </div>
       <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-surface-raised">
         <div className="grid grid-cols-[90px_minmax(0,2fr)_minmax(0,1.4fr)_minmax(0,1fr)] gap-4 border-b border-white/[0.06] bg-white/[0.04] px-6 py-3 text-xs font-bold uppercase tracking-wider text-zinc-300">
           <div className="flex items-center">
@@ -145,7 +194,7 @@ export function BeastSlayerLeaderboard() {
               <div
                 key={`${entry.beastId}-${entry.rank}`}
                 className={`grid grid-cols-[90px_minmax(0,2fr)_minmax(0,1.4fr)_minmax(0,1fr)] gap-4 px-6 py-3 transition-all duration-300 hover:bg-white/[0.04] ${
-                  entry.rank <= 3
+                  medals && entry.rank <= 3
                     ? "bg-gradient-to-r from-red-500/10 via-orange-500/5 to-transparent"
                     : ""
                 }`}
@@ -153,7 +202,9 @@ export function BeastSlayerLeaderboard() {
                 <div className="flex items-center">
                   <div
                     className={`flex items-center gap-2 text-xl font-black ${
-                      entry.rank === 1
+                      !medals
+                        ? "text-gold"
+                        : entry.rank === 1
                         ? "text-red-400"
                         : entry.rank === 2
                         ? "text-orange-300"
@@ -162,7 +213,7 @@ export function BeastSlayerLeaderboard() {
                         : "text-gold"
                     }`}
                   >
-                    {entry.rank <= 3 && (
+                    {medals && entry.rank <= 3 && (
                       <span className="text-2xl">
                         {entry.rank === 1
                           ? "👑"
@@ -176,15 +227,29 @@ export function BeastSlayerLeaderboard() {
                 </div>
 
                 <div className="flex items-center">
-                  <Link
-                    to={`/beasts/${encodeURIComponent(entry.beastId)}`}
-                    className="text-base font-semibold text-zinc-100 transition-all duration-200 hover:text-gold"
-                  >
-                    {entry.beastName}
-                  </Link>
-                  <span className="ml-2 text-xs text-zinc-500">
-                    #{entry.beastRank > 0 ? entry.beastRank : entry.beastId}
-                  </span>
+                  {entry.inV3 ? (
+                    <Link
+                      to={`/beasts/${encodeURIComponent(entry.beastId)}`}
+                      className="truncate text-base font-semibold text-zinc-100 transition-all duration-200 hover:text-gold"
+                    >
+                      {entry.beastName}
+                    </Link>
+                  ) : (
+                    <span className="truncate text-base font-semibold text-zinc-300" title="Not found in the v3 collection">
+                      {entry.beastName}
+                    </span>
+                  )}
+                  {entry.beastRank > 0 && <span className="ml-2 shrink-0 text-xs text-zinc-500">#{entry.beastRank}</span>}
+                  {entry.genesis && (
+                    <span className="ml-2 shrink-0 rounded border border-[#e2b94c]/50 px-1 text-[9px] font-bold uppercase tracking-wider text-[#e2b94c]">
+                      Genesis
+                    </span>
+                  )}
+                  {!entry.inV3 && (
+                    <span className="ml-2 shrink-0 rounded border border-white/10 px-1 text-[9px] uppercase tracking-wider text-zinc-500">
+                      legacy
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex items-center">

@@ -17,9 +17,9 @@ export async function fetchBeastHighlights(forceRefresh = false): Promise<BeastH
   // v3 encodes shiny/animated in visualEffects (the SDK's `animated` flag is
   // always true on v3), so count by preset.
   const [animatedShiny, shinyOnly, animatedOnly, standard] = await Promise.all([
-    collectablesClient.beasts.list({ visualEffects: VISUAL_TO_EFFECTS["Shiny Animated"], limit: 1 }),
+    collectablesClient.beasts.list({ visualEffects: VISUAL_TO_EFFECTS["Shiny MIDI"], limit: 1 }),
     collectablesClient.beasts.list({ visualEffects: VISUAL_TO_EFFECTS.Shiny, limit: 1 }),
-    collectablesClient.beasts.list({ visualEffects: VISUAL_TO_EFFECTS.Animated, limit: 1 }),
+    collectablesClient.beasts.list({ visualEffects: VISUAL_TO_EFFECTS.MIDI, limit: 1 }),
     collectablesClient.beasts.list({ visualEffects: VISUAL_TO_EFFECTS.Regular, limit: 1 }),
   ]);
 

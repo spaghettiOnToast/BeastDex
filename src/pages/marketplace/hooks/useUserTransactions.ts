@@ -1,10 +1,12 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import type { TxEntry } from "../types";
 import type { Listing } from "../../../services/marketplace/types";
 import { CategoryType } from "../../../services/marketplace/arcadeTypes";
-import { BEASTS_COLLECTION_ADDRESS } from "../../../services/marketplace/constants";
+import { MARKETPLACE_COLLECTION_ADDRESSES } from "../../../services/marketplace/constants";
+import { festivalCollectionFor } from "../../../services/festivalBeasts";
+import { useFestivalTokens } from "../../../hooks/useFestivalTokens";
 import { compareStarknetAddresses, normaliseStarknetAddress } from "../../../utils/address";
-import { useUserOffers, useUserSales, type ArcadeOrderModelCompat } from "../../../hooks/useArcadeOrders";
+import { useUserOffers, useUserSales, type ArcadeOrderModelCompat, type CollectionArg } from "../../../hooks/useArcadeOrders";
 import { useBeastLookup } from "../../../hooks/useBeastLookup";
 
 /**
@@ -18,15 +20,15 @@ function getOfferStatus(offer: ArcadeOrderModelCompat): "active" | "expired" {
 interface UseUserTransactionsProps {
   address: string | undefined;
   listings: Listing[];
-  /** collection to show activity for (defaults to Beasts) */
-  collection?: string;
+  /** collection(s) to show activity for (defaults to all marketplace collections) */
+  collection?: CollectionArg;
 }
 
 /**
  * Hook for fetching user transaction history from the marketplace
  * Combines listings data, Arcade GraphQL offers, and Arcade GraphQL sales
  */
-export function useUserTransactions({ address, listings, collection = BEASTS_COLLECTION_ADDRESS }: UseUserTransactionsProps) {
+export function useUserTransactions({ address, listings, collection = MARKETPLACE_COLLECTION_ADDRESSES }: UseUserTransactionsProps) {
   const { data: userOffers, isLoading: offersLoading, refetch: refetchOffers } = useUserOffers(
     address,
     collection
@@ -40,13 +42,24 @@ export function useUserTransactions({ address, listings, collection = BEASTS_COL
   // Collect all token IDs from sales and offers for beast lookup
   const additionalTokenIds = useMemo(() => {
     const ids: string[] = [];
-    userSales?.forEach(sale => ids.push(String(sale.order.tokenId)));
-    userOffers?.forEach(offer => ids.push(String(offer.tokenId)));
+    // Festival tokens have no Beast records (named via useFestivalTokens)
+    userSales?.forEach(sale => {
+      if (!festivalCollectionFor(sale.order.collection)) ids.push(String(sale.order.tokenId));
+    });
+    userOffers?.forEach(offer => {
+      if (!festivalCollectionFor(offer.collection)) ids.push(String(offer.tokenId));
+    });
     return ids;
   }, [userSales, userOffers]);
 
   // Use shared beast lookup hook
   const { getBeast } = useBeastLookup(listings, additionalTokenIds);
+  const { getFestival } = useFestivalTokens();
+  const nameFor = useCallback(
+    (collection: string | null | undefined, tokenId: string) =>
+      festivalCollectionFor(collection) ? getFestival(collection, tokenId)?.name : getBeast(tokenId)?.name,
+    [getBeast, getFestival]
+  );
 
   // Build user transactions
   const transactions = useMemo((): TxEntry[] => {
@@ -62,7 +75,7 @@ export function useUserTransactions({ address, listings, collection = BEASTS_COL
         result.push({
           type,
           tokenId: listing.tokenId,
-          beastName: listing.beast?.name,
+          beastName: listing.beast?.name ?? listing.festival?.name,
           price: listing.price,
           paymentToken: listing.paymentToken ?? undefined,
           expiration: listing.expiration,
@@ -79,7 +92,7 @@ export function useUserTransactions({ address, listings, collection = BEASTS_COL
       result.push({
         type: "offer",
         tokenId,
-        beastName: getBeast(tokenId)?.name,
+        beastName: nameFor(offer.collection, tokenId),
         price: String(offer.price),
         paymentToken: offer.currency,
         expiration: offer.expiration,
@@ -93,7 +106,7 @@ export function useUserTransactions({ address, listings, collection = BEASTS_COL
     // Add user's sales (where user is buyer or seller)
     userSales?.forEach(sale => {
       const tokenId = String(sale.order.tokenId);
-      const beastName = getBeast(tokenId)?.name;
+      const beastName = nameFor(sale.order.collection, tokenId);
       const isSeller = compareStarknetAddresses(sale.from, normalizedUserAddress);
       const isBuyer = compareStarknetAddresses(sale.to, normalizedUserAddress);
       const wasOffer = sale.order.category.value === CategoryType.Buy;
@@ -144,7 +157,7 @@ export function useUserTransactions({ address, listings, collection = BEASTS_COL
     });
 
     return result;
-  }, [address, listings, userOffers, userSales, getBeast]);
+  }, [address, listings, userOffers, userSales, nameFor]);
 
   return {
     transactions,

@@ -13,19 +13,19 @@ import { spriteSpeciesName } from "./cardImage";
 
 const COLLECTABLES_BASE_URL = "/collectables";
 
-const VISUALS: BeastVisual[] = ["Regular", "Shiny", "Animated", "Shiny Animated"];
+const VISUALS: BeastVisual[] = ["Regular", "Shiny", "MIDI", "Shiny MIDI"];
 
 /** Visual preset label → v3 `visualEffects` value. */
 export const VISUAL_TO_EFFECTS: Record<BeastVisual, number> = {
   Regular: 0,
   Shiny: 1,
-  Animated: 2,
-  "Shiny Animated": 3,
+  MIDI: 2,
+  "Shiny MIDI": 3,
 };
 
 /**
  * Shiny / animated / visual label for a beast. v3 encodes these in
- * `visualEffects` (0 regular, 1 shiny, 2 animated, 3 shiny animated); the SDK's
+ * `visualEffects` (0 regular, 1 shiny, 2 MIDI, 3 shiny MIDI — labels per the v3 announcement: every original is animated now, and presets 2/3 add the MIDI notes effect; `animated` below keeps the legacy V2 name); the SDK's
  * `animated` flag is always true on v3, so it must not be used there.
  */
 export function beastVisual(sdkBeast: Pick<SdkBeast, "shiny" | "animated" | "visualEffects">): {
@@ -103,6 +103,7 @@ export function mapSdkBeast(sdkBeast: SdkBeast): Beast {
     transferLockedUntil: sdkBeast.transferLockedUntil,
     genesis: sdkBeast.genesis,
     mega: sdkBeast.mega,
+    minterData: sdkBeast.minterData,
     midi: sdkBeast.midi,
     hasBundledImage,
   };
@@ -117,4 +118,11 @@ export function hasCompleteMetadata(beast: Beast): boolean {
   if (!beast.image && beast.hasBundledImage !== false) return false;
   if (!beast.attributes || beast.attributes.length === 0) return false;
   return true;
+}
+
+/** "12.3% of beasts": how rare one visual preset is among `total` beasts. */
+export function presetShareLabel(count: number, total: number): string {
+  if (!(total > 0) || !(count > 0)) return "None collected yet";
+  const pct = (count / total) * 100;
+  return `${pct < 1 ? pct.toFixed(2) : pct.toFixed(1)}% of beasts`;
 }

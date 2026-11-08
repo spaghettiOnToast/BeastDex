@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { useSpeciesCount } from "../hooks/useBeastQueries";
 
 // CSS injection for shimmer animation
 const shimmerStyles = `
@@ -25,7 +26,7 @@ import { AppLayout } from "../components/layout/AppLayout";
 import BeastCard from "../components/beast/BeastCard";
 import BeastModal from "../components/beast/BeastModal";
 import { BeastTableView } from "../components/beast/BeastTableView";
-import { Grid, Table } from "lucide-react";
+import { Grid, RefreshCw, Table } from "lucide-react";
 import {
   fetchBeastAttributeFilters,
   fetchBeasts,
@@ -43,15 +44,18 @@ import {
   calculateCategoryDuplicateCounts,
 } from "../utils/beastCollection";
 import { normaliseStarknetAddress } from "../utils/address";
-import { lookupControllerAddresses } from "../services/controller";
+import { lookupProfileAddresses } from "../services/walletNames";
 import { getUserFriendlyErrorMessage, isSqlEndpointError } from "../utils/error";
 import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
 import { Button } from "../components/ui/button";
 import { getBeastTemplate } from "../data/beastTemplates";
 import { apiCache } from "../services/apiCache";
 import { fetchOwnerSummitRankFromApi, type OwnerSummitRank } from "../services/summitApi";
-import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
-import type { OverviewCard } from "../components/account/OverviewCards";
+import { CollectionHero, type OverviewCard } from "../components/collection/CollectionHero";
+import { ProfileHeader } from "../components/profile/ProfileHeader";
+import { BROTHER_ID_URL } from "../services/walletNames";
+import { useAccount } from "@starknet-react/core";
+
 import { ClaimCorpseButton } from "../components/collection/ClaimCorpseButton";
 import FestivalBeastsStrip from "../components/profile/FestivalBeastsStrip";
 
@@ -59,8 +63,8 @@ const TABS = [
   { key: "all", label: "All" },
   { key: "standard", label: "Standard" },
   { key: "shiny", label: "Shiny" },
-  { key: "animated", label: "Animated" },
-  { key: "animatedShiny", label: "Animated Shiny" },
+  { key: "animated", label: "MIDI" },
+  { key: "animatedShiny", label: "Shiny MIDI" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -211,6 +215,7 @@ function CollectionPage() {
     new Map()
   );
 
+  const totalSpecies = useSpeciesCount();
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
@@ -257,7 +262,7 @@ function CollectionPage() {
 
     const usernameKey = trimmedIdentifier.toLowerCase();
     setResolvingIdentifier(true);
-    lookupControllerAddresses([trimmedIdentifier])
+    lookupProfileAddresses([trimmedIdentifier])
       .then((result) => {
         if (cancelled) return;
         const addresses = result[usernameKey] ?? [];
@@ -785,11 +790,27 @@ function CollectionPage() {
                 const rankAttr = entry.beast.attributes.find(
                   (attr) => attr.trait_type?.toLowerCase() === "rank"
                 );
-                return rankAttr?.value ? Number(rankAttr.value) : 999999;
+                const rank = Number(rankAttr?.value);
+                // rank 0 = not ranked yet: after ranked beasts, before missing slots
+                return Number.isFinite(rank) && rank >= 1 ? rank : 999998;
               };
               const rankA = getRank(a);
               const rankB = getRank(b);
               return rankA - rankB; // Low to high
+            });
+            break;
+          case "rank-desc":
+            tabEntries.sort((a, b) => {
+              // High to low; unranked (0) after ranked, missing slots last
+              const getRank = (entry: (typeof tabEntries)[0]) => {
+                if (!entry.beast || entry.missing) return -2;
+                const rankAttr = entry.beast.attributes.find(
+                  (attr) => attr.trait_type?.toLowerCase() === "rank"
+                );
+                const rank = Number(rankAttr?.value);
+                return Number.isFinite(rank) && rank >= 1 ? rank : -1;
+              };
+              return getRank(b) - getRank(a);
             });
             break;
           case "last-death":
@@ -840,6 +861,14 @@ function CollectionPage() {
     [resolvedAddress]
   );
 
+  // Own profile shown by address: offer to claim a .brother name
+  const { address: connectedAddress } = useAccount();
+  const isOwnProfile = Boolean(
+    connectedAddress &&
+      normalisedAccountAddress &&
+      normaliseStarknetAddress(connectedAddress) === normaliseStarknetAddress(normalisedAccountAddress)
+  );
+
   const accountUsername = useMemo(() => {
     if (!normalisedAccountAddress) return null;
     const key = normalisedAccountAddress.toLowerCase();
@@ -870,8 +899,13 @@ function CollectionPage() {
     trimmedIdentifier,
   ]);
 
-  const displayNameClass =
-    accountUsername || identifierIsUsername ? "" : "font-mono";
+  // Force refresh: clear cached beast queries and reload the collection
+  const handleRefreshCollection = useCallback(() => {
+    apiCache.clearEndpoint("beast-query");
+    apiCache.clearEndpoint("beast-by-id");
+    apiCache.clearEndpoint("owner-beast-highlights");
+    void loadSummary();
+  }, [loadSummary]);
 
   // Most powerful beast is the first beast (sorted by default power)
   const mostPowerfulBeast = useMemo(
@@ -892,7 +926,7 @@ function CollectionPage() {
   }, [mostPowerfulBeast]);
 
 
-  // Display stats for ThreeColumnStatsLayout
+  // Display stats for the collection hero
   const displayStats = useMemo(() => ({
     animatedShinyCount: collectionStats.animatedShinyCount,
     animatedCount: collectionStats.animatedCount,
@@ -919,18 +953,21 @@ function CollectionPage() {
         key: "beasts",
         icon: "🐾",
         label: "Beasts Collected",
+        shortLabel: "Beasts",
         value: (ownerStats?.totalBeasts ?? ownedBeasts.length).toLocaleString(),
       },
       {
         key: "power",
         icon: "🔮",
         label: "Combined Power",
+        shortLabel: "Power",
         value: collectionStats.totalPower.toLocaleString(),
       },
       {
         key: "health",
         icon: "❤️",
         label: "Combined Health",
+        shortLabel: "Health",
         value: collectionStats.totalHealth.toLocaleString(),
       },
       ...(summitRank?.rank != null
@@ -939,6 +976,7 @@ function CollectionPage() {
               key: "summit",
               icon: "⛰️",
               label: "Summit Rank",
+              shortLabel: "Summit",
               value: `#${summitRank.rank}`,
               sub: `of ${summitRank.total_owners}`,
             },
@@ -1008,56 +1046,25 @@ function CollectionPage() {
   return (
     <AppLayout topBar={topBar}>
       <div className="flex flex-col gap-2">
-        <div className="relative pt-3 sm:pt-4">
-          {summitRank?.rank != null && (
-            <div className="absolute top-3 left-0 text-left">
-              <p className="text-[10px] uppercase tracking-wider text-zinc-500">Summit Rank</p>
-              <p className="text-sm font-bold text-[#fbcb4a]">
-                #{summitRank.rank}
-                <span className="text-zinc-500 font-normal text-xs ml-1">of {summitRank.total_owners}</span>
-              </p>
-            </div>
-          )}
-          <div className="flex flex-col items-center text-center">
-            {collectionStats.mostPowerfulTitle ? (
-              <span className="bg-gradient-to-r from-[#ff7cf7] via-[#7dfbff] to-[#8bff72] bg-clip-text text-3xl font-semibold uppercase tracking-[0.35em] text-transparent">
-                "{collectionStats.mostPowerfulTitle}"
-              </span>
-            ) : null}
-            <span
-              className="bg-gradient-to-r from-[#f9e08a] via-[#fbdc5e] to-[#39ff14] bg-clip-text text-4xl font-semibold uppercase tracking-[0.35em]"
-              style={{ WebkitTextFillColor: "#fbeaa0" }}
-            >
-              <span className={`${displayNameClass} uppercase`}>
-                {displayName}
-              </span>
-            </span>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-zinc-500 mt-1">
-              Collection Overview
-            </p>
-          </div>
-        </div>
+        <ProfileHeader
+          setUsernameHref={isOwnProfile && /^0x/i.test(displayName) ? BROTHER_ID_URL : null}
+          title={collectionStats.mostPowerfulTitle}
+          displayName={displayName}
+          nameIsAddress={!accountUsername && !identifierIsUsername}
+          address={normalisedAccountAddress || null}
+          avatarImage={displayStats.rarest?.image || null}
+          complete={totalSpecies > 0 && collectionStats.uniqueBeastTypes >= totalSpecies}
+          action={{ label: "View profile", href: `/account/${encodeURIComponent(trimmedIdentifier)}` }}
+          onRefresh={handleRefreshCollection}
+          refreshing={anyLoading}
+          refreshDisabled={anyLoading || !resolvedAddress}
+        />
 
-        <div className="flex items-center justify-between">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-1.5 rounded border border-lsGold px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-lsGold transition-colors hover:bg-[rgba(208,201,141,0.2)]"
-          >
-            ← Back to Home
-          </Link>
-
-          <Link
-            to={`/account/${encodeURIComponent(trimmedIdentifier)}`}
-            className="inline-flex items-center gap-1.5 rounded border border-lsGold px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-lsGold transition-colors hover:bg-[rgba(208,201,141,0.2)]"
-          >
-            Go to Profile
-          </Link>
-        </div>
-
-        {/* Profile Stats - Three Column Layout */}
-        <ThreeColumnStatsLayout
-          collectionStats={displayStats}
+        {/* Collection hero: species progress, headline numbers, variants, highlights */}
+        <CollectionHero
+          stats={displayStats}
           overviewCards={overviewCards}
+          onSelectBeast={handleBeastSelect}
         />
 
         {/* Tiddy Mun / Black Shuck held by this owner (hidden when none) */}
@@ -1145,14 +1152,21 @@ function CollectionPage() {
                     : "border-white/[0.06] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08]"
                 }`}
               >
-                {showDuplicatesOnly ? "Dupes Only" : "Duplicates"}
+                {showDuplicatesOnly ? (
+                  "Dupes Only"
+                ) : (
+                  <>
+                    <span className="sm:hidden">Dupes</span>
+                    <span className="hidden sm:inline">Duplicates</span>
+                  </>
+                )}
               </Button>
               <div className="flex items-center border border-white/[0.06] rounded-lg bg-white/[0.04]">
                 <Button
                   variant={viewMode === "grid" ? "default" : "ghost"}
                   size="sm"
                   onClick={() => setViewMode("grid")}
-                  className="rounded-r-none border-0 h-8"
+                  className="rounded-r-none border-0 h-8 px-2 sm:px-3"
                 >
                   <Grid className="h-4 w-4" />
                 </Button>
@@ -1160,49 +1174,34 @@ function CollectionPage() {
                   variant={viewMode === "table" ? "default" : "ghost"}
                   size="sm"
                   onClick={() => setViewMode("table")}
-                  className="rounded-l-none border-0 h-8"
+                  className="rounded-l-none border-0 h-8 px-2 sm:px-3"
                 >
                   <Table className="h-4 w-4" />
                 </Button>
               </div>
             </div>
-            <div className="hidden sm:flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  apiCache.clearEndpoint("beast-query");
-                  apiCache.clearEndpoint("beast-by-id");
-                  void loadSummary();
-                }}
+                onClick={handleRefreshCollection}
                 disabled={anyLoading || !resolvedAddress}
                 className="inline-flex items-center gap-2 rounded-lg border border-white/[0.06] px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
                 title="Force refresh collection data"
+                aria-label="Refresh collection data"
               >
                 {anyLoading ? (
                   <span className="h-3 w-3 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
-                ) : null}
-                <span>Refresh</span>
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5 sm:hidden" aria-hidden />
+                )}
+                <span className="hidden sm:inline">Refresh</span>
               </button>
-              <ClaimCorpseButton ownerAddress={resolvedAddress} />
+              <div className="hidden sm:block">
+                <ClaimCorpseButton ownerAddress={resolvedAddress} />
+              </div>
             </div>
           </div>
-          <div className="flex sm:hidden items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                apiCache.clearEndpoint("beast-query");
-                apiCache.clearEndpoint("beast-by-id");
-                void loadSummary();
-              }}
-              disabled={anyLoading || !resolvedAddress}
-              className="inline-flex items-center gap-2 rounded-lg border border-white/[0.06] px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/[0.06] disabled:opacity-50 transition-colors"
-              title="Force refresh collection data"
-            >
-              {anyLoading ? (
-                <span className="h-3 w-3 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
-              ) : null}
-              <span>Refresh</span>
-            </button>
+          <div className="flex sm:hidden items-center gap-2 empty:hidden">
             <ClaimCorpseButton ownerAddress={resolvedAddress} />
           </div>
         </div>
@@ -1216,7 +1215,7 @@ function CollectionPage() {
             ownerUsernames={ownerUsernames}
           />
         ) : (
-          <div className="grid gap-2 grid-cols-2 xs:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 sm:gap-3">
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
             {tabEntries[activeTab].map((entry) => (
               <BeastCard
                 key={entry.id}

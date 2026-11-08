@@ -1,13 +1,20 @@
-import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useMemo, useRef, useEffect, type ReactNode } from "react";
 
 // localStorage key for persisting sold listing IDs
 const STORAGE_KEY = "beastdex:sold-listings";
-// Max age for persisted sold IDs (24 hours) - after this, re-validate
-const MAX_PERSISTENCE_AGE_MS = 24 * 60 * 60 * 1000;
+/**
+ * How long an optimistic "sold" mark may hide a listing that the indexer still
+ * reports as active. The indexer catches up within a minute or so; past this,
+ * the mark was wrong (e.g. a failed or rejected purchase) and the listing shows
+ * again instead of staying hidden indefinitely.
+ */
+const SOLD_MARK_TTL_MS = 10 * 60 * 1000;
+
+/** listingId -> when it was marked sold (ms) */
+type SoldMarks = Map<string, number>;
 
 type PersistedSoldData = {
-  ids: string[];
-  timestamp: number;
+  marks: Record<string, number>;
 };
 
 type SoldListingsContextValue = {
@@ -31,37 +38,31 @@ type SoldListingsContextValue = {
 
 const SoldListingsContext = createContext<SoldListingsContextValue | null>(null);
 
+const isFresh = (markedAt: number, now = Date.now()) => now - markedAt < SOLD_MARK_TTL_MS;
+
 /**
- * Load persisted sold IDs from localStorage
+ * Load persisted sold marks from localStorage, dropping expired ones.
+ * (The old `{ ids, timestamp }` format had no per-listing age and is discarded.)
  */
-function loadPersistedSoldIds(): Set<string> {
+function loadPersistedSoldMarks(): SoldMarks {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return new Set();
-
-    const data: PersistedSoldData = JSON.parse(raw);
-
-    // Check if data is too old
-    if (Date.now() - data.timestamp > MAX_PERSISTENCE_AGE_MS) {
-      localStorage.removeItem(STORAGE_KEY);
-      return new Set();
-    }
-
-    return new Set(data.ids);
+    if (!raw) return new Map();
+    const data = JSON.parse(raw) as Partial<PersistedSoldData>;
+    if (!data.marks || typeof data.marks !== "object") return new Map();
+    const now = Date.now();
+    return new Map(Object.entries(data.marks).filter(([, at]) => typeof at === "number" && isFresh(at, now)));
   } catch {
-    return new Set();
+    return new Map();
   }
 }
 
 /**
- * Save sold IDs to localStorage
+ * Save sold marks to localStorage
  */
-function persistSoldIds(ids: Set<string>): void {
+function persistSoldMarks(marks: SoldMarks): void {
   try {
-    const data: PersistedSoldData = {
-      ids: [...ids],
-      timestamp: Date.now(),
-    };
+    const data: PersistedSoldData = { marks: Object.fromEntries(marks) };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch {
     // Ignore storage errors (quota exceeded, etc.)
@@ -70,35 +71,43 @@ function persistSoldIds(ids: Set<string>): void {
 
 export function SoldListingsProvider({ children }: { children: ReactNode }) {
   // Initialize from localStorage
-  const [soldListingIds, setSoldListingIds] = useState<Set<string>>(() => loadPersistedSoldIds());
+  const [soldMarks, setSoldMarks] = useState<SoldMarks>(() => loadPersistedSoldMarks());
   const offerSubscribersRef = useRef<Set<() => void>>(new Set());
   const purchaseSubscribersRef = useRef<Set<() => void>>(new Set());
 
-  // Persist to localStorage when sold IDs change
+  // Persist to localStorage when sold marks change
   useEffect(() => {
-    persistSoldIds(soldListingIds);
-  }, [soldListingIds]);
+    persistSoldMarks(soldMarks);
+  }, [soldMarks]);
 
+  const soldListingIds = useMemo(() => new Set(soldMarks.keys()), [soldMarks]);
+
+  // Ids may arrive as numbers from SQL rows; key marks by their string form.
   const markAsSold = useCallback((listingId: string) => {
-    setSoldListingIds((prev) => new Set([...prev, listingId]));
+    setSoldMarks((prev) => new Map(prev).set(String(listingId), Date.now()));
   }, []);
 
   const isSold = useCallback(
-    (listingId: string) => soldListingIds.has(listingId),
-    [soldListingIds]
+    (listingId: string) => {
+      const markedAt = soldMarks.get(String(listingId));
+      return markedAt !== undefined && isFresh(markedAt);
+    },
+    [soldMarks]
   );
 
   const clearStaleIds = useCallback((currentListingIds: string[]) => {
-    const currentSet = new Set(currentListingIds);
-    setSoldListingIds((prev) => {
-      const stillPending = new Set<string>();
-      prev.forEach((id) => {
-        // Keep IDs that are still in the current listings (not yet removed by indexer)
-        if (currentSet.has(id)) {
-          stillPending.add(id);
+    const currentSet = new Set(currentListingIds.map(String));
+    const now = Date.now();
+    setSoldMarks((prev) => {
+      const stillPending: SoldMarks = new Map();
+      prev.forEach((markedAt, id) => {
+        // Keep marks for listings the indexer still reports (not yet caught up),
+        // but only for a while: an old mark on a still-active listing was wrong.
+        if (currentSet.has(id) && isFresh(markedAt, now)) {
+          stillPending.set(id, markedAt);
         }
       });
-      return stillPending;
+      return stillPending.size === prev.size ? prev : stillPending;
     });
   }, []);
 

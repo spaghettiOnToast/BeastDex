@@ -2,6 +2,7 @@ import { useState, useCallback, lazy, Suspense } from "react";
 import { useAccount } from "@starknet-react/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGlobalCart } from "../../contexts/GlobalCartContext";
+import { useSoldListings } from "../../contexts/SoldListingsContext";
 import { useTermsOfService } from "../../contexts/TermsOfServiceContext";
 import { useMarketplaceListings } from "../../pages/marketplace/hooks/useMarketplaceListings";
 import { toast } from "sonner";
@@ -26,6 +27,7 @@ export function GlobalCartDialogs() {
   const { account } = useAccount();
   const queryClient = useQueryClient();
   const globalCart = useGlobalCart();
+  const { markAsSold, notifyPurchase } = useSoldListings();
   const { hasAcceptedToS, openToSDialog } = useTermsOfService();
   const { listings: existingListings } = useMarketplaceListings();
   const {
@@ -145,6 +147,11 @@ export function GlobalCartDialogs() {
           `Successfully purchased ${listings.length} beast${listings.length > 1 ? "s" : ""}!`
         );
 
+        // Hide the bought listings until the indexer catches up, and let open
+        // pages (marketplace My Items, listings, sales) refresh.
+        for (const listing of listings) markAsSold(listing.listingId);
+        notifyPurchase();
+
         // Clear purchase cart and close dialog
         globalCart.clearPurchaseCart();
         closePurchaseDialog();
@@ -160,7 +167,7 @@ export function GlobalCartDialogs() {
         setIsPurchasing(false);
       }
     },
-    [account, globalCart, closePurchaseDialog]
+    [account, globalCart, closePurchaseDialog, markAsSold, notifyPurchase]
   );
 
   /**

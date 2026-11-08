@@ -24,11 +24,12 @@ class ApiCache {
     this.cacheConfigs.set("adventurer-deaths", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("beast-stats", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("beast-highlights", { ttl: 5 * 60 * 1000 }); // 5 minutes
-    this.cacheConfigs.set("beast-of-the-day", { ttl: 3 * 60 * 1000 }); // 3 minutes
     this.cacheConfigs.set("power-rank-leaderboard", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("owner-beast-stats", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("owner-beast-highlights", { ttl: 5 * 60 * 1000 }); // 5 minutes
     this.cacheConfigs.set("festival-tokens", { ttl: 30 * 1000 }); // 30s: owners change on trades
+    this.cacheConfigs.set("beast-grade-counts", { ttl: 30 * 60 * 1000 }); // 30 min
+    this.cacheConfigs.set("collection-glance", { ttl: 10 * 60 * 1000 }); // 10 min
   }
 
   private getCacheKey(endpoint: string, params: any): string {
@@ -114,7 +115,6 @@ class ApiCache {
       'beast-query',
       'beast-stats',
       'beast-highlights',
-      'beast-of-the-day',
       'power-rank-leaderboard',
     ];
 

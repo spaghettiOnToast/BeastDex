@@ -27,8 +27,9 @@ export interface UseMarketplaceListingsResult {
  * One query to rule them all!
  */
 export function useMarketplaceListings(
-  collectionAddress: string = BEASTS_COLLECTION_ADDRESS,
+  collections: string | readonly string[] = BEASTS_COLLECTION_ADDRESS,
 ): UseMarketplaceListingsResult {
+  const collectionKey = typeof collections === "string" ? collections : collections.join(",");
   const queryClient = useQueryClient();
   const { markAsSold, clearStaleIds, isSold } = useSoldListings();
 
@@ -40,9 +41,9 @@ export function useMarketplaceListings(
     error,
     refetch,
   } = useQuery({
-    queryKey: ["marketplaceListingsSingleQuery", collectionAddress],
+    queryKey: ["marketplaceListingsSingleQuery", collectionKey],
     queryFn: async () => {
-      const result = await fetchListingsWithMetadataSingleQuery(collectionAddress);
+      const result = await fetchListingsWithMetadataSingleQuery(collections);
       // Clear stale sold IDs when we get fresh data
       clearStaleIds(result.map((l) => l.listingId));
       return result;

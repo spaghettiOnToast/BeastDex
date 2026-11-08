@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Link,
   useNavigate,
   useParams,
   useSearchParams,
@@ -30,13 +29,16 @@ import {
   type BeastCollectionStats,
 } from "../utils/beastCollection";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
-import { lookupControllerAddresses } from "../services/controller";
+import { lookupProfileAddresses } from "../services/walletNames";
 import { getUserFriendlyErrorMessage } from "../utils/error";
 import SortDropdown, { type SortOption, sortOptionToBeastSortField } from "../components/sort/SortDropdown";
-import { ThreeColumnStatsLayout } from "../components/layout/ThreeColumnStatsLayout";
+import { CollectionHero, type OverviewCard } from "../components/collection/CollectionHero";
+import { ProfileHeader } from "../components/profile/ProfileHeader";
+import { BROTHER_ID_URL } from "../services/walletNames";
+import { useAccount } from "@starknet-react/core";
 import { Grid, Table } from "lucide-react";
 import { Button } from "../components/ui/button";
-import type { OverviewCard } from "@/components/account/OverviewCards";
+
 import { useSpeciesCount } from "../hooks/useBeastQueries";
 import { normaliseStarknetAddress } from "../utils/address";
 import { fetchOwnerSummitRankFromApi, type OwnerSummitRank } from "../services/summitApi";
@@ -67,11 +69,11 @@ function AccountPage() {
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
-  const [_ownerStats, setOwnerStats] = useState<OwnerBeastStats | null>(null);
+  const [ownerStats, setOwnerStats] = useState<OwnerBeastStats | null>(null);
   const [ownedBeasts, setOwnedBeasts] = useState<Beast[]>([]);
   const [collectionStats, setCollectionStats] = useState<BeastCollectionStats>(EMPTY_BEAST_COLLECTION_STATS);
   const [beastHighlights, setBeastHighlights] = useState<OwnerBeastHighlights | null>(null);
-  const [_summitRank, setSummitRank] = useState<OwnerSummitRank | null>(null);
+  const [summitRank, setSummitRank] = useState<OwnerSummitRank | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const summaryRequestRef = useRef(0);
@@ -124,7 +126,7 @@ function AccountPage() {
     setResolvingIdentifier(true);
 
     // First try Cartridge username resolution
-    lookupControllerAddresses([trimmedIdentifier])
+    lookupProfileAddresses([trimmedIdentifier])
       .then(async (result) => {
         if (cancelled) return;
         const addresses = result[usernameKey] ?? [];
@@ -436,6 +438,14 @@ function AccountPage() {
     [resolvedAddress]
   );
 
+  // Own profile shown by address: offer to claim a .brother name
+  const { address: connectedAddress } = useAccount();
+  const isOwnProfile = Boolean(
+    connectedAddress &&
+      normalisedAccountAddress &&
+      normaliseStarknetAddress(connectedAddress) === normaliseStarknetAddress(normalisedAccountAddress)
+  );
+
   const accountUsername = useMemo(() => {
     if (!normalisedAccountAddress) return null;
     const key = normalisedAccountAddress.toLowerCase();
@@ -466,8 +476,6 @@ function AccountPage() {
     trimmedIdentifier,
   ]);
 
-  const displayAddressClass =
-    accountUsername || identifierIsUsername ? "" : "font-mono";
 
   const collectionRouteIdentifier = useMemo(
     () =>
@@ -516,7 +524,23 @@ function AccountPage() {
     totalHealth: collectionStats.totalHealth,
   }), [collectionStats, mostPowerfulBeast, mostPowerfulTitle, beastHighlights]);
 
-  const overviewCards: OverviewCard[] = [];
+  const overviewCards: OverviewCard[] = useMemo(
+    () => [
+      {
+        key: "beasts",
+        icon: "🐾",
+        label: "Beasts Collected",
+        shortLabel: "Beasts",
+        value: (ownerStats?.totalBeasts ?? ownedBeasts.length).toLocaleString(),
+      },
+      { key: "power", icon: "🔮", label: "Combined Power", shortLabel: "Power", value: collectionStats.totalPower.toLocaleString() },
+      { key: "health", icon: "❤️", label: "Combined Health", shortLabel: "Health", value: collectionStats.totalHealth.toLocaleString() },
+      ...(summitRank?.rank != null
+        ? [{ key: "summit", icon: "⛰️", label: "Summit Rank", shortLabel: "Summit", value: `#${summitRank.rank}`, sub: `of ${summitRank.total_owners}` }]
+        : []),
+    ],
+    [ownerStats, ownedBeasts.length, collectionStats, summitRank]
+  );
 
   if (!trimmedIdentifier) {
     return (
@@ -531,90 +555,31 @@ function AccountPage() {
   return (
     <AppLayout topBar={topBar}>
       <div className="space-y-4">
-        <div className="rounded-xl border border-white/[0.06] bg-surface-raised p-4">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="flex flex-col items-start space-y-2">
-              {mostPowerfulTitle ? (
-                <div className="bg-gradient-to-r from-pink-500 via-cyan-400 to-green-400 bg-clip-text text-lg md:text-xl font-bold uppercase tracking-wider text-transparent">
-                  "{mostPowerfulTitle}"
-                </div>
-              ) : null}
-
-              <div className="flex items-center gap-3">
-                <h1 className="text-xl md:text-2xl font-bold text-white tracking-wide font-display">
-                  <span
-                    className={displayAddressClass}
-                    title={normalisedAccountAddress || undefined}
-                  >
-                    {displayAddress}
-                  </span>
-                </h1>
-
-                <div className="flex items-center gap-1.5 sm:gap-2 ml-2 sm:ml-4 text-xs sm:text-sm">
-                  <span className={`text-sm sm:text-lg${displayStats.uniqueBeastTypes === totalSpecies ? " animate-bounce" : ""}`}>
-                    {displayStats.uniqueBeastTypes === totalSpecies ? "🎉" : "🏆"}
-                  </span>
-                  <span className="uppercase tracking-wider text-zinc-500 font-medium text-[10px] sm:text-sm">
-                    Total
-                  </span>
-                  <span className={`font-bold ${
-                    displayStats.uniqueBeastTypes === totalSpecies
-                      ? "text-[#39ff14] drop-shadow-[0_0_8px_rgba(57,255,20,0.6)]"
-                      : "text-white"
-                  }`}>
-                    {displayStats.uniqueBeastTypes}
-                  </span>
-                  <span className="text-zinc-500 text-xs sm:text-base">
-                    / {totalSpecies}
-                  </span>
-                  {displayStats.uniqueBeastTypes === totalSpecies && (
-                    <span className="text-[#39ff14] font-bold text-[10px] sm:text-sm drop-shadow-[0_0_8px_rgba(57,255,20,0.6)]">
-                      COMPLETE!
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {usernamesError ? (
-                <p className="text-xs text-red-400">{usernamesError}</p>
-              ) : usernamesLoading && Object.keys(ownerUsernames).length === 0 ? (
-                <p className="text-xs text-zinc-500">Loading usernames...</p>
-              ) : null}
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-              <div className="flex items-center gap-3">
-                {collectionRouteIdentifier ? (
-                  <Link
-                    to={`/collection/${encodeURIComponent(collectionRouteIdentifier)}`}
-                    className="inline-flex items-center px-3 py-1.5 text-sm font-semibold uppercase tracking-wide bg-[#a855f7] text-white rounded-lg hover:bg-[#9333ea] transition-colors"
-                  >
-                    Collection
-                  </Link>
-                ) : null}
-
-                <button
-                  type="button"
-                  onClick={handleRefresh}
-                  disabled={anyLoading || !resolvedAddress}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-white/[0.06] text-zinc-300 rounded-lg hover:bg-white/[0.10] disabled:opacity-50 transition-colors"
-                >
-                  {anyLoading ? (
-                    <div className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
-                  ) : null}
-                  <span>Refresh</span>
-                </button>
-              </div>
-              <Link
-                to="/"
-                onClick={handleBackToHome}
-                className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
-              >
-                ← Back to Home
-              </Link>
-            </div>
-          </div>
-        </div>
+        <ProfileHeader
+          setUsernameHref={isOwnProfile && /^0x/i.test(displayAddress) ? BROTHER_ID_URL : null}
+          title={mostPowerfulTitle}
+          displayName={displayAddress}
+          nameIsAddress={!accountUsername && !identifierIsUsername}
+          address={normalisedAccountAddress || null}
+          complete={totalSpecies > 0 && displayStats.uniqueBeastTypes >= totalSpecies}
+          avatarImage={displayStats.rarest?.image || null}
+          action={
+            collectionRouteIdentifier
+              ? { label: "View collection", href: `/collection/${encodeURIComponent(collectionRouteIdentifier)}` }
+              : null
+          }
+          onRefresh={handleRefresh}
+          refreshing={anyLoading}
+          refreshDisabled={anyLoading || !resolvedAddress}
+          onBack={handleBackToHome}
+          status={
+            usernamesError ? (
+              <p className="text-xs text-red-400">{usernamesError}</p>
+            ) : usernamesLoading && Object.keys(ownerUsernames).length === 0 ? (
+              <p className="text-xs text-zinc-500">Loading usernames...</p>
+            ) : null
+          }
+        />
 
         {/* Error Display */}
         {identifierError ? (
@@ -625,9 +590,10 @@ function AccountPage() {
           </div>
         ) : null}
 
-        <ThreeColumnStatsLayout
-          collectionStats={displayStats}
+        <CollectionHero
+          stats={displayStats}
           overviewCards={overviewCards}
+          onSelectBeast={handleSelectBeast}
         />
 
         {/* Summary Error */}

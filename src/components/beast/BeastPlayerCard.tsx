@@ -96,7 +96,7 @@ export default function BeastPlayerCard({ beast, trackSound, onStateChange, onPl
     <div style={{ position: "relative", width: "100%", aspectRatio: "250 / 350" }}>
       {(!artReady || failed) && (
         <div style={{ position: "absolute", inset: 0 }}>
-          <BeastCard beast={beast} owned={false} />
+          <BeastCard beast={beast} owned={false} showNotes={false} />
         </div>
       )}
       <div

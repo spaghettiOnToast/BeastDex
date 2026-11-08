@@ -6,7 +6,7 @@ import {
   VISUAL_TO_EFFECTS,
 } from "./helpers";
 export { hasCompleteMetadata, beastVisual, beastRarityScore };
-import { collectablesClient } from "./collectablesClient";
+import { collectablesClient, legacyCollectablesClient } from "./collectablesClient";
 import {
   ITEM_NAME_PREFIXES,
   ITEM_NAME_SUFFIXES,
@@ -25,14 +25,8 @@ import type { BeastVisual } from "./types";
 const _beastCursorCache = new Map<string, Map<number, string | null>>();
 
 // Module-level cache for Slayer leaderboard (excludes EXCLUDED_OWNER_ADDRESS)
-type SlayerCache = { timestamp: number; entries: import("./types").BeastSlayerEntry[] };
-let _slayerCache: SlayerCache | null = null;
 const SLAYER_CACHE_TTL_MS = 5 * 60 * 1000;
 
-// Module-level cache for Beast of the Day (24h window, sorted client-side)
-type BotdEntry = { rank: number; beast: import("./types").Beast; owner: string; rarity_score: number; power: number; beast_rank: number; last_death: number };
-let _beastOfTheDayCache: { timestamp: number; entries: BotdEntry[] } | null = null;
-const BOTD_CACHE_TTL_MS = 3 * 60 * 1000;
 
 function _sdkQueryKey(q: BeastQuery): string {
   return JSON.stringify(q, Object.keys(q as object).sort());
@@ -57,6 +51,7 @@ function _mapSort(sort: string): { sort: BeastQuery["sort"]; order: "asc" | "des
     case "tier": return { sort: "tier", order: "asc" };
     case "health": return { sort: "health", order: "desc" };
     case "rank": return { sort: "rank", order: "asc" };
+    case "rank-desc": return { sort: "rank", order: "desc" };
     case "last-death": return { sort: "last_death_timestamp", order: "desc" };
     default: return { sort: "power", order: "desc" };
   }
@@ -90,11 +85,15 @@ function _mapAttributeFilters(filters: AttributeFiltersInput): Partial<BeastQuer
         .filter((n): n is number => typeof n === "number");
       if (effects.length > 0) q.visualEffectsIn = effects;
     } else if (key === "card grade") {
-      // [min, max] range, or a single value meaning "at least".
+      // [min, max] range, or a single value meaning "at least"; [g, g] = exactly g.
       const lo = Number(values[0]);
       const hi = values.length >= 2 ? Number(values[1]) : CARD_GRADE_MAX;
-      if (Number.isFinite(lo) && lo > CARD_GRADE_MIN) q.cardGradeGte = lo;
-      if (Number.isFinite(hi) && hi < CARD_GRADE_MAX) q.cardGradeLte = hi;
+      if (values.length >= 2 && Number.isFinite(lo) && lo === hi) {
+        q.cardGrade = lo;
+      } else {
+        if (Number.isFinite(lo) && lo > CARD_GRADE_MIN) q.cardGradeGte = lo;
+        if (Number.isFinite(hi) && hi < CARD_GRADE_MAX) q.cardGradeLte = hi;
+      }
     } else if (key === "soulbound") {
       if (_boolFilter(values)) q.transferLockHours = beastsV3.SOULBOUND_TRANSFER_LOCK;
       else q.transferLockHoursLte = beastsV3.SOULBOUND_TRANSFER_LOCK - 1;
@@ -191,17 +190,85 @@ export async function fetchBeasts({
     includeOwner: true,
   };
 
+  // Rank sort: the API orders rank 0 (not ranked yet) before rank 1, so page
+  // through ranked beasts first and append the unranked ones after them.
+  if (sdkSort === "rank") {
+    return _fetchRankSorted(ownerAddress, baseQuery, page);
+  }
+
+  const result = await _fetchPage(ownerAddress, baseQuery, page);
+  return {
+    beasts: result.items.map(mapSdkBeast),
+    total: result.total,
+  };
+}
+
+/** One emulated page of a query (cursor chained from the previous page). */
+async function _fetchPage(ownerAddress: string | null, baseQuery: BeastQuery, page: number) {
   const cursor = _getCursor(baseQuery, page);
   const sdkQuery: BeastQuery = cursor ? { ...baseQuery, cursor } : baseQuery;
-
   const result = ownerAddress
     ? await collectablesClient.beasts.byOwner(ownerAddress, sdkQuery)
     : await collectablesClient.beasts.list(sdkQuery);
   _setCursor(baseQuery, page, result.nextCursor);
+  return result;
+}
+
+/** Most unranked beasts appended to a rank-sorted list (there are ~100 in total). */
+const MAX_UNRANKED_APPENDED = 2000;
+
+/** Every unranked (rank 0) beast matching `baseQuery`, strongest first. */
+function _fetchAllUnranked(ownerAddress: string | null, baseQuery: BeastQuery) {
+  const query: BeastQuery = { ...baseQuery, rank: 0, sort: "power", order: "desc" };
+  delete query.rankGte;
+  delete query.rankLte;
+  return apiCache.get("beast-query", { unranked: true, ownerAddress, query }, async () => {
+    const items: Awaited<ReturnType<typeof collectablesClient.beasts.list>>["items"] = [];
+    let cursor: string | undefined;
+    do {
+      const q: BeastQuery = cursor ? { ...query, cursor } : query;
+      const r = ownerAddress
+        ? await collectablesClient.beasts.byOwner(ownerAddress, q)
+        : await collectablesClient.beasts.list(q);
+      items.push(...r.items);
+      cursor = r.nextCursor ?? undefined;
+    } while (cursor && items.length < MAX_UNRANKED_APPENDED);
+    return items;
+  });
+}
+
+/** Ranked-beast totals per query, so pages past the ranked set skip that request. */
+const _rankedTotals = new Map<string, number>();
+
+async function _fetchRankSorted(
+  ownerAddress: string | null,
+  baseQuery: BeastQuery,
+  page: number
+): Promise<FetchBeastsResponse> {
+  const limit = baseQuery.limit ?? 20;
+  const start = (page - 1) * limit;
+  // A rank filter (always >= 1) already excludes unranked beasts.
+  const rankFiltered = baseQuery.rankGte != null && baseQuery.rankGte >= 1;
+  const rankedQuery: BeastQuery = { ...baseQuery, rankGte: Math.max(1, baseQuery.rankGte ?? 1) };
+  const rankedKey = _sdkQueryKey(rankedQuery) + (ownerAddress ?? "");
+
+  let rankedItems: Awaited<ReturnType<typeof collectablesClient.beasts.list>>["items"] = [];
+  let rankedTotal = _rankedTotals.get(rankedKey);
+  if (rankedTotal === undefined || start < rankedTotal) {
+    const r = await _fetchPage(ownerAddress, rankedQuery, page);
+    rankedItems = r.items;
+    rankedTotal = r.total;
+    _rankedTotals.set(rankedKey, rankedTotal);
+  }
+
+  const unranked = rankFiltered ? [] : await _fetchAllUnranked(ownerAddress, baseQuery);
+  const need = limit - rankedItems.length;
+  const unrankedStart = Math.max(0, start - rankedTotal);
+  const unrankedItems = need > 0 ? unranked.slice(unrankedStart, unrankedStart + need) : [];
 
   return {
-    beasts: result.items.map(mapSdkBeast),
-    total: result.total,
+    beasts: [...rankedItems, ...unrankedItems].map(mapSdkBeast),
+    total: rankedTotal + unranked.length,
   };
 }
 
@@ -340,88 +407,88 @@ export async function fetchBeastAttributeFilters(): Promise<BeastAttributeFilter
 }
 
 
-export async function fetchBeastOfTheDayLeaderboard({
-  limit = 10,
-  offset = 0,
-}: FetchLeaderboardOptions = {}): Promise<Array<{
-  rank: number;
-  beast: Beast;
-  owner: string;
-  rarity_score: number;
-  power: number;
-  beast_rank: number;
-  last_death: number;
-}>> {
-  const now = Date.now();
+/** How many legacy slayers the leaderboard covers (per order). */
+const SLAYER_POOL_SIZE = 100;
+const _slayerPools = new Map<string, { timestamp: number; items: SdkLegacyBeast[] }>();
+type SdkLegacyBeast = Awaited<ReturnType<typeof legacyCollectablesClient.beasts.list>>["items"][number];
+type SdkV3Beast = Awaited<ReturnType<typeof collectablesClient.beasts.list>>["items"][number];
+const _v3ByAffixes = new Map<string, SdkV3Beast | null>();
 
-  if (!_beastOfTheDayCache || now - _beastOfTheDayCache.timestamp > BOTD_CACHE_TTL_MS) {
-    const twentyFourHoursAgo = Math.floor(now / 1000) - 24 * 60 * 60;
-
-    const result = await collectablesClient.beasts.list({
-      lastDeathTimestampGte: twentyFourHoursAgo,
-      sort: "power",
-      order: "desc",
-      limit: 100,
+/**
+ * The v3 token of a legacy beast: legacy beasts are unique per species +
+ * prefix + suffix, and the unnamed ones are the species' Genesis beast.
+ */
+async function findV3Twin(legacy: SdkLegacyBeast): Promise<SdkV3Beast | null> {
+  const named = Boolean(legacy.prefixName && legacy.suffixName);
+  const key = named ? `${legacy.beastId}|${legacy.prefixName}|${legacy.suffixName}` : `${legacy.beastId}|genesis`;
+  if (_v3ByAffixes.has(key)) return _v3ByAffixes.get(key) ?? null;
+  try {
+    const r = await collectablesClient.beasts.list({
+      beastId: legacy.beastId,
+      ...(named ? { prefixName: legacy.prefixName!, suffixName: legacy.suffixName! } : { genesis: true }),
+      limit: 1,
       includeOwner: true,
     });
-
-    const sorted = result.items
-      .map((item) => {
-        const beast = mapSdkBeast(item);
-        return {
-          beast,
-          owner: item.owner ?? "",
-          rarity_score: beastRarityScore(beast),
-          power: item.power ?? 0,
-          beast_rank: item.rank ?? 999999,
-          last_death: item.lastDeathTimestamp ?? 0,
-        };
-      })
-      .sort(
-        (a, b) =>
-          b.rarity_score - a.rarity_score ||
-          b.power - a.power ||
-          a.beast_rank - b.beast_rank
-      )
-      .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
-
-    _beastOfTheDayCache = { timestamp: now, entries: sorted };
+    const twin = r.items[0] ?? null;
+    _v3ByAffixes.set(key, twin);
+    return twin;
+  } catch {
+    return null; // not cached: retry next time
   }
-
-  return _beastOfTheDayCache.entries.slice(offset, offset + limit);
 }
 
+/**
+ * All-time Slayer leaderboard. v3 reset adventurer kills at the migration, so
+ * kills come from the legacy collection (ranked there), plus any v3 kills since;
+ * each entry shows the beast's current v3 token, owner and rank.
+ */
 export async function fetchBeastSlayerLeaderboard({
   limit = 10,
   offset = 0,
+  order = "desc",
+  includeGenesis = false,
 }: FetchLeaderboardOptions = {}): Promise<BeastSlayerEntry[]> {
   const now = Date.now();
-
-  if (!_slayerCache || now - _slayerCache.timestamp > SLAYER_CACHE_TTL_MS) {
-    const result = await collectablesClient.beasts.list({
+  const poolKey = `${order}|${includeGenesis ? "all" : "named"}`;
+  let pool = _slayerPools.get(poolKey);
+  if (!pool || now - pool.timestamp > SLAYER_CACHE_TTL_MS) {
+    const result = await legacyCollectablesClient.beasts.list({
       sort: "adventurers_killed",
-      order: "desc",
+      order,
       adventurersKilledGte: 1,
-      limit: 100,
+      // Genesis beasts (one per species, all held by one wallet) dominate the
+      // all-time kills; hidden unless asked for
+      ...(includeGenesis ? {} : { genesis: false }),
+      limit: SLAYER_POOL_SIZE,
       includeOwner: true,
     });
-
-    const excludedAddr = normalizeAddress(EXCLUDED_OWNER_ADDRESS);
-    const entries = result.items
-      .filter((item) => !item.owner || normalizeAddress(item.owner) !== excludedAddr)
-      .map((item, idx) => ({
-        rank: idx + 1,
-        beastId: toTokenIdString(item.tokenId) ?? String(item.tokenId),
-        beastName: mapSdkBeast(item).name,
-        beastRank: item.rank ?? 0,
-        owner: item.owner ?? null,
-        kills: item.adventurersKilled ?? 0,
-      }));
-
-    _slayerCache = { timestamp: now, entries };
+    pool = { timestamp: now, items: result.items };
+    _slayerPools.set(poolKey, pool);
   }
 
-  return _slayerCache.entries.slice(offset, offset + limit);
+  const slice = pool.items.slice(offset, offset + limit);
+  const twins: Array<SdkV3Beast | null> = [];
+  for (let i = 0; i < slice.length; i += 10) {
+    twins.push(...(await Promise.all(slice.slice(i, i + 10).map(findV3Twin))));
+  }
+
+  const excludedAddr = normalizeAddress(EXCLUDED_OWNER_ADDRESS);
+  return slice
+    .map((legacy, i) => {
+      const twin = twins[i];
+      const owner = twin?.owner ?? legacy.owner ?? null;
+      return {
+        rank: offset + i + 1,
+        beastId: twin ? toTokenIdString(twin.tokenId) ?? String(twin.tokenId) : String(legacy.tokenId),
+        beastName: mapSdkBeast((twin ?? legacy) as SdkV3Beast).name,
+        beastRank: twin?.rank ?? legacy.rank ?? 0,
+        owner,
+        kills: (legacy.adventurersKilled ?? 0) + (twin?.adventurersKilled ?? 0),
+        inV3: Boolean(twin),
+        genesis: Boolean(twin?.genesis ?? legacy.genesis),
+      };
+    })
+    .filter((e) => !e.owner || normalizeAddress(e.owner) !== excludedAddr);
 }
 
 export async function fetchOwnerBeastStats(
@@ -457,6 +524,65 @@ export type TierCollectionStats = {
   maxSupply: number;
 };
 
+/** Card grades shown on the Statistics tab (0 = ungraded). */
+export const STAT_CARD_GRADES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+
+/** Number of beasts at each card grade (grade -> count), cached 30 min. */
+export async function fetchCardGradeCounts(): Promise<Record<number, number>> {
+  return apiCache.get("beast-grade-counts", {}, async () => {
+    const totals = await Promise.all(
+      STAT_CARD_GRADES.map((cardGrade) =>
+        collectablesClient.beasts.list({ cardGrade, limit: 1 }).then((r) => r.total ?? 0)
+      )
+    );
+    return Object.fromEntries(STAT_CARD_GRADES.map((g, i) => [g, totals[i]]));
+  });
+}
+
+export type CollectionGlance = {
+  holders: number;
+  totalBeasts: number;
+  midi: number;
+  genesis: number;
+  /** shiny + animated shiny */
+  shiny: number;
+  /** Grade 10 + Animated Shiny */
+  perfectCards: number;
+  strongest: Beast | null;
+  topName: { label: string; count: number } | null;
+  topPrefix: { label: string; count: number } | null;
+};
+
+/** Collection-wide figures for the Statistics tab (cached 10 min). */
+export async function fetchCollectionGlance(): Promise<CollectionGlance> {
+  return apiCache.get("collection-glance", {}, async () => {
+    const [stats, perfect, strongest, names, prefixes] = await Promise.all([
+      collectablesClient.beasts.stats(),
+      collectablesClient.beasts.list({ cardGrade: 10, visualEffects: VISUAL_TO_EFFECTS["Shiny MIDI"], limit: 1 }),
+      collectablesClient.beasts.list({ sort: "power", order: "desc", limit: 1, includeOwner: true }),
+      collectablesClient.beasts.groups({ groupBy: "full_name", limit: 5 }),
+      collectablesClient.beasts.groups({ groupBy: "prefix", limit: 5 }),
+    ]);
+    const num = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0);
+    // "__none__" = beasts without a special name
+    const top = (groups: typeof names) => {
+      const g = groups.items.find((x) => x.key !== "__none__");
+      return g ? { label: g.label.replace(/^"|"$/g, ""), count: g.count } : null;
+    };
+    return {
+      holders: num(stats.holders),
+      totalBeasts: num(stats.totalTokens),
+      midi: num(stats.midi),
+      genesis: num(stats.genesis),
+      shiny: num(stats.shiny),
+      perfectCards: perfect.total ?? 0,
+      strongest: strongest.items[0] ? mapSdkBeast(strongest.items[0]) : null,
+      topName: top(names),
+      topPrefix: top(prefixes),
+    };
+  });
+}
+
 export async function fetchTierCollectionStats(): Promise<TierCollectionStats[]> {
   return apiCache.get("tier-collection-stats", {}, async () => {
     const species = await fetchBeastSpecies();
@@ -482,6 +608,57 @@ export type OwnerBeastHighlights = {
   lastCollectedName: string | null;
 };
 
+type SdkOwnedBeast = Awaited<ReturnType<typeof collectablesClient.beasts.byOwner>>["items"][number];
+
+/** Worst per-species rank in the v3 data (rank 1 = best of its species, 0 = unranked). */
+const MAX_SPECIES_RANK = 1243;
+
+/**
+ * Rarity score (0–3): rank, card grade and visual each contribute 0–1.
+ * - rank 1 scores 1, falling linearly to 0 at MAX_SPECIES_RANK; unranked (0) scores 0
+ * - card grade 10 scores 1, grade 1 scores 0
+ * - Animated Shiny 1, Shiny 2/3, Animated 1/3, Standard 0
+ */
+export function ownedBeastRarityScore(b: {
+  rank?: number | null;
+  cardGrade?: number | null;
+  shiny?: boolean | null;
+  animated?: boolean | null;
+}): number {
+  const rank = b.rank ?? 0;
+  const rankScore = rank >= 1 ? Math.max(0, (MAX_SPECIES_RANK - rank) / (MAX_SPECIES_RANK - 1)) : 0;
+  const grade = b.cardGrade ?? 0;
+  const gradeScore = grade >= 1 ? Math.min(1, (grade - 1) / 9) : 0;
+  const visualScore = b.shiny && b.animated ? 1 : b.shiny ? 2 / 3 : b.animated ? 1 / 3 : 0;
+  return rankScore + gradeScore + visualScore;
+}
+
+/** Highest of `items` by `key`, ties broken by higher power. */
+function maxBy<T extends { power?: number | null }>(items: T[], key: (t: T) => number): T | null {
+  let best: T | null = null;
+  let bestKey = -Infinity;
+  for (const item of items) {
+    const k = key(item);
+    if (k > bestKey || (k === bestKey && best && (item.power ?? 0) > (best.power ?? 0))) {
+      best = item;
+      bestKey = k;
+    }
+  }
+  return best;
+}
+
+/** Owner highlights computed from their full holding (one owner-scoped query). */
+export function pickOwnerHighlights(items: SdkOwnedBeast[]) {
+  const ranked = items.filter((b) => (b.rank ?? 0) >= 1);
+  return {
+    // v3 shiny/animated live in visualEffects; beastVisual normalises both formats
+    rarest: maxBy(items, (b) => ownedBeastRarityScore({ ...b, ...beastVisual(b) })),
+    // rank 1 is the best; unranked (0) beasts can't be "highest ranked"
+    highestRanked: maxBy(ranked, (b) => -(b.rank ?? 0)),
+    lastCollected: maxBy(items, (b) => Number(b.lastDeathTimestamp ?? 0)),
+  };
+}
+
 export async function fetchOwnerBeastHighlights(
   ownerAddress: string
 ): Promise<OwnerBeastHighlights> {
@@ -498,19 +675,10 @@ export async function fetchOwnerBeastHighlights(
   return apiCache.get("owner-beast-highlights", { address: normalised }, async () => {
     const addr = normalizeAddress(normalised);
 
-    const [animatedShiny, shinyOnly, animatedOnly, highestRanked, lastCollected] =
-      await Promise.all([
-        collectablesClient.beasts.byOwner(addr, { visualEffects: VISUAL_TO_EFFECTS["Shiny Animated"], sort: "power", order: "desc", limit: 1 }),
-        collectablesClient.beasts.byOwner(addr, { visualEffects: VISUAL_TO_EFFECTS.Shiny, sort: "power", order: "desc", limit: 1 }),
-        collectablesClient.beasts.byOwner(addr, { visualEffects: VISUAL_TO_EFFECTS.Animated, sort: "power", order: "desc", limit: 1 }),
-        collectablesClient.beasts.byOwner(addr, { sort: "rank", order: "asc", limit: 1 }),
-        collectablesClient.beasts.byOwner(addr, { sort: "last_death_timestamp", order: "desc", limit: 1 }),
-      ]);
-
-    // Rarest: animated+shiny > shiny-only > animated-only > null
-    const rarestItem = animatedShiny.items[0] ?? shinyOnly.items[0] ?? animatedOnly.items[0] ?? null;
-    const highestRankedItem = highestRanked.items[0] ?? null;
-    const lastCollectedItem = lastCollected.items[0] ?? null;
+    // Owner-scoped queries return the whole holding by default
+    const { items } = await collectablesClient.beasts.byOwner(addr, {});
+    const { rarest: rarestItem, highestRanked: highestRankedItem, lastCollected: lastCollectedItem } =
+      pickOwnerHighlights(items);
 
     const lastCollectedBeast = lastCollectedItem ? mapSdkBeast(lastCollectedItem) : null;
 

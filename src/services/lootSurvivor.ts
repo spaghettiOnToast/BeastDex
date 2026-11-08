@@ -94,7 +94,7 @@ export const DUNGEONS: Dungeon[] = [
     tagline: "Free entries from your QR leaflet",
     image: "/images/dungeons/norwich.png",
     accentColor: "#80ff00",
-    status: "online",
+    status: "closed",
     entryCost: "Free",
     difficulty: "Easy",
     reward: "Tiddy Mun Beast",

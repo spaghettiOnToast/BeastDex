@@ -28,7 +28,7 @@ export default function SearchBar({ value, onChange, onSubmit }: Props) {
       <div className="relative flex-1">
         <Input
           type="text"
-          placeholder="Search beasts & usernames..."
+          placeholder="Search BeastDex"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="w-full px-3 sm:px-4 py-2 pr-10 sm:pr-11 text-sm border-white/[0.06] bg-white/[0.04] text-white focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent/30 placeholder:text-zinc-500 rounded-lg"

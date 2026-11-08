@@ -13,7 +13,7 @@ export type BeastAttribute = {
 };
 
 /** Original-art visual preset (Beasts v3 `visualEffects` 0-3). */
-export type BeastVisual = "Regular" | "Shiny" | "Animated" | "Shiny Animated";
+export type BeastVisual = "Regular" | "Shiny" | "MIDI" | "Shiny MIDI";
 
 export type Beast = {
   /** `beasts_nft:0x<hex>` */
@@ -41,6 +41,8 @@ export type Beast = {
   /** Unix seconds a timed transfer lock ends; 0/undefined when none */
   transferLockedUntil?: number;
   genesis?: boolean;
+  /** v3 minter data: legacy token id for migrated beasts, 0 for new v3 mints */
+  minterData?: number;
   mega?: boolean;
   midi?: boolean;
   /** false when the package has no bundled sprite (v3 species past the bundled set) */
@@ -50,7 +52,7 @@ export type Beast = {
 export type AttributeFilterInput = Record<string, Array<string | number>>;
 export type BeastAttributeFilters = Record<string, string[]>;
 
-export type BeastSortField = "default" | "beast" | "tier" | "health" | "rank" | "last-death";
+export type BeastSortField = "default" | "beast" | "tier" | "health" | "rank" | "rank-desc" | "last-death";
 
 export type FetchBeastsOptions = {
   limit?: number;
@@ -89,11 +91,16 @@ export type BeastHighlights = {
 
 export type BeastSlayerEntry = {
   rank: number;
+  /** v3 token id when the beast was found in v3, else the legacy token id */
   beastId: string;
   beastName: string;
   beastRank: number;
   owner: string | null;
+  /** all-time adventurer kills: legacy (pre-migration) + v3 */
   kills: number;
+  /** false when no v3 token was found for this legacy beast */
+  inV3: boolean;
+  genesis: boolean;
 };
 
 export type BeastPowerRank = {
@@ -113,4 +120,8 @@ export type BeastHealthRank = {
 export type FetchLeaderboardOptions = {
   limit?: number;
   offset?: number;
+  /** "desc" = most first (default) */
+  order?: "asc" | "desc";
+  /** Slayer: include the 75 Genesis beasts (default false) */
+  includeGenesis?: boolean;
 };

@@ -125,6 +125,9 @@ function matchV3Filter(beast: Beast, trait: string, values: string[]): boolean |
       return Boolean(beast.mega) === isYes(values);
     case "midi":
       return Boolean(beast.midi) === isYes(values);
+    case "festival":
+      // Marketplace-only trait; Beasts are never festival tokens
+      return !isYes(values);
     default:
       return null;
   }
@@ -200,6 +203,27 @@ export function getBeastHealth(beast: Beast | null | undefined): number | null {
 export function getBeastRank(beast: Beast | null | undefined): number | null {
   return getNumericAttribute(beast, "Rank");
 }
+
+/**
+ * Why a beast has no rank (rank 0), or null when it is ranked:
+ * - "genesis": the 75 original Genesis mints (never ranked by design)
+ * - "new": v3 mints with no legacy origin (minterData 0). Ranks are set by an
+ *   admin `update_rankings` call on the Beasts contract, last run at the v3
+ *   migration (2026-11-03), so every beast minted since is still rank 0.
+ * - "unranked": anything else without a rank
+ * (Festival beasts — Tiddy Mun / Black Shuck — are separate collections with
+ * their own Festival badge.)
+ */
+export function unrankedReason(beast: Beast | null | undefined): "genesis" | "new" | "unranked" | null {
+  if (!beast) return null;
+  const rank = getBeastRank(beast);
+  if (rank != null && rank >= 1) return null;
+  if (beast.genesis) return "genesis";
+  if (beast.minterData === 0) return "new";
+  return "unranked";
+}
+
+export const UNRANKED_LABELS = { genesis: "Genesis", new: "New", unranked: "Unranked" } as const;
 
 /**
  * Get the last death timestamp from a beast

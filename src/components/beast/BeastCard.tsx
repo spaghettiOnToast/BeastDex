@@ -11,6 +11,8 @@ import type { Beast, BeastAttribute } from "../../services/beast";
 import { CONTRACT_ADDRESS } from "../../services/beast/constants";
 import { readRpcUrls } from "../../services/tx";
 import { fetchV3CardImgSrc, spriteSpeciesName } from "../../services/beast/cardImage";
+import { unrankedReason, UNRANKED_LABELS } from "../../utils/beast";
+import MidiNotesArt from "./MidiNotesArt";
 
 // On-chain card images for beasts without a bundled sprite (v3 species past the
 // bundled set), keyed by token id. Shared across cards to avoid repeat RPC reads.
@@ -51,6 +53,8 @@ type Props = {
   duplicateCount?: number;
   /** Highlights the card when every named variant of this species/affix has been collected */
   hasAllVariants?: boolean;
+  /** Draw the MIDI notes background on MIDI beasts (default true). */
+  showNotes?: boolean;
   className?: string;
 };
 
@@ -81,6 +85,7 @@ const BeastCard = memo(function BeastCard({
   disabled = false,
   duplicateCount,
   hasAllVariants = false,
+  showNotes = true,
   className,
 }: Props) {
   const { image, owner, attributes, power } = beast;
@@ -171,7 +176,7 @@ const BeastCard = memo(function BeastCard({
     <div
       style={{ cursor: disabled || missing ? "default" : "pointer", opacity: missing || disabled ? 0.5 : 1, position: "relative" }}
       onClick={() => { if (!disabled && !missing) onSelect?.(beast); }}
-      className={`transition-transform duration-150 hover:scale-[1.03] w-full${className ? ` ${className}` : ""}`}
+      className={`@container transition-transform duration-150 hover:scale-[1.03] w-full${className ? ` ${className}` : ""}`}
     >
       {(duplicateCount ?? 0) > 1 && !missing && (
         <div style={{
@@ -194,6 +199,16 @@ const BeastCard = memo(function BeastCard({
             style={{ width: "100%", height: "100%", display: "block" }}
           />
         )}
+        {/* MIDI beasts: the notes background over the card, drawn from its song. */}
+        {showNotes && cardImageSrc && !missing && beast.midi && beast.tokenId && beast.visualEffects !== undefined && (
+          <MidiNotesArt
+            card={cardImageSrc}
+            tokenId={beast.tokenId}
+            speciesId={beast.speciesId}
+            visualEffects={beast.visualEffects}
+            alt={String(getAttr(attributes, "Beast") ?? beast.name)}
+          />
+        )}
         {/* Grade badge: gold for 10, dark for 1-9, red when the beast has no
             grade at all (legacy beast or missing data) so it stands out.
             Placeholder cards (no token id) and "missing" slots get none. */}
@@ -212,10 +227,66 @@ const BeastCard = memo(function BeastCard({
                 border: `1px solid ${!graded ? "#fca5a5" : perfect ? "#f3dc8a" : "rgba(255,255,255,0.25)"}`,
                 borderRadius: 4,
                 boxShadow: "0 1px 4px rgba(0,0,0,0.6)",
-                padding: "3px 5px", fontSize: 9, fontWeight: "bold", letterSpacing: 0.5,
+                fontWeight: "bold", letterSpacing: 0.5,
               }}
+              // Narrow cards (3-up on phones) get a compact "G8" so the
+              // badge doesn't cover the beast's name.
+              className="px-[3px] py-[2px] text-[7px] @min-[150px]:px-[5px] @min-[150px]:py-[3px] @min-[150px]:text-[9px]"
             >
-              {graded ? `GRADE ${beast.cardGrade}` : "NO GRADE"}
+              {graded ? (
+                <>
+                  <span className="@min-[150px]:hidden">G{beast.cardGrade}</span>
+                  <span className="hidden @min-[150px]:inline">GRADE {beast.cardGrade}</span>
+                </>
+              ) : (
+                <>
+                  <span className="@min-[150px]:hidden">NO G</span>
+                  <span className="hidden @min-[150px]:inline">NO GRADE</span>
+                </>
+              )}
+            </div>
+          );
+        })()}
+        {/* MIDI: the card plays a MIDI track (its notes background is drawn by MidiNotesArt). */}
+        {!missing && beast.tokenId && beast.midi && (
+          <div
+            title="MIDI beast — its card plays a music track; open it to listen"
+            style={{
+              position: "absolute", top: "16.5%", right: "8%", zIndex: 20, lineHeight: 1,
+              background: "rgba(11,11,13,0.85)", color: "#c4b5fd", fontWeight: "bold", letterSpacing: 0.5,
+              border: "1px solid rgba(196,181,253,0.5)", borderRadius: 4,
+              boxShadow: "0 1px 4px rgba(0,0,0,0.6)",
+            }}
+            className="px-[3px] py-[2px] text-[7px] @min-[150px]:px-[5px] @min-[150px]:py-[3px] @min-[150px]:text-[9px]"
+          >
+            ♪<span className="hidden @min-[150px]:inline"> MIDI</span>
+          </div>
+        )}
+        {/* Rank 0: label why (Genesis / New / Unranked) rather than leaving
+            the corner blank (the card art draws no rank for 0). */}
+        {!missing && beast.tokenId && beast.visualEffects !== undefined && cardInput.rank < 1 && (() => {
+          const reason = unrankedReason(beast) ?? "unranked";
+          const tone =
+            reason === "genesis"
+              ? { color: "#e2b94c", border: "rgba(226,185,76,0.55)", title: "Genesis beast — one of the 75 originals" }
+              : reason === "new"
+                ? { color: "#7dd3fc", border: "rgba(125,211,252,0.45)", title: "New beast — minted after the last ranking update, awaiting a rank" }
+                : { color: "#a1a1aa", border: "rgba(255,255,255,0.15)", title: "Unranked — this beast hasn't been ranked yet" };
+          const label = UNRANKED_LABELS[reason];
+          const short = reason === "genesis" ? "GEN" : reason === "new" ? "NEW" : "UNR.";
+          return (
+            <div
+              title={tone.title}
+              style={{
+                position: "absolute", top: 5, right: 5, zIndex: 20, lineHeight: 1,
+                background: "#0b0b0d", color: tone.color, fontWeight: "bold", letterSpacing: 0.5,
+                border: `1px solid ${tone.border}`, borderRadius: 4,
+                boxShadow: "0 1px 4px rgba(0,0,0,0.6)",
+              }}
+              className="px-[3px] py-[2px] text-[7px] uppercase @min-[150px]:px-[5px] @min-[150px]:py-[3px] @min-[150px]:text-[9px]"
+            >
+              <span className="@min-[150px]:hidden">{short}</span>
+              <span className="hidden @min-[150px]:inline">{label}</span>
             </div>
           );
         })()}

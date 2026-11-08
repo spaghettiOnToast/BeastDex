@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { type BeastHighlights, type TierCollectionStats } from "../../services/beast";
 import { Alert, AlertDescription } from "../ui/alert";
+import { presetShareLabel } from "../../services/beast/helpers";
 
 const TIER_COLORS: Record<number, { text: string; gradient: string; border: string }> = {
   1: {
@@ -61,9 +62,11 @@ export const StatsPanel = memo(function StatsPanel({
   const remaining = Math.max(totalSupply - mintedCount, 0);
   const progress = totalSupply > 0 ? (mintedCount / totalSupply) * 100 : 0;
 
+  const presetTotal =
+    (highlights?.animatedShinyCount ?? 0) + (highlights?.shinyCount ?? 0) + (highlights?.animatedCount ?? 0) + (highlights?.standardCount ?? 0);
   const summaryTiles = [
     {
-      label: "Animated Shinies",
+      label: "Shiny MIDI Beasts",
       value: highlights?.animatedShinyCount ?? 0,
       gradient: "from-pink-400/20 via-purple-400/10 to-accent/20",
       accent: "text-pink-400",
@@ -75,7 +78,7 @@ export const StatsPanel = memo(function StatsPanel({
       accent: "text-amber-400",
     },
     {
-      label: "Animated Beasts",
+      label: "MIDI Beasts",
       value: highlights?.animatedCount ?? 0,
       gradient: "from-sky-400/20 via-accent/10 to-teal-400/20",
       accent: "text-accent",
@@ -134,7 +137,7 @@ export const StatsPanel = memo(function StatsPanel({
                 {highlightsLoading && !highlights ? "—" : tile.value.toLocaleString()}
               </div>
               <div className="mt-1 sm:mt-2 text-[10px] sm:text-xs text-zinc-500">
-                Total collected across all adventurers
+                {highlightsLoading && !highlights ? "\u00a0" : presetShareLabel(tile.value, presetTotal)}
               </div>
             </div>
           </div>

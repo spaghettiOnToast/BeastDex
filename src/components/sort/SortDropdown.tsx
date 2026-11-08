@@ -35,6 +35,8 @@ export type SortOption =
  */
 export function sortOptionToBeastSortField(sortOption: SortOption): BeastSortField {
   if (sortOption === "default") return "default";
+  // Rank is the one API sort with both directions
+  if (sortOption === "rank-desc") return "rank-desc";
 
   // Strip the -asc or -desc suffix to get the base field
   const field = sortOption.replace(/-(?:asc|desc)$/, "") as BeastSortField;

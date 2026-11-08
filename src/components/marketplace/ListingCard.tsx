@@ -124,7 +124,10 @@ function ListingCard({
               ) : (
                 <div className={compact ? "aspect-[4/5]" : "aspect-square"} />
               )}
-              <span className="absolute left-1.5 top-1.5 rounded bg-black/80 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+              <span className="absolute left-1.5 top-1.5 rounded border border-gold/50 bg-black/80 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-gold">
+                Festival
+              </span>
+              <span className="absolute bottom-1.5 left-1.5 rounded bg-black/80 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
                 {festival.collectionName} #{festival.tokenId}
               </span>
             </div>
