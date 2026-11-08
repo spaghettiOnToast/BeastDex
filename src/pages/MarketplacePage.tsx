@@ -79,8 +79,9 @@ import { shortTokenId } from "../utils/tokenId";
 import { executeMarketplaceCalls } from "../services/marketplace/safety";
 import { IndexerStatusBanner } from "../components/marketplace/IndexerStatusBanner";
 import { SUMMIT_ENABLED } from "../services/summitApi/constants";
-import { FestivalHoldingsPanel } from "../components/marketplace/FestivalHoldingsPanel";
-import { FESTIVAL_COLLECTIONS, FESTIVAL_FILTER_TRAIT, festivalPlaceholderBeast } from "../services/festivalBeasts";
+import { FestivalHoldingItems } from "../components/marketplace/FestivalHoldingItems";
+import { useHeldFestivalTokens } from "../hooks/useFestivalTokens";
+import { FESTIVAL_FILTER_TRAIT, festivalPlaceholderBeast } from "../services/festivalBeasts";
 
 // Storage keys for hidden offers
 const HIDDEN_OFFERS_KEY = "beastdex-hidden-offers";
@@ -901,6 +902,11 @@ export default function MarketplacePage() {
     ],
     [floorPriceParts, filtersHook.myActiveListings.length, totalListingsCount, visibleOffersReceived.length, uniqueSellers]
   );
+
+  // Festival tokens held, shown in the My Items grid when the filters allow them
+  const heldFestivalTokens = useHeldFestivalTokens(address);
+  const showFestivalHoldings =
+    heldFestivalTokens.length > 0 && festivalItemsMatchFilters(filtersHook.attributeFilters);
 
   // Beast filter options plus the marketplace-only Festival (Yes/No/Any) trait
   const marketplaceFilterOptions = useMemo(
@@ -2144,21 +2150,6 @@ export default function MarketplacePage() {
           </section>
         )}
 
-        {/* My Items: festival tokens held (each section hides itself when empty) */}
-        {filtersHook.activeTab === "my-beasts" &&
-          festivalItemsMatchFilters(filtersHook.attributeFilters) &&
-          FESTIVAL_COLLECTIONS.map((c) => (
-            <section key={c.slug} className="space-y-3">
-              <FestivalHoldingsPanel
-                slug={c.slug}
-                address={address}
-                listings={dataHook.listings}
-                onListed={() => dataHook.refetchOrders()}
-                asSection
-              />
-            </section>
-          ))}
-
         {filtersHook.activeTab === "my-beasts" && (
           <section className="space-y-4">
             {dataHook.userBeastsLoading && filtersHook.sortedUserBeasts.length === 0 ? (
@@ -2178,7 +2169,7 @@ export default function MarketplacePage() {
               <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-4">
                 <p className="text-sm text-yellow-200">{dataHook.userBeastsError}</p>
               </div>
-            ) : filtersHook.sortedUserBeasts.length === 0 ? (
+            ) : filtersHook.sortedUserBeasts.length === 0 && !showFestivalHoldings ? (
               <p className="rounded-lg border border-white/[0.06] bg-white/[0.04] px-4 py-8 text-center text-xs text-zinc-400">
                 You don't own any beasts yet.
               </p>
@@ -2214,6 +2205,14 @@ export default function MarketplacePage() {
                   )}
                 </div>
                 <div className="grid grid-cols-3 gap-1.5 xs:gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                  {/* Festival tokens (Black Shuck, Tiddy Mun) share the grid, first page only */}
+                  {showFestivalHoldings && filtersHook.currentPage === 1 && (
+                    <FestivalHoldingItems
+                      address={address}
+                      listings={dataHook.listings}
+                      onListed={() => dataHook.refetchOrders()}
+                    />
+                  )}
                   {filtersHook.userBeastsToRender.map((beast) => {
                     const tokenId = filtersHook.normalizedBeastTokenIds.get(beast.id) || beast.id;
                     const isListed = filtersHook.alreadyListedTokenIds.has(tokenId);

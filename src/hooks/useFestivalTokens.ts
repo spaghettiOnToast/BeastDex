@@ -6,6 +6,7 @@ import {
   fetchFestivalTokens,
   ownedFestivalTokenIds,
   toFestivalListingToken,
+  type FestivalCollection,
   type FestivalToken,
 } from "../services/festivalBeasts";
 import type { FestivalListingToken } from "../services/marketplace/types";
@@ -58,4 +59,19 @@ export function useFestivalTokens(enabled = true) {
   );
 
   return { getFestival, ownedKeys, tokensByCollection, isLoading: results.some((r) => r.isLoading) };
+}
+
+export type HeldFestivalToken = { collection: FestivalCollection; token: FestivalToken };
+
+/** Festival tokens held by `address` (Black Shuck, Tiddy Mun), across all festival collections. */
+export function useHeldFestivalTokens(address: string | undefined): HeldFestivalToken[] {
+  const { tokensByCollection } = useFestivalTokens(!!address);
+  return useMemo(
+    () =>
+      tokensByCollection.flatMap(({ collection, tokens }) => {
+        const ids = ownedFestivalTokenIds(tokens, address);
+        return tokens.filter((t) => ids.has(t.tokenId)).map((token) => ({ collection, token }));
+      }),
+    [tokensByCollection, address],
+  );
 }
