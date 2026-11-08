@@ -99,8 +99,8 @@ export function GradeBrowser() {
         <div className="mt-4 flex items-center justify-center gap-3 text-xs">
           <button
             type="button"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1 || loading}
+            onClick={() => !loading && setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
             className="rounded-lg border border-white/[0.08] px-3 py-1.5 text-zinc-300 hover:bg-white/[0.06] disabled:opacity-40"
           >
             ← Prev
@@ -110,8 +110,8 @@ export function GradeBrowser() {
           </span>
           <button
             type="button"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages || loading}
+            onClick={() => !loading && setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages}
             className="rounded-lg border border-white/[0.08] px-3 py-1.5 text-zinc-300 hover:bg-white/[0.06] disabled:opacity-40"
           >
             Next →
