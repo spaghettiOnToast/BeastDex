@@ -10,6 +10,9 @@ const TOKEN_LOGOS: Record<string, string> = {
   STRK: "https://imagedelivery.net/0xPAQaDtnQhBs8IzYRIlNg/1b126320-367c-48ed-cf5a-ba7580e49600/logo",
   ETH: "https://imagedelivery.net/0xPAQaDtnQhBs8IzYRIlNg/e07829b7-0382-4e03-7ecd-a478c5aa9f00/logo",
   USDC: "https://imagedelivery.net/0xPAQaDtnQhBs8IzYRIlNg/e5aaa970-a998-47e8-bd43-4a3b56b87200/logo",
+  // From Ekubo's token list
+  SURVIVOR: "https://imagedelivery.net/0xPAQaDtnQhBs8IzYRIlNg/399cb277-f675-4efe-97fb-fac94a236a00/logo",
+  SKULL: "https://imagedelivery.net/0xPAQaDtnQhBs8IzYRIlNg/token-logos/ecfa655e252de100820855f0cc57b373d7c801068cbc337ba3df0153566bc7d3/logo",
 };
 
 const SIZE_CLASSES = {

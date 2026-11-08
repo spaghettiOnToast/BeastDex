@@ -17,6 +17,7 @@ import { ControllerConnector } from "@cartridge/connector";
 import { useTermsOfService } from "../../contexts/TermsOfServiceContext";
 import { WalletConnectDialog } from "./WalletConnectDialog";
 import { MarketplaceApprovals } from "./MarketplaceApprovals";
+import { WalletBalances } from "./WalletBalances";
 import { MARKETPLACE_ENABLED } from "../../services/marketplace/constants";
 import { BROTHER_ID_URL, lookupWalletNames } from "../../services/walletNames";
 import { normaliseStarknetAddress } from "../../utils/address";
@@ -150,6 +151,8 @@ export function WalletButton() {
             {walletName(connector)}
           </div>
         )}
+        <WalletBalances address={address} />
+        <DropdownMenuSeparator className="bg-white/[0.06]" />
         <DropdownMenuItem
           onClick={() => navigate(`/account/${encodeURIComponent(username || address)}`)}
           className="cursor-pointer focus:bg-white/[0.06] focus:text-white"
