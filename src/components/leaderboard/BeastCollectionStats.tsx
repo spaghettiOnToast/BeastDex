@@ -8,6 +8,7 @@ import {
 } from "../../services/beast";
 import { useBeastHighlights, useSpeciesCount } from "../../hooks/useBeastQueries";
 import { GradeBrowser } from "./GradeBrowser";
+import { CollectionGlance } from "./CollectionGlance";
 
 const TIER_COLORS: Record<number, { text: string; gradient: string; border: string }> = {
   1: { text: "text-orange-400", gradient: "from-orange-500 to-orange-400", border: "border-orange-500/30" },
@@ -87,6 +88,9 @@ export function BeastCollectionStats() {
           </div>
         ))}
       </div>
+
+      {/* Collection-wide fun figures */}
+      <CollectionGlance />
 
       {/* Tier stats */}
       <div className="bg-surface-raised border border-white/[0.06] rounded-xl p-4">
