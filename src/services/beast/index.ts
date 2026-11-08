@@ -499,7 +499,6 @@ export type CollectionGlance = {
   shiny: number;
   /** Grade 10 + Animated Shiny */
   perfectCards: number;
-  unranked: number;
   strongest: Beast | null;
   topName: { label: string; count: number } | null;
   topPrefix: { label: string; count: number } | null;
@@ -508,13 +507,12 @@ export type CollectionGlance = {
 /** Collection-wide figures for the Statistics tab (cached 10 min). */
 export async function fetchCollectionGlance(): Promise<CollectionGlance> {
   return apiCache.get("collection-glance", {}, async () => {
-    const [stats, perfect, strongest, names, prefixes, unranked] = await Promise.all([
+    const [stats, perfect, strongest, names, prefixes] = await Promise.all([
       collectablesClient.beasts.stats(),
       collectablesClient.beasts.list({ cardGrade: 10, visualEffects: VISUAL_TO_EFFECTS["Shiny Animated"], limit: 1 }),
       collectablesClient.beasts.list({ sort: "power", order: "desc", limit: 1, includeOwner: true }),
       collectablesClient.beasts.groups({ groupBy: "full_name", limit: 5 }),
       collectablesClient.beasts.groups({ groupBy: "prefix", limit: 5 }),
-      collectablesClient.beasts.list({ rank: 0, limit: 1 }),
     ]);
     const num = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0);
     // "__none__" = beasts without a special name
@@ -529,7 +527,6 @@ export async function fetchCollectionGlance(): Promise<CollectionGlance> {
       genesis: num(stats.genesis),
       shiny: num(stats.shiny),
       perfectCards: perfect.total ?? 0,
-      unranked: unranked.total ?? 0,
       strongest: strongest.items[0] ? mapSdkBeast(strongest.items[0]) : null,
       topName: top(names),
       topPrefix: top(prefixes),

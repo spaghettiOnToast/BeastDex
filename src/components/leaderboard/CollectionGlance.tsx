@@ -72,6 +72,7 @@ export function CollectionGlance() {
       sub: glance?.topName ? `×${glance.topName.count.toLocaleString()}` : "",
       accent: "text-purple-300",
       small: true,
+      wide: true,
     },
     {
       label: "Most common prefix",
@@ -85,12 +86,6 @@ export function CollectionGlance() {
       value: glance && glance.shiny > 0 ? `1 in ${Math.round(total / glance.shiny)}` : "…",
       sub: glance ? `${glance.shiny.toLocaleString()} shiny beasts` : "",
       accent: "text-amber-300",
-    },
-    {
-      label: "Awaiting a rank",
-      value: v(glance?.unranked),
-      sub: glance ? `incl. ${glance.genesis} Genesis beasts` : "",
-      accent: "text-zinc-300",
     },
   ];
 
@@ -134,7 +129,10 @@ export function CollectionGlance() {
         {/* Figures */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {tiles.map((t) => (
-            <div key={t.label} className="min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
+            <div
+              key={t.label}
+              className={`min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.02] p-3 ${"wide" in t && t.wide ? "sm:col-span-2" : ""}`}
+            >
               <p className="truncate text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">{t.label}</p>
               <p className={`mt-1 truncate font-bold leading-tight ${t.accent} ${t.small ? "text-sm" : "text-xl"}`} title={t.value}>
                 {t.value}
