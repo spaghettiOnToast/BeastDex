@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { Beast } from "../services/beast";
 import { fetchBeasts } from "../services/beast";
 
@@ -31,7 +31,23 @@ export function useUserBeasts(
   const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Each load (and each wallet change) gets a new generation; results from an
+  // older one are dropped, so a load still running for the previous wallet
+  // can't overwrite the new wallet's beasts.
+  const generationRef = useRef(0);
+
+  // Wallet changed: forget the previous wallet's beasts straight away.
+  useEffect(() => {
+    generationRef.current += 1;
+    setBeasts([]);
+    setHasLoaded(false);
+    setError(null);
+    setLoading(false);
+  }, [address]);
+
   const loadBeasts = useCallback(async () => {
+    const generation = ++generationRef.current;
+    const stale = () => generation !== generationRef.current;
     if (!address) {
       setBeasts([]);
       setError(null);
@@ -56,6 +72,7 @@ export function useUserBeasts(
           sort: "default",
         });
 
+        if (stale()) return;
         results = results.concat(fetchedBeasts);
         total = typeof totalCount === "number" ? totalCount : results.length;
 
@@ -74,8 +91,9 @@ export function useUserBeasts(
         page += 1;
       }
       // Mark as loaded after successful completion
-      setHasLoaded(true);
+      if (!stale()) setHasLoaded(true);
     } catch (err) {
+      if (stale()) return;
       const errorMsg = err instanceof Error ? err.message : "Failed to load beasts";
 
       // Provide user-friendly error messages for common issues
@@ -87,7 +105,7 @@ export function useUserBeasts(
         setError("Failed to load beasts. Please try again.");
       }
     } finally {
-      setLoading(false);
+      if (!stale()) setLoading(false);
     }
   }, [address]);
 
