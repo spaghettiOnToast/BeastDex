@@ -2,10 +2,9 @@ import {
   mapSdkBeast,
   hasCompleteMetadata,
   beastVisual,
-  beastRarityScore,
   VISUAL_TO_EFFECTS,
 } from "./helpers";
-export { hasCompleteMetadata, beastVisual, beastRarityScore };
+export { hasCompleteMetadata, beastVisual };
 import { collectablesClient, legacyCollectablesClient } from "./collectablesClient";
 import {
   ITEM_NAME_PREFIXES,

@@ -44,11 +44,6 @@ export function beastVisual(sdkBeast: Pick<SdkBeast, "shiny" | "animated" | "vis
   return { shiny, animated, visual: VISUALS[(shiny ? 1 : 0) + (animated ? 2 : 0)] };
 }
 
-/** Rarity score used by leaderboards: shiny animated 3, shiny or animated 2, regular 1. */
-export function beastRarityScore(b: { shiny?: boolean; animated?: boolean }): number {
-  return b.shiny && b.animated ? 3 : b.shiny || b.animated ? 2 : 1;
-}
-
 export function mapSdkBeast(sdkBeast: SdkBeast): Beast {
   const tokenId = normalizeTokenId(sdkBeast.tokenId);
   const fullName = beastFullName(sdkBeast);
