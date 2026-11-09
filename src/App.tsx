@@ -32,6 +32,7 @@ const CollectionPage = lazy(() => import("./pages/CollectionPage"));
 const CollectionIndexPage = lazy(() => import("./pages/CollectionIndexPage"));
 const LeaderboardPage = lazy(() => import("./pages/LeaderboardPage"));
 const DungeonsPage = lazy(() => import("./pages/DungeonsPage"));
+const TracksPage = lazy(() => import("./pages/TracksPage"));
 const MarketplacePage = lazy(() => import("./pages/MarketplacePage"));
 const FestivalBeastDetailPage = lazy(() => import("./pages/FestivalBeastDetailPage"));
 
@@ -139,6 +140,7 @@ function App() {
                   element={MARKETPLACE_ENABLED ? <MarketplacePage /> : <Navigate to="/" replace />}
                 />
                 <Route path="/dungeons" element={<DungeonsPage />} />
+                <Route path="/tracks" element={<TracksPage />} />
                 <Route path="/festival/:slug/:tokenId" element={<FestivalBeastDetailPage />} />
                 {/* legacy Tiddy Mun links */}
                 <Route path="/dungeons/:tokenId" element={<LegacyTiddyMunRedirect />} />
