@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { WalletFeeComparison } from "./WalletFeeComparison";
 import { useAccount } from "@starknet-react/core";
 import {
   Dialog,
@@ -527,6 +528,7 @@ export default function CartListDialog({
               )}
             </div>
 
+            <WalletFeeComparison actions={{ list: beasts.length, approveCollection: 1 }} />
             {error && <p className="text-sm text-red-400">{error}</p>}
 
             {/* Actions */}

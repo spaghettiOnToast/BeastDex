@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { WalletFeeComparison } from "./WalletFeeComparison";
 import {
   Dialog,
   DialogContent,
@@ -173,6 +174,8 @@ export default function PurchaseConfirmDialog({
               </span>
             </div>
           </div>
+
+          <WalletFeeComparison actions={{ buy: 1, approveToken: 1, swap: swapping ? 1 : 0 }} />
 
           <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-3">
             <p className="text-xs text-yellow-200">

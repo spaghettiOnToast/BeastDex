@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { WalletFeeComparison } from "./WalletFeeComparison";
 import { useAccount } from "@starknet-react/core";
 import {
   Dialog,
@@ -403,6 +404,7 @@ export default function ListDialog({
                 <p className="mt-2 text-xs text-red-400">{expirationDetails.error}</p>
               ) : null}
             </div>
+            <WalletFeeComparison actions={{ list: 1, approveCollection: 1 }} />
             <div className="text-[10px] text-gray-500 break-all">
               Marketplace: {MARKETPLACE_ADDRESS}
             </div>

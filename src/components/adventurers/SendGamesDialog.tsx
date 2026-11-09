@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { WalletFeeComparison } from "../marketplace/WalletFeeComparison";
 import { useAccount } from "@starknet-react/core";
 import { CheckCircle2, Loader2, Send, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
@@ -174,6 +175,7 @@ export function SendGamesDialog({ open, onClose, games, onRemove, onSent, listed
             )}
 
             <SendGameNotice listed={listedCount} withOffers={offersCount} />
+            <WalletFeeComparison actions={{ nftTransfer: Math.max(1, count) }} />
 
             <Button
               className="w-full bg-gold/15 font-bold text-gold border border-gold hover:bg-gold/20"

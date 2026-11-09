@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import { WalletFeeComparison } from "../marketplace/WalletFeeComparison";
 import { useAccount } from "@starknet-react/core";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { Button } from "../ui/button";
@@ -260,6 +261,7 @@ export function SendBeastDialog({
               )}
             </div>
 
+            <WalletFeeComparison actions={{ nftTransfer: 1 }} />
             {error && (
               <Alert variant="destructive" className="bg-red-950/50 border-red-800">
                 <AlertDescription className="text-red-300">{error}</AlertDescription>

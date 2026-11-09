@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { WalletFeeComparison } from "./WalletFeeComparison";
 import {
   Dialog,
   DialogContent,
@@ -389,6 +390,15 @@ export default function PurchaseCartDialog({
                   onChange={setPayWith}
                   onBlockerChange={setSwapBlocker}
                   disabled={isProcessing}
+                />
+              )}
+              {validListings.length > 0 && (
+                <WalletFeeComparison
+                  actions={{
+                    buy: validListings.length,
+                    approveToken: paymentNeeds.length,
+                    swap: swapping ? paymentNeeds.filter((n) => !sameToken(n.currency, payWith.token)).length : 0,
+                  }}
                 />
               )}
               {validListings.length > 0 && (

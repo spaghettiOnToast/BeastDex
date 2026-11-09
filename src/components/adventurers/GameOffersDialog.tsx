@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { WalletFeeComparison } from "../marketplace/WalletFeeComparison";
 import { Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Button } from "../ui/button";
@@ -68,6 +69,7 @@ export function GameOffersDialog({ open, onOpenChange, game, offers, acceptingId
           <p className="text-[11px] text-zinc-500">
             The buyer also pays the {ADVENTURER_CLIENT_FEE_BP / 100}% BeastDex client fee on top, from their wallet. Network gas is extra.
           </p>
+          <WalletFeeComparison actions={{ buy: 1, approveCollection: 1 }} />
           <NoticeBox
             title="Before you accept"
             items={[

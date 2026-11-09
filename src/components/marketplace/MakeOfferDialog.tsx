@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { WalletFeeComparison } from "./WalletFeeComparison";
 import { useAccount } from "@starknet-react/core";
 import {
   Dialog,
@@ -357,6 +358,7 @@ export default function MakeOfferDialog({
               </p>
             </div>
           )}
+          <WalletFeeComparison actions={{ offer: 1, approveToken: 1 }} />
           {error && <p className="text-sm text-red-400">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button

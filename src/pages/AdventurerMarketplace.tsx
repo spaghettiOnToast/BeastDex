@@ -25,6 +25,7 @@ import { Button } from "../components/ui/button";
 import { AdventurerCard, GameStatusBadge } from "../components/adventurers/AdventurerCard";
 import { GameOffersDialog } from "../components/adventurers/GameOffersDialog";
 import { SendGamesDialog } from "../components/adventurers/SendGamesDialog";
+import { WalletFeeComparison } from "../components/marketplace/WalletFeeComparison";
 import { BuyGameNotice, ConfirmTxDialog, ListGameNotice, NoticeBox, OfferGameNotice } from "../components/adventurers/TxNotices";
 import { useAdventurerListings, useMyGames, type AdventurerListing } from "../hooks/useAdventurerGames";
 import {
@@ -941,6 +942,7 @@ export default function AdventurerMarketplace() {
         busy={!!cancelTarget && cancellingId === cancelTarget.order.listingId}
         onConfirm={() => cancelTarget && sendCancel(cancelTarget.order, cancelTarget.label)}
       >
+        <WalletFeeComparison actions={{ cancel: 1 }} />
         {cancelTarget?.label === "offer" ? (
           <NoticeBox
             tone="blue"
