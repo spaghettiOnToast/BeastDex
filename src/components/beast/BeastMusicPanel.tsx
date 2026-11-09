@@ -66,6 +66,10 @@ function blurb(track: MusicTrack): string {
 
 function txErrorMessage(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err ?? "");
+  // Wallets wrap their own failures (e.g. Ready's WalletRPCError) with the real reason in `cause`.
+  const cause = err instanceof Error && err.cause instanceof Error ? err.cause.message : "";
+  if (/timeout|timed out/i.test(`${msg} ${cause}`))
+    return "Your wallet didn't respond in time. Nothing was sent. Check its popup isn't hidden or locked, then try again.";
   if (/reject|denied|cancel|abort/i.test(msg)) return "Cancelled in wallet. Nothing was sent.";
   if (/insufficient|balance/i.test(msg)) return "Not enough funds for this transaction.";
   return msg.length > 140 ? `${msg.slice(0, 140)}…` : msg || "Transaction failed.";
