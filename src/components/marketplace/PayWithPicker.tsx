@@ -226,6 +226,13 @@ export function PayWithPicker({ needs, value, onChange, onBlockerChange, disable
               Liquidity is thin, so you pay noticeably more than market value. Paying in the listing's token directly is cheaper.
             </p>
           )}
+          {!blocker && premium !== null && premium < -0.2 && (
+            <p className="text-sky-300">
+              Unusually cheap: the best route right now goes through special-purpose pools (e.g. Loot Survivor ticket pools) with
+              only a little liquidity at this price. If it's gone before your transaction lands and the swap needs more than the
+              maximum above, the purchase stops and nothing is spent.
+            </p>
+          )}
           {!blocker && ready && premium === null && (
             <p className="text-amber-300">Couldn't value-check this swap (no USD price for one of the tokens). Check the amounts.</p>
           )}
