@@ -116,6 +116,14 @@ export function PayWithPicker({ needs, value, onChange, onBlockerChange, disable
     return n.toLocaleString(undefined, { maximumFractionDigits: n < 1 ? 6 : 4 });
   };
   const fmtNeed = (n: PaymentNeed) => `${fmt(n.amount, info(n.currency).decimals)} ${info(n.currency).symbol}`;
+  /** "$1.23" for an amount of a token, or "" without a price. */
+  const usd = (v: bigint, token: string) => {
+    const t = info(token);
+    if (!t.usdPrice) return "";
+    const dollars = (Number(v) / 10 ** t.decimals) * t.usdPrice;
+    return `$${dollars < 0.01 ? dollars.toPrecision(2) : dollars.toFixed(2)}`;
+  };
+  const directTotal = direct.reduce((sum, n) => sum + n.amount, 0n);
 
   return (
     <div className="space-y-2 rounded-md border border-white/[0.06] bg-black/20 p-2.5">
@@ -123,6 +131,18 @@ export function PayWithPicker({ needs, value, onChange, onBlockerChange, disable
         <span className="text-sm text-zinc-400">Pay with</span>
         <TokenSelect value={value.token} onValueChange={(token) => onChange({ ...value, token, caps: {} })} disabled={disabled} className="w-40" />
       </div>
+
+      {!swapping && directTotal > 0n && (
+        <div className="flex justify-between text-xs">
+          <span className="text-zinc-400">You pay</span>
+          <span className="text-right">
+            <span className="font-semibold text-white">
+              {fmt(directTotal, pay.decimals)} {pay.symbol}
+            </span>
+            {usd(directTotal, value.token) && <span className="ml-1.5 text-zinc-500">≈ {usd(directTotal, value.token)}</span>}
+          </span>
+        </div>
+      )}
 
       {swapping && (
         <div className="space-y-1.5 text-xs">
@@ -137,29 +157,34 @@ export function PayWithPicker({ needs, value, onChange, onBlockerChange, disable
                   {rows.map((r) => (
                     <div key={r.need.currency} className="flex justify-between">
                       <span>{fmtNeed(r.need)}</span>
-                      <span>
+                      <span className="text-right">
                         ≈ {fmt(r.quote!.amountIn, pay.decimals)} {pay.symbol}
+                        {usd(r.quote!.amountIn, value.token) && ` (${usd(r.quote!.amountIn, value.token)})`}
                       </span>
                     </div>
                   ))}
                   {direct.map((n) => (
                     <div key={n.currency} className="flex justify-between">
                       <span>{fmtNeed(n)}</span>
-                      <span>paid directly</span>
+                      <span>paid directly{usd(n.amount, n.currency) && ` (${usd(n.amount, n.currency)})`}</span>
                     </div>
                   ))}
                 </div>
               )}
               <div className="flex justify-between">
                 <span className="text-zinc-400">You spend about{direct.length > 0 ? " (swaps)" : ""}</span>
-                <span className="font-semibold text-white">
-                  {fmt(expected, pay.decimals)} {pay.symbol}
+                <span className="text-right">
+                  <span className="font-semibold text-white">
+                    {fmt(expected, pay.decimals)} {pay.symbol}
+                  </span>
+                  {usd(expected, value.token) && <span className="ml-1.5 text-zinc-500">≈ {usd(expected, value.token)}</span>}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-zinc-400">At most (with {value.slippageBp / 100}% slippage)</span>
-                <span className="text-zinc-300">
+                <span className="text-right text-zinc-300">
                   {fmt(capTotal, pay.decimals)} {pay.symbol}
+                  {usd(capTotal, value.token) && <span className="ml-1.5 text-zinc-500">≈ {usd(capTotal, value.token)}</span>}
                 </span>
               </div>
               <div className="flex justify-between">

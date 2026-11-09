@@ -45,7 +45,7 @@ export function GameOffersDialog({ open, onOpenChange, game, offers, acceptingId
     const price = BigInt(confirming.price);
     const royalty = (price * BigInt(ADVENTURER_ROYALTY_BP)) / 10000n;
     const platform = (price * BigInt(platformFeeBP)) / 10000n;
-    const fmt = (v: bigint) => `${formatPrice(v, symbol)} ${symbol}`;
+    const fmt = (v: bigint) => formatPrice(v, symbol); // includes the symbol
     const busy = acceptingId === String(confirming.id);
     const blocker = acceptOfferBlocker(game, confirming.createdAt);
     return (
@@ -121,10 +121,10 @@ export function GameOffersDialog({ open, onOpenChange, game, offers, acceptingId
                   <div className="flex items-center justify-between gap-2">
                     <div>
                       <div className="text-sm font-bold text-gold">
-                        {formatPrice(price, symbol)} {symbol}
+                        {formatPrice(price, symbol)}
                       </div>
                       <div className="text-zinc-500">
-                        You receive {formatPrice(net, symbol)} {symbol} · from{" "}
+                        You receive {formatPrice(net, symbol)} · from{" "}
                         {(buyer && usernames[buyer]) || `${o.owner.slice(0, 6)}…${o.owner.slice(-4)}`}
                         {o.createdAt ? ` · ${formatAgo(o.createdAt)}` : ""}
                       </div>

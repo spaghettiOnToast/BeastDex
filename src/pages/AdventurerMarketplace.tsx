@@ -83,7 +83,7 @@ const LEVELS = [0, 5, 10, 15, 20, 30];
 const symbolFor = (currency?: string | null) => getPaymentTokenByAddress(currency ?? undefined)?.symbol ?? "STRK";
 const priceLabel = (l: { price: string; paymentToken?: string | null }) => {
   const symbol = symbolFor(l.paymentToken);
-  return `${formatPrice(l.price, symbol)} ${symbol}`;
+  return formatPrice(l.price, symbol); // includes the symbol
 };
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const cmpBig = (a: bigint, b: bigint) => (a < b ? -1 : a > b ? 1 : 0);
