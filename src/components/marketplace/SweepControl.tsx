@@ -246,7 +246,7 @@ export default function SweepControl({
                   ${totalUsd.toFixed(2)}
                 </span>
                 <span className="text-[10px] text-zinc-500">
-                  incl. {CLIENT_FEE_BP / 100}% fee
+                  incl. {CLIENT_FEE_BP / 100}% fee · pay in any token at checkout
                 </span>
               </div>
 

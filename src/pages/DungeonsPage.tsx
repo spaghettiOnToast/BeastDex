@@ -5,6 +5,14 @@ import { CheckCircle2, ExternalLink, Sword } from "lucide-react";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import { cn } from "../lib/utils";
+import { GoldenPassMintDialog } from "../components/adventurers/GoldenPassMintDialog";
+import { useGoldenPasses } from "../hooks/useGoldenPasses";
+import {
+  GOLDEN_TOKEN_IMAGE_URL,
+  formatCountdown,
+  formatReadyDate,
+  type GoldenPassSummary,
+} from "../services/adventurers/goldenPass";
 import { DUNGEONS, LOOT_SURVIVOR_URL, lootSurvivorDungeonUrl, type Dungeon } from "../services/lootSurvivor";
 import {
   FESTIVAL_COLLECTIONS,
@@ -15,9 +23,11 @@ import {
   type FestivalToken,
 } from "../services/festivalBeasts";
 
-function DungeonCard({ dungeon }: { dungeon: Dungeon }) {
+type GoldenSummary = GoldenPassSummary & { onOpen: () => void };
+
+function DungeonCard({ dungeon, golden }: { dungeon: Dungeon; golden?: GoldenSummary }) {
   const closed = dungeon.status === "closed";
-  return (
+  const card = (
     <a
       href={lootSurvivorDungeonUrl(dungeon.id)}
       target="_blank"
@@ -48,6 +58,15 @@ function DungeonCard({ dungeon }: { dungeon: Dungeon }) {
             </span>
           )}
         </span>
+        {golden && golden.ready > 0 && (
+          <span
+            className="absolute right-2 top-2 flex items-center gap-1 rounded-full border border-gold/60 bg-black/75 py-0.5 pl-0.5 pr-2 text-[11px] font-bold text-gold shadow-[0_0_12px_rgba(212,175,55,0.45)]"
+            title={`${golden.ready} free Beast Mode game${golden.ready === 1 ? "" : "s"} to claim with your Golden Tokens`}
+          >
+            <img src={GOLDEN_TOKEN_IMAGE_URL} alt="Golden Token" className="h-5 w-5" />
+            {golden.ready}
+          </span>
+        )}
         <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 bg-gradient-to-t from-black/90 to-transparent pb-2 pt-8 text-xs font-bold uppercase tracking-wider text-white opacity-0 transition-opacity group-hover:opacity-100">
           {closed ? "View on Loot Survivor" : "Play on Loot Survivor"} <ExternalLink className="h-3.5 w-3.5" />
         </span>
@@ -73,6 +92,30 @@ function DungeonCard({ dungeon }: { dungeon: Dungeon }) {
         </dl>
       </div>
     </a>
+  );
+  if (!golden || golden.total === 0) return card;
+  const now = Math.floor(Date.now() / 1000);
+  return (
+    <div className="flex flex-col gap-2">
+      {card}
+      <button
+        type="button"
+        onClick={golden.onOpen}
+        className={cn(
+          "flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold transition-colors",
+          golden.ready > 0
+            ? "border-gold bg-gold/15 text-gold hover:bg-gold/25"
+            : "border-white/10 bg-white/[0.03] text-zinc-400 hover:text-zinc-200",
+        )}
+      >
+        <img src={GOLDEN_TOKEN_IMAGE_URL} alt="" className="h-4 w-4" />
+        {golden.ready > 0
+          ? `Claim ${golden.ready} free game${golden.ready === 1 ? "" : "s"} with Golden Tokens`
+          : golden.nextReady
+            ? `Golden Tokens · next usable ${formatReadyDate(golden.nextReady)} (in ${formatCountdown(golden.nextReady - now)})`
+            : "Golden Tokens"}
+      </button>
+    </div>
   );
 }
 
@@ -156,6 +199,13 @@ function DungeonsPage() {
   const { address } = useAccount();
   const live = DUNGEONS.filter((d) => d.status === "online");
   const closed = DUNGEONS.filter((d) => d.status === "closed");
+  const [goldenOpen, setGoldenOpen] = useState(false);
+  const goldenQuery = useGoldenPasses(address);
+  const summary = goldenQuery.data?.summary;
+  const golden = useMemo<GoldenSummary | undefined>(
+    () => (summary?.total ? { ...summary, onOpen: () => setGoldenOpen(true) } : undefined),
+    [summary],
+  );
 
   return (
     <AppLayout topBar={<TopBar />}>
@@ -179,7 +229,7 @@ function DungeonsPage() {
           <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-500">Live now</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {live.map((d) => (
-              <DungeonCard key={d.id} dungeon={d} />
+              <DungeonCard key={d.id} dungeon={d} golden={d.id === "beastmode" ? golden : undefined} />
             ))}
           </div>
         </section>
@@ -207,6 +257,7 @@ function DungeonsPage() {
           ))}
         </section>
       </div>
+      <GoldenPassMintDialog open={goldenOpen} onClose={() => setGoldenOpen(false)} />
     </AppLayout>
   );
 }

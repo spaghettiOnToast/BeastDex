@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { WalletFeeComparison } from "./WalletFeeComparison";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +18,8 @@ import { getOrderValidities, getPublicProvider } from "../../services/marketplac
 import { useEkuboTokens, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
 import { useSoldListings } from "../../contexts/SoldListingsContext";
 import BeastCard from "../beast/BeastCard";
+import { PayWithPicker } from "./PayWithPicker";
+import { DEFAULT_SLIPPAGE_BP, sameToken, type PayWith } from "../../services/marketplace/swap";
 
 type Props = {
   open: boolean;
@@ -24,7 +27,8 @@ type Props = {
   listings: Listing[];
   onRemove: (listingId: string) => void;
   onClearAll: () => void;
-  onPurchaseAll: (validListings?: Listing[]) => void;
+  /** `payWith` is set when the buyer pays in another token (single-currency carts) */
+  onPurchaseAll: (validListings?: Listing[], payWith?: PayWith) => void;
   isProcessing: boolean;
 };
 
@@ -42,6 +46,8 @@ export default function PurchaseCartDialog({
   const [hasValidated, setHasValidated] = useState(false);
   const { tokens } = useEkuboTokens();
   const { markAsSold } = useSoldListings();
+  const [payWith, setPayWith] = useState<PayWith>({ token: "0x0", slippageBp: DEFAULT_SLIPPAGE_BP });
+  const [swapBlocker, setSwapBlocker] = useState<string | null>(null);
 
   // Build a map of token address -> token data for USD calculations
   const tokenDataMap = useMemo(() => {
@@ -124,11 +130,18 @@ export default function PurchaseCartDialog({
   const invalidListings = listings.filter(l => invalidListingIds.has(l.listingId));
   const hasInvalidListings = invalidListings.length > 0;
 
+  // Pay with any token: one swap per listing currency that differs from it
+  const firstCurrency = validListings.find((l) => l.paymentToken)?.paymentToken ?? null;
+  useEffect(() => {
+    if (firstCurrency) setPayWith((p) => (p.token !== "0x0" ? p : { ...p, token: firstCurrency }));
+  }, [firstCurrency]);
+
   const handlePurchaseClick = () => {
+    const pw = swapping ? payWith : undefined;
     if (hasInvalidListings) {
-      onPurchaseAll(validListings);
+      onPurchaseAll(validListings, pw);
     } else {
-      onPurchaseAll();
+      onPurchaseAll(undefined, pw);
     }
   };
 
@@ -186,6 +199,11 @@ export default function PurchaseCartDialog({
       totalUsd,
     };
   });
+
+  const paymentNeeds = tokenTotals
+    .filter((t) => t.tokenAddress !== "default")
+    .map((t) => ({ currency: t.tokenAddress, amount: t.total }));
+  const swapping = payWith.token !== "0x0" && paymentNeeds.some((n) => !sameToken(n.currency, payWith.token));
 
   const formatListingPrice = (listing: Listing) => {
     const token = getPaymentTokenByAddress(listing.paymentToken ?? undefined);
@@ -365,6 +383,24 @@ export default function PurchaseCartDialog({
               <p className="text-[10px] text-gray-500 italic">
                 A {CLIENT_FEE_BP / 100}% client fee is added to each purchase. Each purchase uses the token specified in the listing.
               </p>
+              {validListings.length > 0 && payWith.token !== "0x0" && (
+                <PayWithPicker
+                  needs={paymentNeeds}
+                  value={payWith}
+                  onChange={setPayWith}
+                  onBlockerChange={setSwapBlocker}
+                  disabled={isProcessing}
+                />
+              )}
+              {validListings.length > 0 && (
+                <WalletFeeComparison
+                  actions={{
+                    buy: validListings.length,
+                    approveToken: paymentNeeds.length,
+                    swap: swapping ? paymentNeeds.filter((n) => !sameToken(n.currency, payWith.token)).length : 0,
+                  }}
+                />
+              )}
               {validListings.length > 0 && (
                 <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-3">
                   <p className="text-xs text-yellow-200">
@@ -385,7 +421,7 @@ export default function PurchaseCartDialog({
               </Button>
               <Button
                 onClick={handlePurchaseClick}
-                disabled={isProcessing || validListings.length === 0 || isValidating}
+                disabled={isProcessing || validListings.length === 0 || isValidating || (swapping && !!swapBlocker)}
                 className="flex-1 bg-green-600 text-white hover:bg-green-600/90"
               >
                 {isProcessing

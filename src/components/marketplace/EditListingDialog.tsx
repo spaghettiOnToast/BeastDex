@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { WalletFeeComparison } from "./WalletFeeComparison";
 import {
   Dialog,
   DialogContent,
@@ -275,6 +276,7 @@ export default function EditListingDialog({
                 <p className="mt-2 text-xs text-red-400">{expirationDetails.error}</p>
               ) : null}
             </div>
+            <WalletFeeComparison actions={{ cancel: 1, list: 1 }} />
             {error && <p className="text-sm text-red-400">{error}</p>}
             <div className="flex justify-end gap-2">
               <Button

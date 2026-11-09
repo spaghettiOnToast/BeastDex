@@ -36,6 +36,8 @@ export type Beast = {
   animated?: boolean;
   visual?: BeastVisual;
   visualEffects?: number;
+  /** v3 `Sound Effects` preset 0-3 (Written / Mega / Echo / Mega + echo), set by rarity */
+  soundEffects?: number;
   cardGrade?: number;
   soulbound?: boolean;
   /** Unix seconds a timed transfer lock ends; 0/undefined when none */

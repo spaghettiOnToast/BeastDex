@@ -32,6 +32,7 @@ import { config } from "../config";
 import { useListedTokens } from "../hooks/useListedTokens";
 import { useGlobalCart } from "../contexts/GlobalCartContext";
 import { formatPrice } from "../utils/price";
+import type { PayWith } from "../services/marketplace/swap";
 import { getPaymentTokenByAddress, MARKETPLACE_ENABLED, BEASTS_COLLECTION_ADDRESS, CLIENT_FEE_BP, CLIENT_FEE_RECEIVER, ROYALTIES_ENABLED } from "../services/marketplace/constants";
 import { useTokenMap, tokenAmountToUsd } from "../hooks/useEkuboTokens";
 import { toBigIntSafe } from "../utils/bigint";
@@ -408,7 +409,7 @@ function HomePage() {
   }, [getToken]);
 
   // Handle direct purchase execution
-  const handleDirectPurchase = useCallback(async (listing: Listing) => {
+  const handleDirectPurchase = useCallback(async (listing: Listing, payWith?: PayWith) => {
     if (!account || !listing) return;
 
     setPurchaseProcessing(true);
@@ -425,7 +426,8 @@ function HomePage() {
         listing.paymentToken || "0x0",
         listing.price,
         CLIENT_FEE_BP,
-        CLIENT_FEE_RECEIVER
+        CLIENT_FEE_RECEIVER,
+        payWith
       );
 
       toast.success("Purchase successful!", { id: toastId });
@@ -635,9 +637,9 @@ function HomePage() {
           }}
           listing={purchasingListing}
           priceLabel={purchasingListing ? formatPriceWithUsd(purchasingListing) : ""}
-          onConfirm={() => {
+          onConfirm={(payWith) => {
             if (purchasingListing) {
-              handleDirectPurchase(purchasingListing);
+              handleDirectPurchase(purchasingListing, payWith);
             }
           }}
           isProcessing={purchaseProcessing}

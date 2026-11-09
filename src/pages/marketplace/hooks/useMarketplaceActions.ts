@@ -14,10 +14,13 @@ import {
   getProvider,
   buildMarketplaceExecuteCall,
   getErc20ApprovalCallIfNeeded,
+  getSwapCallsForPurchase,
+  assertPayTokenCoversCaps,
 } from "../../../services/marketplace/approvals";
 import {
   BEASTS_COLLECTION_ADDRESS,
   CLIENT_FEE_BP,
+  clientFeeBpFor,
   CLIENT_FEE_RECEIVER,
   DEFAULT_PAYMENT_TOKEN,
   getPaymentTokenByAddress,
@@ -30,6 +33,7 @@ import { isUserRejection } from "../../../utils/transaction";
 import { toUint256Hex } from "../../../utils/uint256";
 import { VOYAGER_BASE } from "../types";
 import { executeMarketplaceCalls } from "../../../services/marketplace/safety";
+import { sameToken, type PayWith } from "../../../services/marketplace/swap";
 
 const toBigInt = toBigIntSafe;
 
@@ -91,7 +95,7 @@ export function useMarketplaceActions({
    * Handle purchase of a single listing
    */
   const handlePurchase = useCallback(
-    async (listing: Listing) => {
+    async (listing: Listing, payWith?: PayWith) => {
       if (!account) {
         toast.error("Please connect your wallet");
         return;
@@ -151,16 +155,17 @@ export function useMarketplaceActions({
         }
 
         // Calculate total amount including platform fee
-        const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
+        const feeBp = clientFeeBpFor(listing.collection);
+        const feeAmount = (priceBigInt * BigInt(feeBp)) / 10000n;
         const totalAmount = priceBigInt + feeAmount;
 
-        // Check balance
-        toast.loading("Checking balance...", { id: toastId });
-        const { sufficient, balance } = await checkSufficientBalance(
-          account,
-          currency,
-          totalAmount
-        );
+        const swapping = !!payWith && !sameToken(payWith.token, currency);
+
+        // Check balance (when swapping, the swap step checks the pay token instead)
+        toast.loading(swapping ? "Quoting swap..." : "Checking balance...", { id: toastId });
+        const { sufficient, balance } = swapping
+          ? { sufficient: true, balance: 0n }
+          : await checkSufficientBalance(account, currency, totalAmount);
 
         if (!sufficient) {
           const token = getPaymentTokenByAddress(currency);
@@ -188,8 +193,9 @@ export function useMarketplaceActions({
           ROYALTIES_ENABLED, // creator royalties (5%)
           currency,
           priceBigInt,
-          BigInt(CLIENT_FEE_BP),
-          CLIENT_FEE_RECEIVER
+          BigInt(feeBp),
+          CLIENT_FEE_RECEIVER,
+          swapping ? payWith : undefined
         );
 
         const txHash = result?.transaction_hash;
@@ -235,7 +241,9 @@ export function useMarketplaceActions({
   const handlePurchaseAll = useCallback(
     async (
       purchaseCart: Listing[],
-      handleRemoveFromPurchaseCart: (id: string) => void
+      handleRemoveFromPurchaseCart: (id: string) => void,
+      /** pay in another token (single-currency carts): swapped first, same tx */
+      payWith?: PayWith
     ) => {
       if (!account || purchaseCart.length === 0 || purchasingBatch) return;
 
@@ -335,13 +343,22 @@ export function useMarketplaceActions({
           listingsByToken.get(tokenAddr)!.push(listing);
         }
 
+        // Several swaps may draw on the same pay token: check it covers them all
+        await assertPayTokenCoversCaps(account, payWith);
+
         // Step 3: Add approval calls for each token
         for (const [tokenAddr, tokenListings] of listingsByToken) {
           let totalNeeded = 0n;
           for (const listing of tokenListings) {
             const price = toBigInt(listing.price);
-            const fee = (price * BigInt(CLIENT_FEE_BP)) / 10000n;
+            const fee = (price * BigInt(clientFeeBpFor(listing.collection))) / 10000n;
             totalNeeded += price + fee;
+          }
+
+          // Pay with another token: swap into exactly this total first
+          if (payWith && !sameToken(payWith.token, tokenAddr)) {
+            toast.loading("Quoting swap...", { id: toastId });
+            calls.unshift(...(await getSwapCallsForPurchase(account, payWith, tokenAddr, totalNeeded)));
           }
 
           // Get approval call if needed
@@ -372,7 +389,7 @@ export function useMarketplaceActions({
               tokenIdU256[1],
               "0", // quantity: 0 for ERC721 (non-fungible)
               ROYALTIES_ENABLED ? "1" : "0",
-              CLIENT_FEE_BP.toString(),
+              clientFeeBpFor(listing.collection).toString(),
               CLIENT_FEE_RECEIVER,
             ],
           });
@@ -504,7 +521,7 @@ export function useMarketplaceActions({
           ROYALTIES_ENABLED, // creator royalties (5%)
           order.currency,
           toBigInt(order.price),
-          BigInt(CLIENT_FEE_BP),
+          BigInt(clientFeeBpFor(order.collection)),
           CLIENT_FEE_RECEIVER
         );
 

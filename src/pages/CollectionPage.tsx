@@ -63,6 +63,19 @@ import FestivalBeastsStrip from "../components/profile/FestivalBeastsStrip";
 import { useFollowConnectedWallet } from "../hooks/useFollowConnectedWallet";
 import { GradeFilterDropdown } from "../components/filters/GradeFilterDropdown";
 import { matchesGradeFilter, gradeFilterLabel, type GradeFilter } from "../utils/gradeFilter";
+import { OptionFilterDropdown, type FilterOption } from "../components/filters/OptionFilterDropdown";
+import {
+  matchesRankFilter,
+  matchesTierFilter,
+  rankFilterLabel,
+  rankOf,
+  tierFilterLabel,
+  tierOf,
+  RANK_OPTIONS,
+  TIER_OPTIONS,
+  type RankFilter,
+  type TierFilter,
+} from "../utils/tierRankFilter";
 import { ResultCount } from "../components/common/ResultCount";
 
 const TABS = [
@@ -239,6 +252,10 @@ function CollectionPage() {
   const totalSpecies = useSpeciesCount();
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
+  const [tierFilter, setTierFilter] = useState<TierFilter>("all");
+  const [rankFilter, setRankFilter] = useState<RankFilter>("all");
+  /** Any beast-level filter: the grid then shows only matching owned beasts (no "Need to hunt" slots). */
+  const anyBeastFilter = gradeFilter !== "all" || tierFilter !== "all" || rankFilter !== "all";
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
@@ -556,11 +573,49 @@ function CollectionPage() {
     setCatalogLoading(false);
   }, [beastTypes, genesisCache]); // Build catalog when beast types or Genesis cache change
 
-  // Beasts the grid, table and duplicate counts work from: all owned, or one card grade.
+  // Beasts the grid, table and duplicate counts work from: all owned, narrowed by grade, tier and rank.
   const gradeFilteredBeasts = useMemo(
-    () => (gradeFilter === "all" ? ownedBeasts : ownedBeasts.filter((b) => matchesGradeFilter(b, gradeFilter))),
-    [ownedBeasts, gradeFilter]
+    () =>
+      !anyBeastFilter
+        ? ownedBeasts
+        : ownedBeasts.filter(
+            (b) => matchesGradeFilter(b, gradeFilter) && matchesTierFilter(b, tierFilter) && matchesRankFilter(b, rankFilter)
+          ),
+    [ownedBeasts, gradeFilter, tierFilter, rankFilter, anyBeastFilter]
   );
+
+  // Dropdown options with counts of owned beasts (before the tier/rank filters themselves).
+  const tierOptions = useMemo<FilterOption<TierFilter>[]>(() => {
+    const counts = new Map<number, number>();
+    for (const b of ownedBeasts) {
+      const t = tierOf(b);
+      if (t != null) counts.set(t, (counts.get(t) ?? 0) + 1);
+    }
+    return [
+      { value: "all", label: "All", count: ownedBeasts.length },
+      ...TIER_OPTIONS.map((t, i) => ({ value: t, label: `Tier ${t}`, short: `T${t}`, count: counts.get(t) ?? 0, separatorBefore: i === 0 })),
+    ];
+  }, [ownedBeasts]);
+
+  const rankOptions = useMemo<FilterOption<RankFilter>[]>(() => {
+    const counts = new Map<number, number>();
+    for (const b of ownedBeasts) {
+      const r = rankOf(b);
+      if (r != null && r <= 10) counts.set(r, (counts.get(r) ?? 0) + 1);
+    }
+    const top10 = [...counts.values()].reduce((a, n) => a + n, 0);
+    return [
+      { value: "all", label: "All", count: ownedBeasts.length },
+      { value: "top10", label: "Top 10 (Rank 1–10)", short: "Top 10", count: top10, separatorBefore: true },
+      ...RANK_OPTIONS.map((r, i) => ({
+        value: r,
+        label: r === 1 ? "Rank 1 · King" : `Rank ${r}`,
+        short: String(r),
+        count: counts.get(r) ?? 0,
+        separatorBefore: i === 0,
+      })),
+    ];
+  }, [ownedBeasts]);
 
   const categoryMaps = useMemo(
     () => buildCategoryMaps(gradeFilteredBeasts),
@@ -1206,9 +1261,11 @@ function CollectionPage() {
         {/* Controls row */}
         <div className="mb-4 space-y-2">
           <div className="flex items-center justify-between gap-2 min-w-0">
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
               <SortDropdown value={sortOption} onChange={setSortOption} />
               <GradeFilterDropdown value={gradeFilter} onChange={setGradeFilter} beasts={ownedBeasts} />
+              <OptionFilterDropdown name="Tier" value={tierFilter} allValue="all" options={tierOptions} onChange={setTierFilter} />
+              <OptionFilterDropdown name="Rank" value={rankFilter} allValue="all" options={rankOptions} onChange={setRankFilter} />
               <Button
                 variant="outline"
                 size="sm"
@@ -1282,6 +1339,8 @@ function CollectionPage() {
             filters={[
               ...(activeTab !== "all" ? [TABS.find((t) => t.key === activeTab)?.label ?? ""] : []),
               ...(gradeFilter !== "all" ? [gradeFilterLabel(gradeFilter)] : []),
+              ...(tierFilter !== "all" ? [tierFilterLabel(tierFilter)] : []),
+              ...(rankFilter !== "all" ? [rankFilterLabel(rankFilter)] : []),
               ...(showDuplicatesOnly ? ["Duplicates"] : []),
             ]}
           />
@@ -1296,14 +1355,22 @@ function CollectionPage() {
           />
         ) : (
           <>
-          {gradeFilter !== "all" && !tabEntries[activeTab].some((entry) => !entry.missing) && (
+          {anyBeastFilter && !tabEntries[activeTab].some((entry) => !entry.missing) && (
             <p className="py-8 text-center text-sm text-zinc-500">
-              No {gradeFilterLabel(gradeFilter).toLowerCase()} beasts{activeTab !== "all" ? " in this tab" : ""}.
+              No beasts match{" "}
+              {[
+                gradeFilter !== "all" ? gradeFilterLabel(gradeFilter) : null,
+                tierFilter !== "all" ? tierFilterLabel(tierFilter) : null,
+                rankFilter !== "all" ? rankFilterLabel(rankFilter) : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              {activeTab !== "all" ? " in this tab" : ""}.
             </p>
           )}
           <div className="grid grid-cols-3 gap-1.5 sm:gap-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
             {/* A grade filter shows only matching owned beasts, not "Need to hunt" slots. */}
-            {tabEntries[activeTab].filter((entry) => gradeFilter === "all" || !entry.missing).map((entry) => (
+            {tabEntries[activeTab].filter((entry) => !anyBeastFilter || !entry.missing).map((entry) => (
               <BeastCard
                 key={entry.id}
                 beast={

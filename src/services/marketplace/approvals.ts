@@ -13,6 +13,7 @@ import {
 } from "../../utils/uint256";
 import { getReadProvider, withReadProvider } from "../tx";
 import { executeMarketplaceCalls } from "./safety";
+import { prepareSwapForPurchase, sameToken, totalCap, type PayWith, type SwapCall } from "./swap";
 
 /** Read-only RPC provider (no wallet needed), with public-RPC fallback. */
 export function getPublicProvider(): RpcProvider {
@@ -622,6 +623,36 @@ export function buildMarketplaceExecuteCall(
   };
 }
 
+/** Throws unless the pay-token balance covers every confirmed swap cap together (carts with several swaps). */
+export async function assertPayTokenCoversCaps(account: AccountInterface, payWith: PayWith | undefined): Promise<void> {
+  if (!payWith || !account.address) return;
+  const needed = totalCap(payWith);
+  if (needed === 0n) return;
+  const balance = await getErc20Balance(getProvider(account), payWith.token, account.address);
+  if (balance < needed) throw new Error("Not enough balance of the token you chose to pay with (including slippage).");
+}
+
+/**
+ * Swap calls (fresh quote, capped at the confirmed `payWith.caps`) delivering exactly
+ * `amount` of `currency` to the buyer; checks the pay-token balance covers the cap.
+ * Empty when paying in `currency` itself.
+ */
+export async function getSwapCallsForPurchase(
+  account: AccountInterface,
+  payWith: PayWith | undefined,
+  currency: string,
+  amount: bigint
+): Promise<SwapCall[]> {
+  if (!payWith || sameToken(payWith.token, currency)) return [];
+  if (!account.address) throw new Error("Wallet address not available");
+  const swap = await prepareSwapForPurchase(payWith, currency, amount);
+  const balance = await getErc20Balance(getProvider(account), payWith.token, account.address);
+  if (balance < swap.maxIn) {
+    throw new Error("Not enough balance of the token you chose to pay with (including slippage).");
+  }
+  return swap.calls;
+}
+
 /**
  * Execute marketplace purchase with approval in a single multicall transaction
  * This provides a better UX by combining approval + purchase into one signature
@@ -636,7 +667,9 @@ export async function executePurchaseWithApproval(
   currency: string,
   price: BigNumberish,
   clientFee: BigNumberish,
-  clientReceiver: string
+  clientReceiver: string,
+  /** pay in another token: swapped on Ekubo into exactly price + fee in the same tx */
+  payWith?: PayWith
 ): Promise<{ transaction_hash: string }> {
   const calls: Call[] = [];
 
@@ -646,6 +679,11 @@ export async function executePurchaseWithApproval(
   const clientFeeBigInt = typeof clientFee === 'bigint' ? clientFee : BigInt(clientFee.toString());
   const feeAmount = (priceBigInt * clientFeeBigInt) / 10000n;
   const totalAmount = priceBigInt + feeAmount;
+
+  // Pay with another token: a fresh exact-output quote, then the swap goes first
+  if (payWith && !sameToken(payWith.token, currency)) {
+    calls.push(...(await getSwapCallsForPurchase(account, payWith, currency, totalAmount)));
+  }
 
   // Check if we need to add approval call with total amount (price + fee)
   const approvalCall = await getErc20ApprovalCallIfNeeded(

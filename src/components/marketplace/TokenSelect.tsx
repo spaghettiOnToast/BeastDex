@@ -159,7 +159,7 @@ function TokenDisplay({
       <span className="font-medium">{token.symbol}</span>
       {showPrice && token.usdPrice != null && (
         <span className="text-xs text-gray-500 ml-auto">
-          ${token.usdPrice.toFixed(2)}
+          ${token.usdPrice >= 0.01 ? token.usdPrice.toFixed(2) : token.usdPrice.toPrecision(2)}
         </span>
       )}
     </div>

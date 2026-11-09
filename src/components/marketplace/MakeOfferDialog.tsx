@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { WalletFeeComparison } from "./WalletFeeComparison";
 import { useAccount } from "@starknet-react/core";
 import {
   Dialog,
@@ -20,7 +21,7 @@ import {
 import {
   DEFAULT_PAYMENT_TOKEN,
   BEASTS_COLLECTION_ADDRESS,
-  CLIENT_FEE_BP,
+  clientFeeBpFor,
   MARKETPLACE_ADDRESS,
 } from "../../services/marketplace/constants";
 import { getErc20ApprovalCallIfNeeded, getProvider } from "../../services/marketplace/approvals";
@@ -49,6 +50,10 @@ type Props = {
   }) => void;
   /** NFT collection of the token (defaults to Beasts; festival collections too) */
   collection?: string;
+  /** Item copy ("Beast" by default, "Game" for adventurers) */
+  itemLabel?: string;
+  /** Extra content under the item name (e.g. how game offers behave) */
+  notice?: ReactNode;
 };
 
 export default function MakeOfferDialog({
@@ -58,6 +63,8 @@ export default function MakeOfferDialog({
   tokenId,
   onOfferMade,
   collection = BEASTS_COLLECTION_ADDRESS,
+  itemLabel = "Beast",
+  notice,
 }: Props) {
   const { account } = useAccount();
   const [price, setPrice] = useState("");
@@ -114,7 +121,7 @@ export default function MakeOfferDialog({
   // Calculate fee and total (fee is paid by buyer)
   const feeDetails = useMemo(() => {
     if (!priceBigInt) return null;
-    const feeAmount = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
+    const feeAmount = (priceBigInt * BigInt(clientFeeBpFor(collection))) / 10000n;
     const totalAmount = priceBigInt + feeAmount;
     return {
       feeAmount,
@@ -122,7 +129,7 @@ export default function MakeOfferDialog({
       feeFormatted: fromWei(feeAmount, tokenDecimals),
       totalFormatted: fromWei(totalAmount, tokenDecimals),
     };
-  }, [priceBigInt, tokenDecimals]);
+  }, [priceBigInt, tokenDecimals, collection]);
 
   const canSubmit = useMemo(() => {
     return (
@@ -217,7 +224,7 @@ export default function MakeOfferDialog({
         tokenId || beast?.id.split(":").pop() || beast?.id || "";
       onOfferMade?.({
         tokenId: actualTokenId,
-        beastName: beast?.name || `Beast #${actualTokenId}`,
+        beastName: beast?.name || `${itemLabel} #${actualTokenId}`,
         offerPrice: price,
         currency: tokenSymbol,
       });
@@ -249,7 +256,7 @@ export default function MakeOfferDialog({
   };
 
   const displayName =
-    beast?.name ?? (tokenId ? `Beast #${tokenId}` : "Unknown Beast");
+    beast?.name ?? (tokenId ? `${itemLabel} #${tokenId}` : `Unknown ${itemLabel}`);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -257,14 +264,15 @@ export default function MakeOfferDialog({
         <DialogHeader>
           <DialogTitle>Make an Offer</DialogTitle>
           <DialogDescription>
-            Submit an offer for this beast. The owner can accept or reject it.
+            Submit an offer for this {itemLabel.toLowerCase()}. The owner can accept or reject it.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <p className="text-sm text-zinc-400">Beast</p>
+            <p className="text-sm text-zinc-400">{itemLabel}</p>
             <p className="text-sm font-medium">{displayName}</p>
           </div>
+          {notice}
           <div>
             <label className="text-sm text-zinc-400">Offer Amount</label>
             <Input
@@ -338,7 +346,7 @@ export default function MakeOfferDialog({
                 <span className="text-sm font-medium">{price} {tokenSymbol}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-zinc-400">Client Fee ({CLIENT_FEE_BP / 100}%):</span>
+                <span className="text-sm text-zinc-400">Client Fee ({clientFeeBpFor(collection) / 100}%):</span>
                 <span className="text-sm font-medium text-zinc-400">+{feeDetails.feeFormatted} {tokenSymbol}</span>
               </div>
               <div className="flex justify-between border-t border-white/[0.08] pt-2">
@@ -350,6 +358,7 @@ export default function MakeOfferDialog({
               </p>
             </div>
           )}
+          <WalletFeeComparison actions={{ offer: 1, approveToken: 1 }} />
           {error && <p className="text-sm text-red-400">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button

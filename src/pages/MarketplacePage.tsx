@@ -78,6 +78,8 @@ import type { ExploreSubTab, MyActivitySubTab } from "./marketplace/types";
 import { shortTokenId } from "../utils/tokenId";
 import { executeMarketplaceCalls } from "../services/marketplace/safety";
 import { IndexerStatusBanner } from "../components/marketplace/IndexerStatusBanner";
+import { MarketSwitch } from "../components/marketplace/MarketSwitch";
+import { useMarketKind } from "../hooks/useMarketKind";
 import { SUMMIT_ENABLED } from "../services/summitApi/constants";
 import { FestivalHoldingItems } from "../components/marketplace/FestivalHoldingItems";
 import { useHeldFestivalTokens } from "../hooks/useFestivalTokens";
@@ -122,7 +124,7 @@ function formatRelativeTime(timestamp: number): string {
  * - useMarketplaceCarts: Manages listing and purchase carts
  * - useMarketplaceActions: Handles buy/sell/offer actions
  */
-export default function MarketplacePage() {
+function BeastMarketplace() {
   const { address, account } = useAccount();
   const { tokenMap, getToken } = useTokenMap();
   const globalCart = useGlobalCart();
@@ -1164,6 +1166,7 @@ export default function MarketplacePage() {
     <AppLayout topBar={<TopBar />}>
       <IndexerStatusBanner />
       <div className="space-y-4">
+        <MarketSwitch />
           {/* Stats cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
           {heroStats.map((stat) => (
@@ -2929,9 +2932,9 @@ export default function MarketplacePage() {
                   : ""
               }
               isProcessing={!!actionsHook.buyingListingId}
-              onConfirm={() => {
+              onConfirm={(payWith) => {
                 if (purchasingListing) {
-                  actionsHook.handlePurchase(purchasingListing);
+                  actionsHook.handlePurchase(purchasingListing, payWith);
                 }
                 setPurchaseConfirmOpen(false);
               }}
@@ -2951,10 +2954,11 @@ export default function MarketplacePage() {
               listings={globalCart.purchaseCart}
               onRemove={globalCart.removeFromPurchaseCart}
               onClearAll={globalCart.clearPurchaseCart}
-              onPurchaseAll={(validListings) =>
+              onPurchaseAll={(validListings, payWith) =>
                 actionsHook.handlePurchaseAll(
                   validListings ?? globalCart.purchaseCart,
-                  globalCart.removeFromPurchaseCart
+                  globalCart.removeFromPurchaseCart,
+                  payWith
                 ).then((success) => {
                   if (success) setPurchaseCartOpen(false);
                 })
@@ -3133,4 +3137,19 @@ export default function MarketplacePage() {
       </div>
     </AppLayout>
   );
+}
+
+const AdventurerMarketplace = lazy(() => import("./AdventurerMarketplace"));
+
+/** /marketplace: Beasts by default, Loot Survivor games with `?market=adventurers`. */
+export default function MarketplacePage() {
+  const [kind] = useMarketKind();
+  if (kind === "adventurers") {
+    return (
+      <Suspense fallback={null}>
+        <AdventurerMarketplace />
+      </Suspense>
+    );
+  }
+  return <BeastMarketplace />;
 }

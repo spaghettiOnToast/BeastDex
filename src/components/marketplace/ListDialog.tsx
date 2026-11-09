@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { WalletFeeComparison } from "./WalletFeeComparison";
 import { useAccount } from "@starknet-react/core";
 import {
   Dialog,
@@ -14,12 +15,12 @@ import type { Listing } from "../../services/marketplace/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import {
   BEASTS_COLLECTION_ADDRESS,
-  CLIENT_FEE_BP,
+  clientFeeBpFor,
   DEFAULT_PAYMENT_TOKEN,
   MARKETPLACE_ADDRESS,
   ROYALTIES_ENABLED,
-  CREATOR_ROYALTY_BP,
   getPaymentTokenByAddress,
+  sellerRoyaltyFor,
 } from "../../services/marketplace/constants";
 import { useArcadeBookConfig } from "../../hooks/useArcadeBookConfig";
 import { toWei, fromWei, formatPrice } from "../../utils/price";
@@ -45,6 +46,10 @@ type Props = {
   existingListings?: Listing[];
   /** NFT collection to list from (defaults to Beasts; festival collections too) */
   collection?: string;
+  /** What's being listed, for copy ("Beast" by default, "Game" for adventurers) */
+  itemLabel?: string;
+  /** Extra content above the price (e.g. a game's live state) */
+  notice?: ReactNode;
 };
 
 export default function ListDialog({
@@ -54,7 +59,12 @@ export default function ListDialog({
   onListed,
   existingListings = [],
   collection = BEASTS_COLLECTION_ADDRESS,
+  itemLabel = "Beast",
+  notice,
 }: Props) {
+  const royalty = sellerRoyaltyFor(collection);
+  const clientFeeBp = clientFeeBpFor(collection);
+  const item = itemLabel.toLowerCase();
   const { account } = useAccount();
   const [price, setPrice] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -146,7 +156,7 @@ export default function ListDialog({
 
     setSubmitting(true);
     setError(null);
-    const toastId = toast.loading("Listing beast...");
+    const toastId = toast.loading(`Listing ${item}...`);
 
     try {
       const rawTokenId = (beast.id.split(":").pop() || beast.id).trim();
@@ -193,7 +203,7 @@ export default function ListDialog({
         });
       }
 
-      toast.success("Beast listed successfully!", { id: toastId });
+      toast.success(`${itemLabel} listed successfully!`, { id: toastId });
       toast.info("Your listing will appear in the marketplace shortly...", { duration: 5000 });
       onOpenChange(false);
       setPrice("");
@@ -202,7 +212,7 @@ export default function ListDialog({
       if (isUserRejection(e)) {
         toast.info("Listing cancelled", { id: toastId });
       } else {
-        const errorMessage = (e as Error).message || "Failed to list beast";
+        const errorMessage = (e as Error).message || `Failed to list ${item}`;
         setError(errorMessage);
         toast.error(errorMessage, { id: toastId });
       }
@@ -215,19 +225,20 @@ export default function ListDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-[#0b0b0f] border-gray-800">
         <DialogHeader>
-          <DialogTitle>List Beast for Sale</DialogTitle>
+          <DialogTitle>List {itemLabel} for Sale</DialogTitle>
           <DialogDescription>
-            Set your listing price and expiration for your beast.
+            Set your listing price and expiration for your {item}.
           </DialogDescription>
         </DialogHeader>
         {!beast ? (
-          <p className="text-sm text-gray-400">No beast selected.</p>
+          <p className="text-sm text-gray-400">No {item} selected.</p>
         ) : (
           <div className="space-y-4">
             <div>
-              <p className="text-sm text-gray-400">Beast</p>
+              <p className="text-sm text-gray-400">{itemLabel}</p>
               <p className="text-sm font-medium">{beast.name}</p>
             </div>
+            {notice}
 
             {/* Warning: Beast already has active listing(s) */}
             {hasExistingListing && (
@@ -236,7 +247,7 @@ export default function ListDialog({
                   <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
                     <p className="text-sm font-medium text-yellow-300">
-                      This beast already has {activeExistingListings.length} active listing{activeExistingListings.length > 1 ? "s" : ""}
+                      This {item} already has {activeExistingListings.length} active listing{activeExistingListings.length > 1 ? "s" : ""}
                     </p>
                     <p className="text-xs text-yellow-200/70 mt-1">
                       Creating another listing will result in duplicate listings. Consider cancelling the existing listing first.
@@ -299,11 +310,11 @@ export default function ListDialog({
                 // Calculate seller fees (deducted from proceeds)
                 // platformFeeBP is fetched dynamically from Arcade Book config
                 const platformFee = (priceBigInt * BigInt(platformFeeBP)) / 10000n;
-                const creatorRoyalty = (priceBigInt * BigInt(CREATOR_ROYALTY_BP)) / 10000n;
+                const creatorRoyalty = (priceBigInt * BigInt(royalty.bp)) / 10000n;
                 const sellerReceives = priceBigInt - platformFee - creatorRoyalty;
 
                 // Calculate buyer fees (added on top)
-                const clientFee = (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n;
+                const clientFee = (priceBigInt * BigInt(clientFeeBp)) / 10000n;
                 const buyerTotal = priceBigInt + clientFee;
 
                 return (
@@ -321,7 +332,7 @@ export default function ListDialog({
                         </div>
                       )}
                       <div className="flex justify-between">
-                        <span className="text-sm text-gray-400">Creator Royalty (Survivor DAO) {CREATOR_ROYALTY_BP / 100}%:</span>
+                        <span className="text-sm text-gray-400">{royalty.label} {royalty.bp / 100}%:</span>
                         <span className="text-sm font-medium text-gray-400">-{fromWei(creatorRoyalty, tokenDecimals)} {tokenSymbol}</span>
                       </div>
                       <div className="flex justify-between border-t border-gray-700 pt-2">
@@ -338,7 +349,7 @@ export default function ListDialog({
                         <span className="text-white">{fromWei(priceBigInt, tokenDecimals)} {tokenSymbol}</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Client Fee ({CLIENT_FEE_BP / 100}%):</span>
+                        <span className="text-gray-400">Client Fee ({clientFeeBp / 100}%):</span>
                         <span className="text-gray-300">+{fromWei(clientFee, tokenDecimals)} {tokenSymbol}</span>
                       </div>
                       <div className="flex justify-between text-sm font-semibold border-t border-blue-500/30 pt-2">
@@ -393,6 +404,7 @@ export default function ListDialog({
                 <p className="mt-2 text-xs text-red-400">{expirationDetails.error}</p>
               ) : null}
             </div>
+            <WalletFeeComparison actions={{ list: 1, approveCollection: 1 }} />
             <div className="text-[10px] text-gray-500 break-all">
               Marketplace: {MARKETPLACE_ADDRESS}
             </div>

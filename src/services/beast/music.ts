@@ -1,10 +1,7 @@
 /**
- * Beasts v3 music (read-only): a token's tracks and their sounds, from the
- * collectables API. Playback goes through the SDK's `mountBeastPlayer`.
- *
- * Not covered here (wallet transactions to the Sound Manager, and Live-mode
- * auditioning, which composes the drifted song client-side): setting the
- * default track, saving a sound mode, buying tracks.
+ * Beasts v3 music: a token's tracks and their sounds, from the collectables
+ * API. Playback goes through the SDK's `mountBeastPlayer`; owner transactions
+ * (default track, sound mode, buying tracks) live in `musicActions`.
  */
 import { BeastSoundLoader, type BeastSoundData } from "@provable-games/collectables";
 import { collectablesClient, COLLECTABLES_API_URL } from "./collectablesClient";
@@ -48,6 +45,21 @@ export type BeastMusic = {
 export function trackRefOf(ref: MusicTrackRef | null | undefined): string | null {
   if (!ref) return null;
   return ref.kind === "named" ? "named" : `${ref.kind}:${ref.id ?? 0}`;
+}
+
+/** `Sound Effects` presets 0-3: how a track is performed (the notes stay the same). */
+export const EFFECT_NAMES = ["Written", "Mega", "Echo", "Mega + echo"] as const;
+
+export const EFFECT_TITLES: readonly string[] = [
+  "Plays as written",
+  "Mega lead sound, doubled an octave up; faster, louder",
+  "Lead repeated a dotted eighth later, half as loud; faster, louder",
+  "Mega and echo together, at the fastest and loudest settings",
+];
+
+/** Shared tracks past the Sound Check (id 0) are Species Songs, whose effects the species' King sets. */
+export function isKingSetTrack(ref: MusicTrackRef): boolean {
+  return ref.kind === "shared" && (ref.id ?? 0) >= 1;
 }
 
 export const MUSIC_MODE_LABELS: Record<MusicMode["kind"], string> = {

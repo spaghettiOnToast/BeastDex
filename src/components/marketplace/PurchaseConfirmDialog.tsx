@@ -1,3 +1,5 @@
+import { useEffect, useState, type ReactNode } from "react";
+import { WalletFeeComparison } from "./WalletFeeComparison";
 import {
   Dialog,
   DialogContent,
@@ -9,21 +11,32 @@ import {
 import { Button } from "../ui/button";
 import type { Listing } from "../../services/marketplace/types";
 import { formatPrice } from "../../utils/price";
-import { getPaymentTokenByAddress, CLIENT_FEE_BP } from "../../services/marketplace/constants";
+import { getPaymentTokenByAddress, clientFeeBpFor } from "../../services/marketplace/constants";
 import { toBigIntSafe } from "../../utils/bigint";
 import TokenIcon from "../ui/TokenIcon";
 import { useSelectedToken, tokenAmountToUsd } from "../../hooks/useEkuboTokens";
 import { useControllerUsernames } from "../../hooks/useControllerUsernames";
 import { normaliseStarknetAddress } from "../../utils/address";
 import BeastCard from "../beast/BeastCard";
+import { PayWithPicker } from "./PayWithPicker";
+import { DEFAULT_SLIPPAGE_BP, sameToken, type PayWith } from "../../services/marketplace/swap";
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   listing: Listing | null;
   priceLabel: string;
-  onConfirm: () => void;
+  /** `payWith` is set when the buyer chose another token (swapped in the same tx) */
+  onConfirm: (payWith?: PayWith) => void;
   isProcessing: boolean;
+  /** Item copy ("Beast" by default) */
+  itemLabel?: string;
+  /** Display name when the listing has no Beast record */
+  itemName?: string;
+  /** Replaces the Beast card (e.g. a game card plus its live state) */
+  preview?: ReactNode;
+  /** Blocks confirming (e.g. the game changed and needs re-review) */
+  confirmDisabled?: boolean;
 };
 
 export default function PurchaseConfirmDialog({
@@ -33,16 +46,29 @@ export default function PurchaseConfirmDialog({
   priceLabel,
   onConfirm,
   isProcessing,
+  itemLabel = "Beast",
+  itemName,
+  preview,
+  confirmDisabled = false,
 }: Props) {
   const { decimals: tokenDecimals, usdPrice } = useSelectedToken(listing?.paymentToken ?? undefined);
   const { usernames: sellerUsernames } = useControllerUsernames([listing?.seller]);
+  const listingToken = listing?.paymentToken ?? "0x0";
+  const [payWith, setPayWith] = useState<PayWith>({ token: listingToken, slippageBp: DEFAULT_SLIPPAGE_BP });
+  const [swapBlocker, setSwapBlocker] = useState<string | null>(null);
+  // New listing: start from paying in its own token
+  useEffect(() => {
+    setPayWith((p) => ({ ...p, token: listingToken }));
+  }, [listing?.listingId, listingToken]);
 
   if (!listing) return null;
+  const swapping = !sameToken(payWith.token, listingToken);
 
   const normalizedSeller = normaliseStarknetAddress(listing.seller);
   const sellerDisplay = (normalizedSeller && sellerUsernames[normalizedSeller]) ||
     `${listing.seller.slice(0, 6)}...${listing.seller.slice(-4)}`;
 
+  const CLIENT_FEE_BP = clientFeeBpFor(listing.collection);
   const priceBigInt = toBigIntSafe(listing.price);
   // Buyer pays platform fee (basis points out of 10000)
   const buyerFeeBigInt = CLIENT_FEE_BP > 0 ? (priceBigInt * BigInt(CLIENT_FEE_BP)) / 10000n : 0n;
@@ -69,19 +95,19 @@ export default function PurchaseConfirmDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {listing.beast && (
+          {preview ?? (listing.beast && (
             <div className="flex justify-center">
               <div className="w-[200px]">
                 <BeastCard beast={listing.beast} />
               </div>
             </div>
-          )}
+          ))}
 
           <div className="space-y-2">
             <div className="flex justify-between">
-              <span className="text-sm text-zinc-400">Beast:</span>
+              <span className="text-sm text-zinc-400">{itemLabel}:</span>
               <span className="text-sm font-medium">
-                {listing.beast?.name || `#${listing.tokenId}`}
+                {listing.beast?.name || itemName || `#${listing.tokenId}`}
               </span>
             </div>
 
@@ -124,7 +150,7 @@ export default function PurchaseConfirmDialog({
             </div>
 
             <div className="flex justify-between">
-              <span className="text-sm text-zinc-400">Payment Currency:</span>
+              <span className="text-sm text-zinc-400">Listing currency:</span>
               <div className="flex items-center gap-2">
                 <TokenIcon symbol={tokenSymbol} size="sm" />
                 <span className="text-sm font-medium text-gold">
@@ -133,6 +159,14 @@ export default function PurchaseConfirmDialog({
               </div>
             </div>
 
+            <PayWithPicker
+              needs={[{ currency: listingToken, amount: totalBigInt }]}
+              value={payWith}
+              onChange={setPayWith}
+              onBlockerChange={setSwapBlocker}
+              disabled={isProcessing}
+            />
+
             <div className="flex justify-between">
               <span className="text-sm text-zinc-400">Seller:</span>
               <span className="text-xs font-mono text-zinc-300">
@@ -140,6 +174,8 @@ export default function PurchaseConfirmDialog({
               </span>
             </div>
           </div>
+
+          <WalletFeeComparison actions={{ buy: 1, approveToken: 1, swap: swapping ? 1 : 0 }} />
 
           <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-3">
             <p className="text-xs text-yellow-200">
@@ -159,11 +195,11 @@ export default function PurchaseConfirmDialog({
             Cancel
           </Button>
           <Button
-            onClick={onConfirm}
-            disabled={isProcessing}
+            onClick={() => onConfirm(swapping ? payWith : undefined)}
+            disabled={isProcessing || confirmDisabled || (swapping && !!swapBlocker)}
             className="flex-1 font-bold bg-gold/15 text-gold border border-gold hover:bg-gold/20"
           >
-            {isProcessing ? "Processing..." : "Confirm Purchase"}
+            {isProcessing ? "Processing..." : swapping ? "Swap & Buy" : "Confirm Purchase"}
           </Button>
         </DialogFooter>
       </DialogContent>

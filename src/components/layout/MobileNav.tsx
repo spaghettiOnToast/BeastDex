@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, BarChart3, Home, Package, Store, Sword, type LucideIcon } from "lucide-react";
+import { Menu, X, BarChart3, Home, Music, Package, Store, Sword, type LucideIcon } from "lucide-react";
 import { useAccount } from "@starknet-react/core";
 import { Button } from "../ui/button";
 import { MARKETPLACE_ENABLED } from "../../services/marketplace/constants";
@@ -34,6 +34,7 @@ export function MobileNav({ onNavigate }: Props) {
     ...(MARKETPLACE_ENABLED ? [{ to: "/marketplace", label: "Marketplace", icon: Store }] : []),
     { to: "/statistics", label: "Stats", icon: BarChart3 },
     { to: "/dungeons", label: "Dungeons", icon: Sword },
+    { to: "/tracks", label: "Tracks", icon: Music },
   ];
 
   const mobileMenu = isOpen ? (
