@@ -7,8 +7,10 @@ import type { Beast } from "./types";
 import { collectablesClient } from "./collectablesClient";
 import { mapSdkBeast } from "./helpers";
 import { fetchBeastMusic, type MusicMode } from "./music";
-import { fetchSharedSongPreset } from "./musicActions";
+import { hash } from "starknet";
+import { fetchSharedSongPreset, SOUND_MANAGER_ADDRESS } from "./musicActions";
 import { apiCache } from "../apiCache";
+import { withReadProvider } from "../tx";
 
 /** The Species Song is the first King-controlled shared track. */
 export const SPECIES_SONG_ID = 1;
@@ -76,4 +78,89 @@ export async function searchNamedSongs(query: string, speciesId?: number): Promi
     limit: 48,
   });
   return res.items.filter((b) => b.prefixName && b.suffixName && !b.genesis).map(mapSdkBeast);
+}
+
+/** Block the Sound Manager was deployed at: purchases can't be older. */
+const SOUND_MANAGER_DEPLOY_BLOCK = 17372842;
+
+export type TrackPurchase = {
+  /** decimal token id of the beast the song was bought for */
+  tokenId: string;
+  purchaser: string;
+  /** the beast's individual track id: plays as `individual:<id>` */
+  trackId: number;
+  /** 0 = the first edition (a Song); later editions sell that edition's style */
+  editionId: number;
+  purchaseBlock: number;
+  /** the song can play from this block (purchase + 10) */
+  readyAt: number;
+  txHash: string;
+};
+
+export function purchaseTrackRef(p: TrackPurchase): string {
+  return `individual:${p.trackId}`;
+}
+
+export function editionLabel(editionId: number): string {
+  return editionId === 0 ? "Song" : `Edition ${editionId + 1}`;
+}
+
+/**
+ * Every `TrackPurchased` event from the Sound Manager, newest first, plus the
+ * current head block (to tell which songs are still composing).
+ * Event layout: keys [selector, token_id]; data [purchaser, id, edition_id,
+ * purchase_block, ready_at, ...binding].
+ */
+export async function fetchTrackPurchases(): Promise<{ purchases: TrackPurchase[]; head: number }> {
+  return apiCache.get("track-purchases", {}, async () => {
+    const selector = hash.getSelectorFromName("TrackPurchased");
+    return withReadProvider(async (p) => {
+      const purchases: TrackPurchase[] = [];
+      let token: string | undefined;
+      for (let page = 0; page < 200; page++) {
+        const res = await p.getEvents({
+          address: SOUND_MANAGER_ADDRESS,
+          keys: [[selector]],
+          from_block: { block_number: SOUND_MANAGER_DEPLOY_BLOCK },
+          to_block: "latest",
+          chunk_size: 1000,
+          continuation_token: token,
+        });
+        for (const e of res.events) {
+          const [purchaser = "0x0", id = "0x0", edition = "0x0", purchaseBlock = "0x0", readyAt = "0x0"] = e.data;
+          purchases.push({
+            tokenId: BigInt(e.keys[1] ?? "0x0").toString(),
+            purchaser,
+            trackId: Number(BigInt(id)),
+            editionId: Number(BigInt(edition)),
+            purchaseBlock: Number(BigInt(purchaseBlock)),
+            readyAt: Number(BigInt(readyAt)),
+            txHash: e.transaction_hash,
+          });
+        }
+        token = res.continuation_token;
+        if (!token) break;
+      }
+      const head = await p.getBlockNumber();
+      purchases.sort((a, b) => b.purchaseBlock - a.purchaseBlock || b.trackId - a.trackId);
+      return { purchases, head };
+    });
+  });
+}
+
+const blockTimeCache = new Map<number, Promise<number | null>>();
+
+/** A block's unix timestamp (seconds), cached. */
+export function fetchBlockTime(block: number): Promise<number | null> {
+  let pending = blockTimeCache.get(block);
+  if (!pending) {
+    pending = withReadProvider((p) => p.getBlockWithTxHashes(block))
+      .then((b) => ("timestamp" in b ? Number(b.timestamp) : null))
+      .catch(() => {
+        blockTimeCache.delete(block);
+        return null;
+      });
+    blockTimeCache.set(block, pending);
+  }
+  return pending;
 }

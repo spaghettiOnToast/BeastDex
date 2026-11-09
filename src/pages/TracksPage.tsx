@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { beastImageUrl, hasBundledBeastImage, type BeastSpecies } from "@provable-games/collectables";
-import { Crown, Music, Pause, Play, Search } from "lucide-react";
+import { Crown, ExternalLink, Music, Pause, Play, Search, ShoppingBag } from "lucide-react";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import TrackPlayerBar, { type NowPlaying, type PlayerStatus } from "../components/tracks/TrackPlayerBar";
 import { cn } from "../lib/utils";
-import { fetchBeastSpecies, type Beast } from "../services/beast";
+import { fetchBeastSpecies, fetchBeastsByIds, type Beast } from "../services/beast";
+import { useControllerUsernames } from "../hooks/useControllerUsernames";
+import { normaliseStarknetAddress } from "../utils/address";
+import { formatAgo } from "../services/adventurers/format";
 import { spriteSpeciesName } from "../services/beast/cardImage";
 import { EFFECT_NAMES, EFFECT_TITLES, MUSIC_MODE_LABELS } from "../services/beast/music";
 import {
@@ -14,6 +17,11 @@ import {
   fetchSpeciesSongSettings,
   fetchSpeciesStandIn,
   searchNamedSongs,
+  editionLabel,
+  fetchBlockTime,
+  fetchTrackPurchases,
+  purchaseTrackRef,
+  type TrackPurchase,
   NAMED_SONG_REF,
   SOUND_CHECK_REF,
   SPECIES_SONG_REF,
@@ -323,6 +331,179 @@ function NamedSongSearch({ species, player }: { species: BeastSpecies[]; player:
   );
 }
 
+const PURCHASES_PAGE = 12;
+
+function PurchaseRow({
+  purchase,
+  beast,
+  head,
+  buyerName,
+  player,
+}: {
+  purchase: TrackPurchase;
+  beast: Beast | undefined;
+  head: number;
+  buyerName: string | undefined;
+  player: Player;
+}) {
+  const [time, setTime] = useState<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetchBlockTime(purchase.purchaseBlock).then((t) => alive && setTime(t));
+    return () => {
+      alive = false;
+    };
+  }, [purchase.purchaseBlock]);
+
+  const ready = head >= purchase.readyAt;
+  const label = editionLabel(purchase.editionId);
+  const fx = beast ? tokenEffect(beast) : null;
+  const buyer = normaliseStarknetAddress(purchase.purchaser) ?? purchase.purchaser;
+  const buyerLabel = buyerName ?? `${buyer.slice(0, 6)}…${buyer.slice(-4)}`;
+  const item: NowPlaying | null = beast
+    ? {
+        key: `purchase:${purchase.tokenId}:${purchase.trackId}`,
+        beast,
+        track: purchaseTrackRef(purchase),
+        title: `${beast.name} · ${label}`,
+        subtitle: [`Bought by ${buyerLabel}`, fx != null ? EFFECT_NAMES[fx] : null].filter(Boolean).join(" · "),
+      }
+    : null;
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-surface/60 p-2">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          {beast ? (
+            <Link
+              to={`/beasts/${encodeURIComponent(purchase.tokenId)}`}
+              className="truncate text-xs font-bold text-zinc-100 hover:text-gold hover:underline"
+            >
+              {beast.name}
+            </Link>
+          ) : (
+            <span className="truncate text-xs font-bold text-zinc-500">Loading beast…</span>
+          )}
+          <Pill tone={purchase.editionId === 0 ? "default" : "gold"} title={purchase.editionId === 0 ? "A song from the first edition" : "That edition's style track"}>
+            {label}
+          </Pill>
+        </div>
+        <p className="mt-0.5 truncate text-[10px] text-zinc-500">
+          by{" "}
+          <Link to={`/collection/${encodeURIComponent(buyerName ?? buyer)}`} className="text-zinc-300 hover:text-gold hover:underline">
+            {buyerLabel}
+          </Link>
+          {time != null && <> · {formatAgo(time)}</>}
+          {" · "}
+          <a
+            href={`https://voyager.online/tx/${purchase.txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-0.5 hover:text-gold"
+            aria-label="View transaction"
+          >
+            tx <ExternalLink className="h-2.5 w-2.5" />
+          </a>
+        </p>
+      </div>
+      <div className="w-24 flex-shrink-0">
+        {ready ? (
+          <PlayButton player={player} item={item} label="Play" />
+        ) : (
+          <span className="block text-center text-[10px] text-zinc-500" title="A new song can play ten blocks after it's bought">
+            Composing…
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Songs and Editions bought for beasts, newest first, read from Sound Manager events. */
+function RecentPurchases({ player }: { player: Player }) {
+  const [data, setData] = useState<{ purchases: TrackPurchase[]; head: number } | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [shown, setShown] = useState(PURCHASES_PAGE);
+  const [beasts, setBeasts] = useState<Record<string, Beast>>({});
+
+  useEffect(() => {
+    fetchTrackPurchases()
+      .then(setData)
+      .catch((err) => {
+        console.warn("[tracks] couldn't read purchases:", err);
+        setFailed(true);
+      });
+  }, []);
+
+  const visible = useMemo(() => data?.purchases.slice(0, shown) ?? [], [data, shown]);
+  const missingKey = visible.map((p) => p.tokenId).filter((id) => !beasts[id]).join(",");
+
+  useEffect(() => {
+    if (!missingKey) return;
+    let alive = true;
+    fetchBeastsByIds(missingKey.split(","))
+      .then((list) => {
+        if (!alive) return;
+        setBeasts((prev) => {
+          const next = { ...prev };
+          for (const b of list) next[BigInt(b.tokenId).toString()] = b;
+          return next;
+        });
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [missingKey]);
+
+  const { usernames } = useControllerUsernames(visible.map((p) => p.purchaser), { delayMs: 200 });
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="flex items-center gap-2 text-lg font-bold text-white">
+          <ShoppingBag className="h-4 w-4 text-gold" /> Recently bought
+          {data && <span className="text-sm font-normal text-zinc-500">· {data.purchases.length} songs so far</span>}
+        </h2>
+        <p className="text-sm text-zinc-400">
+          Songs and Editions bought for beasts with SKULL, newest first. Anyone can buy a song for any beast.
+        </p>
+      </div>
+      {failed ? (
+        <p className="text-xs text-red-400">Couldn&apos;t read purchases from the chain.</p>
+      ) : !data ? (
+        <p className="text-xs text-zinc-500">Reading purchases from the chain…</p>
+      ) : data.purchases.length === 0 ? (
+        <p className="text-xs text-zinc-500">No songs have been bought yet.</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {visible.map((p) => (
+              <PurchaseRow
+                key={`${p.tokenId}:${p.trackId}`}
+                purchase={p}
+                beast={beasts[p.tokenId]}
+                head={data.head}
+                buyerName={usernames[normaliseStarknetAddress(p.purchaser) ?? p.purchaser]}
+                player={player}
+              />
+            ))}
+          </div>
+          {shown < data.purchases.length && (
+            <button
+              type="button"
+              onClick={() => setShown((n) => n + PURCHASES_PAGE)}
+              className="w-full rounded-lg border border-white/10 py-2 text-xs font-semibold text-zinc-300 transition-colors hover:border-gold/50 hover:text-gold"
+            >
+              Show more ({data.purchases.length - shown} left)
+            </button>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 /** Tracks: every species' Species Song and Sound Check, plus a Named Song search. */
 function TracksPage() {
   const [species, setSpecies] = useState<BeastSpecies[] | null>(null);
@@ -392,7 +573,7 @@ function TracksPage() {
             >
               Casey Wescott
             </a>{" "}
-            of Fleet Foxes, and is built on his Midi Fun composer.{" "}
+            and is built on his Midi Fun composer.{" "}
             <a
               href="https://x.com/LootSurvivor/status/2118390500092993656"
               target="_blank"
@@ -428,6 +609,8 @@ function TracksPage() {
         </header>
 
         <NamedSongSearch species={species ?? []} player={player} />
+
+        <RecentPurchases player={player} />
 
         <section className="space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
