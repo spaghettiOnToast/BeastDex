@@ -302,7 +302,7 @@ export default function AdventurerMarketplace() {
   const [sendOpen, setSendOpen] = useState(false);
   const [goldenOpen, setGoldenOpen] = useState(false);
   const golden = useGoldenPasses(tab === "mine" ? address : undefined);
-  const goldenReady = golden.data?.passes.filter((p) => p.usable).length ?? 0;
+  const goldenSummary = golden.data?.summary;
   const [listTarget, setListTarget] = useState<AdventurerGame | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [offersFor, setOffersFor] = useState<AdventurerGame | null>(null);
@@ -650,7 +650,7 @@ export default function AdventurerMarketplace() {
                     <option value="level">Level</option>
                     <option value="last-action">Last played</option>
                   </select>
-                  {(golden.data?.passes.length ?? 0) > 0 && (
+                  {!!goldenSummary?.total && (
                     <Button
                       size="sm"
                       className="ml-auto h-8 border border-gold bg-gold/15 text-xs font-bold text-gold hover:bg-gold/20"
@@ -660,7 +660,7 @@ export default function AdventurerMarketplace() {
                       <img src={GOLDEN_TOKEN_IMAGE_URL} alt="" className="mr-1.5 h-4 w-4" />
                       Golden Tokens
                       <span className="ml-1.5 rounded bg-gold/20 px-1 text-[10px]">
-                        {goldenReady}/{golden.data!.passes.length} ready
+                        {goldenSummary.ready}/{goldenSummary.total} ready
                       </span>
                     </Button>
                   )}

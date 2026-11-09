@@ -7,7 +7,12 @@ import { AppLayout } from "../components/layout/AppLayout";
 import { cn } from "../lib/utils";
 import { GoldenPassMintDialog } from "../components/adventurers/GoldenPassMintDialog";
 import { useGoldenPasses } from "../hooks/useGoldenPasses";
-import { GOLDEN_TOKEN_IMAGE_URL, formatCountdown, formatReadyDate } from "../services/adventurers/goldenPass";
+import {
+  GOLDEN_TOKEN_IMAGE_URL,
+  formatCountdown,
+  formatReadyDate,
+  type GoldenPassSummary,
+} from "../services/adventurers/goldenPass";
 import { DUNGEONS, LOOT_SURVIVOR_URL, lootSurvivorDungeonUrl, type Dungeon } from "../services/lootSurvivor";
 import {
   FESTIVAL_COLLECTIONS,
@@ -18,7 +23,7 @@ import {
   type FestivalToken,
 } from "../services/festivalBeasts";
 
-type GoldenSummary = { ready: number; total: number; nextReady: number | null; onOpen: () => void };
+type GoldenSummary = GoldenPassSummary & { onOpen: () => void };
 
 function DungeonCard({ dungeon, golden }: { dungeon: Dungeon; golden?: GoldenSummary }) {
   const closed = dungeon.status === "closed";
@@ -196,17 +201,11 @@ function DungeonsPage() {
   const closed = DUNGEONS.filter((d) => d.status === "closed");
   const [goldenOpen, setGoldenOpen] = useState(false);
   const goldenQuery = useGoldenPasses(address);
-  const golden = useMemo<GoldenSummary | undefined>(() => {
-    const passes = goldenQuery.data?.passes;
-    if (!passes?.length) return undefined;
-    const waiting = passes.filter((p) => !p.usable && p.readyAt).map((p) => p.readyAt!);
-    return {
-      ready: passes.filter((p) => p.usable).length,
-      total: passes.length,
-      nextReady: waiting.length ? Math.min(...waiting) : null,
-      onOpen: () => setGoldenOpen(true),
-    };
-  }, [goldenQuery.data]);
+  const summary = goldenQuery.data?.summary;
+  const golden = useMemo<GoldenSummary | undefined>(
+    () => (summary?.total ? { ...summary, onOpen: () => setGoldenOpen(true) } : undefined),
+    [summary],
+  );
 
   return (
     <AppLayout topBar={<TopBar />}>

@@ -43,6 +43,20 @@ export type GoldenPassStatus = {
   readyAt: number | null;
 };
 
+const toFelt = (n: number) => `0x${n.toString(16)}`;
+
+/** Ready count and the soonest unlock time across a wallet's passes. */
+export type GoldenPassSummary = { ready: number; total: number; nextReady: number | null };
+
+export function summarizeGoldenPasses(passes: GoldenPassStatus[]): GoldenPassSummary {
+  const waiting = passes.flatMap((p) => (!p.usable && p.readyAt ? [p.readyAt] : []));
+  return {
+    ready: passes.filter((p) => p.usable).length,
+    total: passes.length,
+    nextReady: waiting.length ? Math.min(...waiting) : null,
+  };
+}
+
 const call = (contractAddress: string, entrypoint: string, calldata: string[]) =>
   withReadProvider((p) => p.callContract({ contractAddress, entrypoint, calldata }, "latest"));
 
@@ -56,6 +70,7 @@ async function callPreConfirmed(contractAddress: string, entrypoint: string, cal
     try {
       const res = await fetch(url, {
         method: "POST",
+        signal: AbortSignal.timeout(8_000),
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jsonrpc: "2.0",
@@ -99,16 +114,15 @@ export async function fetchOwnedGoldenTokenIds(owner: string): Promise<number[]>
 }
 
 export async function isGoldenPassUsable(tokenId: number): Promise<boolean> {
-  const r = await callPreConfirmed(BEAST_MODE_DUNGEON_ADDRESS, "is_golden_pass_usable", [GOLDEN_TOKEN_ADDRESS, `0x${tokenId.toString(16)}`]);
+  const r = await callPreConfirmed(BEAST_MODE_DUNGEON_ADDRESS, "is_golden_pass_usable", [GOLDEN_TOKEN_ADDRESS, toFelt(tokenId)]);
   return BigInt(r[0]) === 1n;
 }
 
 /** One token's usability and unlock time, from pre-confirmed state. */
 export async function fetchGoldenPassStatus(tokenId: number, cooldownS: number): Promise<GoldenPassStatus> {
-  const id = `0x${tokenId.toString(16)}`;
   const [usable, last] = await Promise.all([
     isGoldenPassUsable(tokenId),
-    callPreConfirmed(BEAST_MODE_DUNGEON_ADDRESS, "golden_pass_last_used", [GOLDEN_TOKEN_ADDRESS, id]),
+    callPreConfirmed(BEAST_MODE_DUNGEON_ADDRESS, "golden_pass_last_used", [GOLDEN_TOKEN_ADDRESS, toFelt(tokenId)]),
   ]);
   const lastUsed = Number(BigInt(last[0]));
   return { tokenId, usable, lastUsed, readyAt: usable ? null : lastUsed ? lastUsed + cooldownS : null };
@@ -128,7 +142,7 @@ export function buildGoldenPassMintCall(tokenId: number, to: string): Call {
   return {
     contractAddress: BEAST_MODE_DUNGEON_ADDRESS,
     entrypoint: "new_game",
-    calldata: ["1", GOLDEN_TOKEN_ADDRESS, `0x${tokenId.toString(16)}`, to, "0"],
+    calldata: ["1", GOLDEN_TOKEN_ADDRESS, toFelt(tokenId), to, "0"],
   };
 }
 

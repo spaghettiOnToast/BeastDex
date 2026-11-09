@@ -3,11 +3,13 @@ import {
   fetchGoldenPassConfig,
   fetchGoldenPassStatuses,
   fetchOwnedGoldenTokenIds,
+  summarizeGoldenPasses,
   type GoldenPassConfig,
   type GoldenPassStatus,
+  type GoldenPassSummary,
 } from "../services/adventurers/goldenPass";
 
-export type GoldenPasses = { config: GoldenPassConfig; passes: GoldenPassStatus[] };
+export type GoldenPasses = { config: GoldenPassConfig; passes: GoldenPassStatus[]; summary: GoldenPassSummary };
 
 /** The wallet's Golden Tokens and whether each can mint a Beast Mode game right now. */
 export function useGoldenPasses(address: string | undefined) {
@@ -17,7 +19,8 @@ export function useGoldenPasses(address: string | undefined) {
     staleTime: 60_000,
     queryFn: async () => {
       const [config, ids] = await Promise.all([fetchGoldenPassConfig(), fetchOwnedGoldenTokenIds(address!)]);
-      return { config, passes: await fetchGoldenPassStatuses(ids, config.cooldownS) };
+      const passes = await fetchGoldenPassStatuses(ids, config.cooldownS);
+      return { config, passes, summary: summarizeGoldenPasses(passes) };
     },
   });
 }

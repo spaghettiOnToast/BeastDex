@@ -6,7 +6,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { Alert, AlertDescription } from "../ui/alert";
 import { WalletFeeComparison } from "../marketplace/WalletFeeComparison";
 import { NoticeBox } from "./TxNotices";
 import { useGoldenPasses } from "../../hooks/useGoldenPasses";
@@ -65,7 +64,6 @@ export function GoldenPassMintDialog({ open, onClose, onMinted }: Props) {
   const [steps, setSteps] = useState<Step[] | null>(null);
   const [running, setRunning] = useState(false);
   const runningRef = useRef(false);
-  const [error, setError] = useState<string | null>(null);
   const now = Math.floor(Date.now() / 1000);
 
   const passes = useMemo(() => golden.data?.passes ?? [], [golden.data]);
@@ -75,10 +73,7 @@ export function GoldenPassMintDialog({ open, onClose, onMinted }: Props) {
     () => usable.filter((p) => (selected ? selected.has(p.tokenId) : true)).map((p) => p.tokenId),
     [usable, selected],
   );
-  const nextReady = useMemo(
-    () => passes.filter((p) => !p.usable && p.readyAt).reduce<number | null>((m, p) => (m === null || p.readyAt! < m ? p.readyAt! : m), null),
-    [passes],
-  );
+  const nextReady = golden.data?.summary.nextReady ?? null;
 
   const to = recipient.trim() ? recip.resolved : (address ?? null);
   const toSelf = !!to && !!address && compareStarknetAddresses(to, address);
@@ -89,7 +84,6 @@ export function GoldenPassMintDialog({ open, onClose, onMinted }: Props) {
     if (!open) {
       setSelected(null);
       setSteps(null);
-      setError(null);
     }
   }, [open]);
 
@@ -106,7 +100,6 @@ export function GoldenPassMintDialog({ open, onClose, onMinted }: Props) {
     if (!account || !to || chosen.length === 0 || runningRef.current) return;
     runningRef.current = true;
     saveRecipient(recipient.trim());
-    setError(null);
     setRunning(true);
     const plan: Step[] = chosen.map((tokenId) => ({ tokenId, state: "queued" }));
     setSteps(plan);
@@ -194,7 +187,7 @@ export function GoldenPassMintDialog({ open, onClose, onMinted }: Props) {
           </DialogTitle>
           <DialogDescription>
             Each Golden Token mints one free Beast Mode game, then rests for{" "}
-            {Math.round((golden.data?.config.cooldownS ?? 604_800) / 86_400)} days. Mint every ready token and send the games
+            {Math.round(cooldownS / 86_400)} days. Mint every ready token and send the games
             straight to any wallet, such as your Controller.
           </DialogDescription>
         </DialogHeader>
@@ -328,12 +321,6 @@ export function GoldenPassMintDialog({ open, onClose, onMinted }: Props) {
                     expiryDays && `Golden Token games must be played within ${expiryDays} days of minting.`,
                   ]}
                 />
-
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
 
                 {chosen.length > 0 && <WalletFeeComparison actions={{ goldenPassMint: 1 }} txCount={chosen.length} />}
 

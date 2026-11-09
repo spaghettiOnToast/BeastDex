@@ -4,6 +4,8 @@ import {
   GOLDEN_TOKEN_ADDRESS,
   buildGoldenPassMintCall,
   formatCountdown,
+  isCooldownError,
+  summarizeGoldenPasses,
 } from "../src/services/adventurers/goldenPass";
 import { estimateFeeFri, WALLET_OVERHEAD_L2, ACTION_L2_GAS } from "../src/services/gas/walletFees";
 
@@ -36,10 +38,21 @@ describe("multi-transaction fees", () => {
   });
 });
 
-import { isCooldownError } from "../src/services/adventurers/goldenPass";
 describe("cooldown errors", () => {
   it("recognises the dungeon's revert reason", () => {
     expect(isCooldownError(new Error("... ('Golden pass on cooldown'), ENTRYPOINT_FAILED"))).toBe(true);
     expect(isCooldownError(new Error("User rejected"))).toBe(false);
+  });
+});
+
+describe("golden pass summary", () => {
+  it("counts ready tokens and finds the soonest unlock", () => {
+    expect(
+      summarizeGoldenPasses([
+        { tokenId: 1, usable: true, lastUsed: 0, readyAt: null },
+        { tokenId: 2, usable: false, lastUsed: 10, readyAt: 500 },
+        { tokenId: 3, usable: false, lastUsed: 5, readyAt: 300 },
+      ]),
+    ).toEqual({ ready: 1, total: 3, nextReady: 300 });
   });
 });
