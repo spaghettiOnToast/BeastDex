@@ -73,6 +73,18 @@ export async function fetchSharedSongPreset(speciesId: number, sharedId: number)
   return Number(BigInt(preset));
 }
 
+/**
+ * King only: set a Species Song's effects preset (0-3) for the whole species.
+ * `leaderTokenId` is the species' Rank 1 beast, which the caller must own.
+ */
+export function setSharedSongPresetCall(leaderTokenId: string, sharedId: number, preset: number): Call {
+  return {
+    contractAddress: SOUND_MANAGER_ADDRESS,
+    entrypoint: "set_shared_song_preset",
+    calldata: [leaderTokenId, String(sharedId), String(preset)],
+  };
+}
+
 /** SKULL balance (wei) of an address. */
 export async function fetchSkullBalance(address: string): Promise<bigint> {
   // Explicit "latest": starknet.js v7 defaults to "pending", which RPC 0.8+

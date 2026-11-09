@@ -313,6 +313,7 @@ export function BeastDetailContent({
                 tokenId={beast.tokenId}
                 speciesId={beast.speciesId}
                 soundEffects={beast.soundEffects ?? beast.visualEffects}
+                isKing={Number(beast.attributes.find((a) => a.trait_type.toLowerCase() === "rank")?.value) === 1}
                 owner={beast.owner}
                 onMusicChanged={handleMusicChanged}
                 selectedRef={selectedTrackRef}

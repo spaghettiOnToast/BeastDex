@@ -5,6 +5,7 @@ import { ExternalLink, Music, Pause, Play, Plus, Star } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { lootSurvivorBeastUrl } from "../../services/beast/constants";
 import {
+  clearTrackSounds,
   fetchBeastMusic,
   isKingSetTrack,
   trackRefOf,
@@ -21,6 +22,7 @@ import {
   formatSkull,
   musicContractsProblem,
   setDefaultTrackCall,
+  setSharedSongPresetCall,
   setTrackModeCall,
   waitForMusic,
   TRACK_PRICE_WEI,
@@ -34,6 +36,8 @@ type Props = {
   speciesId?: number;
   /** the token's `Sound Effects` preset (0-3), set by its rarity */
   soundEffects?: number;
+  /** this beast is its species' King (Rank 1): its owner sets the Species Songs' effects */
+  isKing?: boolean;
   /** current owner of the beast (only they can change its music) */
   owner: string | null;
   /** track currently loaded in the player (null = the token's default) */
@@ -47,7 +51,7 @@ type Props = {
   onMusicChanged?: () => void;
 };
 
-type Busy = { kind: "default" | "mode" | "buy"; ref?: string; phase: "wallet" | "confirming" };
+type Busy = { kind: "default" | "mode" | "buy" | "preset"; ref?: string; phase: "wallet" | "confirming" };
 
 const TRACK_BLURBS: Record<string, string> = {
   "shared:0": "Warming up",
@@ -82,6 +86,7 @@ export default function BeastMusicPanel({
   tokenId,
   speciesId,
   soundEffects,
+  isKing = false,
   owner,
   selectedRef,
   playing,
@@ -99,10 +104,13 @@ export default function BeastMusicPanel({
   const [skullReload, setSkullReload] = useState(0);
   /** King-set effects preset per Species Song ref (absent while loading / unreadable). */
   const [kingPresets, setKingPresets] = useState<Record<string, number>>({});
+  /** The King's staged (not yet applied) effects choice for a Species Song. */
+  const [stagedPreset, setStagedPreset] = useState<{ ref: string; preset: number } | null>(null);
 
   const canManage =
     Boolean(account && address && owner) &&
     normaliseStarknetAddress(address) === normaliseStarknetAddress(owner);
+  const canKing = canManage && isKing;
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -251,6 +259,42 @@ export default function BeastMusicPanel({
     return { name: EFFECT_NAMES[preset], title: `${EFFECT_TITLES[preset]}${echoNote}. ${source}.` };
   };
 
+  /** King: apply a staged effects preset to a Species Song, then re-read it on-chain. */
+  const applyPreset = async (track: MusicTrack, preset: number) => {
+    if (!account || !music) return;
+    const problem = musicContractsProblem(music);
+    if (problem) {
+      setError({ at: track.ref, message: problem });
+      return;
+    }
+    const next = { kind: "preset" as const, ref: track.ref };
+    setError(null);
+    setBusy({ ...next, phase: "wallet" });
+    try {
+      const res = await account.execute([setSharedSongPresetCall(tokenId, track.id ?? 0, preset)]);
+      setBusy({ ...next, phase: "confirming" });
+      const outcome = await waitForTx(res.transaction_hash);
+      if (outcome === "reverted" || outcome === "rejected") throw new Error(`Transaction ${outcome}.`);
+      let current: number | null = null;
+      for (let i = 0; i < 6 && current !== preset; i++) {
+        if (i > 0) await new Promise((r) => setTimeout(r, 2500));
+        current = await fetchSharedSongPreset(speciesId ?? 0, track.id ?? 0).catch(() => current);
+      }
+      if (current != null) setKingPresets((prev) => ({ ...prev, [track.ref]: current }));
+      if (current !== preset) {
+        setError({ at: track.ref, message: "Your change was sent but isn't showing yet. Check back in a moment." });
+      }
+      setStagedPreset(null);
+      clearTrackSounds(tokenId);
+      onMusicChanged?.();
+    } catch (err) {
+      console.error("[music] set effects failed:", err);
+      setError({ at: track.ref, message: txErrorMessage(err) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const busyLabel = busy?.phase === "wallet" ? "Confirm in wallet…" : "Confirming…";
 
   return (
@@ -384,6 +428,66 @@ export default function BeastMusicPanel({
                   </span>
                 )}
               </div>
+              {canKing && ready && isKingSetTrack(track) && kingPresets[track.ref] != null && (() => {
+                const saved = kingPresets[track.ref];
+                const staged = stagedPreset?.ref === track.ref ? stagedPreset.preset : null;
+                const chosen = staged ?? saved;
+                const applying = rowBusy && busy?.kind === "preset";
+                return (
+                  <div className="mt-2 border-t border-white/[0.06] pt-2">
+                    <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-zinc-400" title="As this species' King, you choose how its Species Song is performed for every beast of the species">
+                      Effects · King
+                    </p>
+                    <div className="grid grid-cols-4 gap-1" role="radiogroup" aria-label={`Effects of ${track.label}`}>
+                      {EFFECT_NAMES.map((name, preset) => (
+                        <button
+                          key={name}
+                          type="button"
+                          role="radio"
+                          aria-checked={chosen === preset}
+                          disabled={busy !== null}
+                          onClick={() => setStagedPreset(preset === saved ? null : { ref: track.ref, preset })}
+                          title={`${EFFECT_TITLES[preset]}${preset === saved ? " (current)" : ""}`}
+                          className={cn(
+                            "rounded-md border px-1 py-1 text-[9px] font-semibold transition-colors disabled:opacity-50",
+                            chosen === preset
+                              ? "border-gold bg-gold/15 text-gold"
+                              : "border-white/10 text-zinc-400 hover:border-gold/50 hover:text-gold",
+                          )}
+                        >
+                          {name}
+                          {preset === saved && <span aria-hidden> ✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                    {staged != null && (
+                      <div className="mt-1.5 flex items-center justify-between gap-2 rounded-md border border-gold/30 bg-gold/[0.06] px-2 py-1">
+                        <span className="truncate text-[10px] font-semibold text-zinc-200">
+                          {EFFECT_NAMES[saved]} → {EFFECT_NAMES[staged]}
+                        </span>
+                        <div className="flex flex-shrink-0 items-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={busy !== null}
+                            onClick={() => setStagedPreset(null)}
+                            className="text-[9px] font-semibold uppercase text-zinc-400 hover:text-zinc-200 disabled:opacity-50"
+                          >
+                            Discard
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy !== null}
+                            onClick={() => applyPreset(track, staged)}
+                            className="rounded bg-gold px-2 py-0.5 text-[9px] font-bold uppercase text-black hover:bg-gold/90 disabled:opacity-60"
+                          >
+                            {applying ? busyLabel : "Apply"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               {error?.at === track.ref && <p className="mt-1.5 text-[10px] text-red-400">{error.message}</p>}
             </div>
           );
@@ -442,7 +546,7 @@ export default function BeastMusicPanel({
           rel="noopener noreferrer"
           className="flex items-center justify-between gap-2 text-[10px] text-zinc-400 hover:text-gold transition-colors"
         >
-          <span>Open on Loot Survivor (Live previews, Replay, King settings)</span>
+          <span>Open on Loot Survivor (Live previews, Replay, King sound mode)</span>
           <ExternalLink className="h-3 w-3 flex-shrink-0" />
         </a>
       </div>
