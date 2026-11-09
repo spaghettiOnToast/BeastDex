@@ -10,6 +10,7 @@ import {
 } from "@provable-games/collectables";
 import type { Beast, BeastAttribute, BeastVisual } from "./types";
 import { spriteSpeciesName } from "./cardImage";
+import { projectedRankFor } from "./projectedRank";
 
 const COLLECTABLES_BASE_URL = "/collectables";
 
@@ -51,9 +52,12 @@ export function mapSdkBeast(sdkBeast: SdkBeast): Beast {
   const { shiny, animated, visual } = beastVisual(sdkBeast);
 
   const traits = v3 ? beastV3Traits(sdkBeast) : beastTraits(sdkBeast);
+  // v3 on-chain ranks are stale since the last `update_rankings`; show the projection.
+  const projected = v3 ? projectedRankFor(sdkBeast) : null;
+  const rankProjected = projected != null && projected !== sdkBeast.rank;
   const attributes: BeastAttribute[] = traits.map((t) => ({
     trait_type: t.trait_type,
-    value: t.value,
+    value: rankProjected && t.trait_type === "Rank" ? String(projected) : t.value,
   }));
   if (v3) {
     // v3 token_uri has no Shiny/Animated traits (they live in visualEffects).
@@ -100,6 +104,8 @@ export function mapSdkBeast(sdkBeast: SdkBeast): Beast {
     genesis: sdkBeast.genesis,
     mega: sdkBeast.mega,
     minterData: sdkBeast.minterData,
+    onchainRank: sdkBeast.rank,
+    rankProjected,
     midi: sdkBeast.midi,
     hasBundledImage,
   };

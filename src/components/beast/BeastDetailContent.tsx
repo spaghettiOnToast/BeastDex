@@ -313,7 +313,7 @@ export function BeastDetailContent({
                 tokenId={beast.tokenId}
                 speciesId={beast.speciesId}
                 soundEffects={beast.soundEffects ?? beast.visualEffects}
-                isKing={Number(beast.attributes.find((a) => a.trait_type.toLowerCase() === "rank")?.value) === 1}
+                isKing={(beast.onchainRank ?? Number(beast.attributes.find((a) => a.trait_type.toLowerCase() === "rank")?.value)) === 1}
                 owner={beast.owner}
                 onMusicChanged={handleMusicChanged}
                 selectedRef={selectedTrackRef}
@@ -385,6 +385,7 @@ export function BeastDetailContent({
                     <div className="grid grid-cols-2 gap-1.5">
                       {attributes.map((attr, idx) => {
                         const style = getAttributeStyle(attr.trait_type);
+                        const projectedRank = beast.rankProjected && attr.trait_type === "Rank";
                         return (
                           <div
                             key={`${attr.trait_type}-${attr.value}-${idx}`}
@@ -395,11 +396,18 @@ export function BeastDetailContent({
                             </p>
                             <p
                               className={`text-[11px] font-bold ${style.text} truncate`}
-                              title={String(attr.value)}
+                              title={
+                                projectedRank
+                                  ? `Projected rank: on-chain ranks haven't been updated since new beasts were minted (on-chain: ${beast.onchainRank ? `#${beast.onchainRank}` : "not ranked yet"})`
+                                  : String(attr.value)
+                              }
                             >
                               {formatAttributeValue(
                                 attr.trait_type,
                                 attr.value,
+                              )}
+                              {projectedRank && (
+                                <span className="ml-1 text-[8px] font-medium uppercase tracking-wide text-zinc-500">projected</span>
                               )}
                             </p>
                           </div>

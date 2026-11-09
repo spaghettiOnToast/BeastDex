@@ -209,7 +209,9 @@ export function getBeastRank(beast: Beast | null | undefined): number | null {
  * - "genesis": the 75 original Genesis mints (never ranked by design)
  * - "new": v3 mints with no legacy origin (minterData 0). Ranks are set by an
  *   admin `update_rankings` call on the Beasts contract, last run at the v3
- *   migration (2026-11-03), so every beast minted since is still rank 0.
+ *   migration (2026-11-03), so every beast minted since is still rank 0
+ *   on-chain. BeastDex shows a projected rank instead (services/beast/
+ *   projectedRank.ts); "new" only shows if that projection couldn't load.
  * - "unranked": anything else without a rank
  * (Festival beasts — Tiddy Mun / Black Shuck — are separate collections with
  * their own Festival badge.)

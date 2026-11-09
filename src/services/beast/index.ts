@@ -133,6 +133,7 @@ import { fetchBeastStats } from "./stats";
 import { fetchBeastHighlights, fetchBeastCollectedByName } from "./highlights";
 export type { BeastNameCount } from "./highlights";
 import { apiCache } from "../apiCache";
+import { ensureProjectedRanks, projectedRankFor } from "./projectedRank";
 
 import { MAX_BEASTS_PER_TYPE } from "./constants";
 export { MAX_BEASTS_PER_TYPE, CARD_GRADE_MIN, CARD_GRADE_MAX } from "./constants";
@@ -175,6 +176,7 @@ export async function fetchBeasts({
   page = 1,
   sort = "default",
 }: FetchBeastsOptions = {}): Promise<FetchBeastsResponse> {
+  await ensureProjectedRanks();
   const { sort: sdkSort, order } = _mapSort(sort);
   const filterParams = _mapAttributeFilters(attributeFilters as AttributeFiltersInput);
 
@@ -260,7 +262,15 @@ async function _fetchRankSorted(
     _rankedTotals.set(rankedKey, rankedTotal);
   }
 
-  const unranked = rankFiltered ? [] : await _fetchAllUnranked(ownerAddress, baseQuery);
+  // Order the appended new beasts by projected rank (the API sorts them by power).
+  const dir = baseQuery.order === "desc" ? -1 : 1;
+  const unranked = rankFiltered
+    ? []
+    : [...(await _fetchAllUnranked(ownerAddress, baseQuery))].sort((a, b) => {
+        const pa = projectedRankFor(a), pb = projectedRankFor(b);
+        if (pa == null || pb == null) return (pa == null ? 1 : 0) - (pb == null ? 1 : 0); // Genesis last
+        return dir * (pa - pb);
+      });
   const need = limit - rankedItems.length;
   const unrankedStart = Math.max(0, start - rankedTotal);
   const unrankedItems = need > 0 ? unranked.slice(unrankedStart, unrankedStart + need) : [];
@@ -278,6 +288,7 @@ async function _fetchRankSorted(
  */
 export async function fetchTopBeasts(limit: number = 10): Promise<Beast[]> {
   return apiCache.get("top-beasts", { limit }, async () => {
+    await ensureProjectedRanks();
     const result = await collectablesClient.beasts.list({
       sort: "power",
       order: "desc",
@@ -308,6 +319,7 @@ export async function fetchBeastById(
   if (tokenId === null) return null;
 
   return apiCache.get("beast-by-id", { id: tokenId }, async () => {
+    await ensureProjectedRanks();
     try {
       const sdkBeast = await collectablesClient.beasts.get(tokenId);
       return mapSdkBeast(sdkBeast);
@@ -330,6 +342,7 @@ export async function fetchBeastsByIds(
 
   if (tokenIds.length === 0) return [];
 
+  await ensureProjectedRanks();
   // The API rejects token_id_in arrays over 50 elements outright (400), so
   // this must stay <= 50 — it's not just a page size.
   const BATCH_SIZE = 50;
@@ -555,6 +568,7 @@ export type CollectionGlance = {
 /** Collection-wide figures for the Statistics tab (cached 10 min). */
 export async function fetchCollectionGlance(): Promise<CollectionGlance> {
   return apiCache.get("collection-glance", {}, async () => {
+    await ensureProjectedRanks();
     const [stats, perfect, strongest, names, prefixes] = await Promise.all([
       collectablesClient.beasts.stats(),
       collectablesClient.beasts.list({ cardGrade: 10, visualEffects: VISUAL_TO_EFFECTS["Shiny MIDI"], limit: 1 }),
@@ -693,6 +707,7 @@ export async function fetchOwnerBeastHighlights(
   }
 
   return apiCache.get("owner-beast-highlights", { address: normalised }, async () => {
+    await ensureProjectedRanks();
     const addr = normalizeAddress(normalised);
 
     // Owner-scoped queries return the whole holding by default. Species
