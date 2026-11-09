@@ -164,3 +164,24 @@ export function fetchBlockTime(block: number): Promise<number | null> {
   }
   return pending;
 }
+
+/** One page of Shiny MIDI beasts (visual preset 3: Mega + echo), optionally filtered. */
+export async function fetchShinyMidiPage(opts: {
+  cursor?: string;
+  limit: number;
+  tier?: number;
+  type?: "Magic" | "Hunter" | "Brute";
+  search?: string;
+}): Promise<{ beasts: Beast[]; total: number; nextCursor: string | null }> {
+  const res = await collectablesClient.beasts.list({
+    visualEffects: 3,
+    limit: opts.limit,
+    cursor: opts.cursor,
+    ...(opts.tier ? { tier: opts.tier } : {}),
+    ...(opts.type ? { type: opts.type } : {}),
+    ...(opts.search ? { search: opts.search } : {}),
+    sort: "beast_id",
+    order: "asc",
+  });
+  return { beasts: res.items.map(mapSdkBeast), total: res.total, nextCursor: res.nextCursor ?? null };
+}

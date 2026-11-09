@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { beastImageUrl, hasBundledBeastImage, type BeastSpecies } from "@provable-games/collectables";
-import { Crown, ExternalLink, Music, Pause, Play, Search, ShoppingBag } from "lucide-react";
+import { Crown, ExternalLink, Music, Pause, Play, Search, ShoppingBag, Sparkles } from "lucide-react";
+import BeastModal from "../components/beast/BeastModal";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import TrackPlayerBar, { type NowPlaying, type PlayerStatus } from "../components/tracks/TrackPlayerBar";
 import { cn } from "../lib/utils";
-import { fetchBeastSpecies, fetchBeastsByIds, type Beast } from "../services/beast";
+import { fetchBeastById, fetchBeastSpecies, fetchBeastsByIds, type Beast } from "../services/beast";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { normaliseStarknetAddress } from "../utils/address";
 import { formatAgo } from "../services/adventurers/format";
 import { spriteSpeciesName } from "../services/beast/cardImage";
 import { EFFECT_NAMES, EFFECT_TITLES, MUSIC_MODE_LABELS } from "../services/beast/music";
 import {
+  fetchShinyMidiPage,
   fetchSpeciesKings,
   fetchSpeciesSongSettings,
   fetchSpeciesStandIn,
@@ -33,7 +35,44 @@ type Player = {
   status: PlayerStatus;
   /** Play an item, or toggle it when it's already the current one. */
   play: (item: NowPlaying) => void;
+  /** Open a beast in the card modal (instead of leaving the page). */
+  open: (beast: Beast) => void;
 };
+
+const PAGE_SIZE = 10;
+
+/** A beast's name that opens its card modal. */
+function BeastLink({ beast, player, className, children }: { beast: Beast; player: Player; className?: string; children?: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={() => player.open(beast)}
+      className={cn("truncate text-left hover:text-gold hover:underline", className)}
+    >
+      {children ?? beast.name}
+    </button>
+  );
+}
+
+/** Prev / page x of y / Next. */
+function Pager({ page, pages, onPage }: { page: number; pages: number; onPage: (page: number) => void }) {
+  if (pages <= 1) return null;
+  const btn =
+    "rounded-md border border-white/10 px-3 py-1 text-xs font-semibold text-zinc-300 transition-colors hover:border-gold/50 hover:text-gold disabled:opacity-40 disabled:hover:border-white/10 disabled:hover:text-zinc-300";
+  return (
+    <div className="flex items-center justify-center gap-3 pt-1">
+      <button type="button" className={btn} disabled={page <= 0} onClick={() => onPage(page - 1)}>
+        Prev
+      </button>
+      <span className="text-xs text-zinc-500">
+        Page {page + 1} of {pages}
+      </span>
+      <button type="button" className={btn} disabled={page >= pages - 1} onClick={() => onPage(page + 1)}>
+        Next
+      </button>
+    </div>
+  );
+}
 
 const TYPES = ["Magic", "Hunter", "Brute"] as const;
 const TIERS = [1, 2, 3, 4, 5] as const;
@@ -208,9 +247,9 @@ function SpeciesCard({ species, king, player }: { species: BeastSpecies; king: B
         {king ? (
           <>
             <Crown className="mr-1 inline h-3 w-3 text-gold" />
-            <Link to={`/beasts/${encodeURIComponent(king.tokenId)}`} className="text-zinc-300 hover:text-gold hover:underline">
+            <BeastLink beast={king} player={player} className="text-zinc-300">
               {shortName(king)}
-            </Link>
+            </BeastLink>
           </>
         ) : king === null ? (
           "No King yet (nothing ranked)"
@@ -227,8 +266,10 @@ function NamedSongSearch({ species, player }: { species: BeastSpecies[]; player:
   const [speciesId, setSpeciesId] = useState<number | "">("");
   const [results, setResults] = useState<Beast[] | null>(null);
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
+    setPage(0);
     const q = query.trim();
     if (q.length < 3) {
       setResults(null);
@@ -292,7 +333,7 @@ function NamedSongSearch({ species, player }: { species: BeastSpecies[]; player:
       )}
       {results && results.length > 0 && (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {results.map((b) => {
+          {results.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((b) => {
             const fx = tokenEffect(b);
             const item: NowPlaying = {
               key: `named:${b.tokenId}`,
@@ -304,12 +345,7 @@ function NamedSongSearch({ species, player }: { species: BeastSpecies[]; player:
             return (
               <div key={b.tokenId} className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-surface/60 p-2">
                 <div className="min-w-0 flex-1">
-                  <Link
-                    to={`/beasts/${encodeURIComponent(b.tokenId)}`}
-                    className="block truncate text-xs font-bold text-zinc-100 hover:text-gold hover:underline"
-                  >
-                    {b.name}
-                  </Link>
+                  <BeastLink beast={b} player={player} className="block w-full text-xs font-bold text-zinc-100" />
                   <div className="mt-0.5 flex items-center gap-1">
                     {fx != null && (
                       <Pill tone="gold" title={`${EFFECT_TITLES[fx]}. Set by this beast's rarity.`}>
@@ -327,11 +363,11 @@ function NamedSongSearch({ species, player }: { species: BeastSpecies[]; player:
           })}
         </div>
       )}
+      {results && <Pager page={page} pages={Math.ceil(results.length / PAGE_SIZE)} onPage={setPage} />}
     </section>
   );
 }
 
-const PURCHASES_PAGE = 12;
 
 function PurchaseRow({
   purchase,
@@ -375,12 +411,7 @@ function PurchaseRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           {beast ? (
-            <Link
-              to={`/beasts/${encodeURIComponent(purchase.tokenId)}`}
-              className="truncate text-xs font-bold text-zinc-100 hover:text-gold hover:underline"
-            >
-              {beast.name}
-            </Link>
+            <BeastLink beast={beast} player={player} className="text-xs font-bold text-zinc-100" />
           ) : (
             <span className="truncate text-xs font-bold text-zinc-500">Loading beast…</span>
           )}
@@ -419,11 +450,170 @@ function PurchaseRow({
   );
 }
 
+/** A beast with its own tracks: Named Song (when named) and Sound Check. */
+function BeastTrackRow({ beast, player, king = false }: { beast: Beast; player: Player; king?: boolean }) {
+  const fx = tokenEffect(beast);
+  const named = Boolean(attr(beast, "Prefix") && attr(beast, "Suffix"));
+  const species = attr(beast, "Beast") ?? beast.name;
+  const tier = attr(beast, "Tier");
+  const fxName = fx != null ? EFFECT_NAMES[fx] : null;
+  const namedItem: NowPlaying | null = named
+    ? {
+        key: `named:${beast.tokenId}`,
+        beast,
+        track: NAMED_SONG_REF,
+        title: `${beast.name} · Named Song`,
+        subtitle: [fxName, king ? `King of the ${species}` : null].filter(Boolean).join(" · "),
+      }
+    : null;
+  const checkItem: NowPlaying = {
+    key: `check:${beast.tokenId}`,
+    beast,
+    track: SOUND_CHECK_REF,
+    title: `${beast.name} · Sound Check`,
+    subtitle: [fxName, king ? `King of the ${species}` : null].filter(Boolean).join(" · "),
+  };
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-white/[0.06] bg-surface/60 p-2.5">
+      <div className="flex items-start gap-2">
+        {king && <Crown className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-gold" />}
+        <div className="min-w-0 flex-1">
+          <BeastLink beast={beast} player={player} className="block w-full text-xs font-bold text-zinc-100" />
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            <span className="text-[10px] text-zinc-500">
+              {species}
+              {tier ? ` · T${tier}` : ""}
+            </span>
+            {fx != null && (
+              <Pill tone="gold" title={`${EFFECT_TITLES[fx]}. Set by this beast's rarity.`}>
+                {EFFECT_NAMES[fx]}
+              </Pill>
+            )}
+            {beast.visual && beast.visual !== "Regular" && <Pill>{beast.visual}</Pill>}
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-1.5">
+        <PlayButton player={player} item={namedItem} label="Named Song" disabled={!named} />
+        <PlayButton player={player} item={checkItem} label="Sound Check" />
+      </div>
+    </div>
+  );
+}
+
+/** Every species' King (Rank 1), with its own Named Song and Sound Check. */
+function KingsList({ kings, speciesIds, player }: { kings: Map<number, Beast> | null; speciesIds: number[]; player: Player }) {
+  const [page, setPage] = useState(0);
+  const key = speciesIds.join(",");
+  useEffect(() => setPage(0), [key]);
+  if (!kings) {
+    return <p className="text-xs text-zinc-500">Finding the Kings…</p>;
+  }
+  const list = speciesIds.map((id) => kings.get(id)).filter((b): b is Beast => Boolean(b));
+  if (list.length === 0) return <p className="text-sm text-zinc-500">No Kings match these filters.</p>;
+  return (
+    <>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {list.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((b) => (
+          <BeastTrackRow key={b.tokenId} beast={b} player={player} king />
+        ))}
+      </div>
+      <Pager page={page} pages={Math.ceil(list.length / PAGE_SIZE)} onPage={setPage} />
+    </>
+  );
+}
+
+/** Shiny MIDI beasts (the rarest preset: Mega + echo), from the API, a page at a time. */
+function ShinyMidiList({
+  tier,
+  type,
+  search,
+  player,
+}: {
+  tier: number | null;
+  type: (typeof TYPES)[number] | null;
+  search: string;
+  player: Player;
+}) {
+  const [page, setPage] = useState(0);
+  // cursors[i] = cursor that loads page i (page 0 has none)
+  const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
+  const [data, setData] = useState<{ beasts: Beast[]; total: number; nextCursor: string | null } | null>(null);
+  const [failed, setFailed] = useState(false);
+  const q = search.trim();
+
+  useEffect(() => {
+    setPage(0);
+    setCursors([undefined]);
+  }, [tier, type, q]);
+
+  useEffect(() => {
+    let alive = true;
+    setFailed(false);
+    setData(null);
+    const t = setTimeout(() => {
+      fetchShinyMidiPage({
+        cursor: cursors[page],
+        limit: PAGE_SIZE,
+        tier: tier ?? undefined,
+        type: type ?? undefined,
+        search: q.length >= 2 ? q : undefined,
+      })
+        .then((d) => {
+          if (!alive) return;
+          setData(d);
+          if (d.nextCursor) {
+            setCursors((prev) => {
+              const next = prev.slice(0, page + 1);
+              next[page + 1] = d.nextCursor ?? undefined;
+              return next;
+            });
+          }
+        })
+        .catch(() => alive && setFailed(true));
+    }, 200);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cursors are derived from page loads
+  }, [page, tier, type, q]);
+
+  if (failed) return <p className="text-xs text-red-400">Couldn&apos;t load Shiny MIDI beasts.</p>;
+  if (!data) {
+    return (
+      <div className="flex justify-center py-10">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-gold border-t-transparent" />
+      </div>
+    );
+  }
+  if (data.beasts.length === 0) return <p className="text-sm text-zinc-500">No Shiny MIDI beasts match these filters.</p>;
+  const pages = Math.max(1, Math.ceil(data.total / PAGE_SIZE));
+  return (
+    <>
+      <p className="text-xs text-zinc-500">{data.total.toLocaleString()} Shiny MIDI beasts</p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {data.beasts.map((b) => (
+          <BeastTrackRow key={b.tokenId} beast={b} player={player} />
+        ))}
+      </div>
+      <Pager
+        page={page}
+        pages={pages}
+        onPage={(p) => {
+          // Cursor paging: only step to pages whose cursor we've seen.
+          if (p <= page || cursors[p] !== undefined) setPage(p);
+        }}
+      />
+    </>
+  );
+}
+
 /** Songs and Editions bought for beasts, newest first, read from Sound Manager events. */
 function RecentPurchases({ player }: { player: Player }) {
   const [data, setData] = useState<{ purchases: TrackPurchase[]; head: number } | null>(null);
   const [failed, setFailed] = useState(false);
-  const [shown, setShown] = useState(PURCHASES_PAGE);
+  const [page, setPage] = useState(0);
   const [beasts, setBeasts] = useState<Record<string, Beast>>({});
 
   useEffect(() => {
@@ -435,7 +625,7 @@ function RecentPurchases({ player }: { player: Player }) {
       });
   }, []);
 
-  const visible = useMemo(() => data?.purchases.slice(0, shown) ?? [], [data, shown]);
+  const visible = useMemo(() => data?.purchases.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE) ?? [], [data, page]);
   const missingKey = visible.map((p) => p.tokenId).filter((id) => !beasts[id]).join(",");
 
   useEffect(() => {
@@ -489,15 +679,7 @@ function RecentPurchases({ player }: { player: Player }) {
               />
             ))}
           </div>
-          {shown < data.purchases.length && (
-            <button
-              type="button"
-              onClick={() => setShown((n) => n + PURCHASES_PAGE)}
-              className="w-full rounded-lg border border-white/10 py-2 text-xs font-semibold text-zinc-300 transition-colors hover:border-gold/50 hover:text-gold"
-            >
-              Show more ({data.purchases.length - shown} left)
-            </button>
-          )}
+          <Pager page={page} pages={Math.ceil(data.purchases.length / PAGE_SIZE)} onPage={setPage} />
         </>
       )}
     </section>
@@ -516,6 +698,9 @@ function TracksPage() {
   const [current, setCurrent] = useState<NowPlaying | null>(null);
   const [status, setStatus] = useState<PlayerStatus>("loading");
   const [toggleSignal, setToggleSignal] = useState(0);
+  const [tab, setTab] = useState<"species" | "kings" | "shiny">("species");
+  const [selected, setSelected] = useState<Beast | null>(null);
+  const { usernames: ownerUsernames } = useControllerUsernames([selected?.owner]);
 
   useEffect(() => {
     fetchBeastSpecies().then(setSpecies).catch(() => setLoadError(true));
@@ -531,6 +716,17 @@ function TracksPage() {
       play: (item) => {
         if (current?.key === item.key) setToggleSignal((n) => n + 1);
         else setCurrent(item);
+      },
+      open: (beast) => {
+        // The modal has its own player: pause ours so they don't overlap.
+        if (status === "playing") setToggleSignal((n) => n + 1);
+        setSelected(beast);
+        // Lists don't always carry the owner; refresh it for the modal.
+        if (!beast.owner) {
+          fetchBeastById(beast.tokenId)
+            .then((full) => full && setSelected((cur) => (cur?.tokenId === beast.tokenId ? full : cur)))
+            .catch(() => {});
+        }
       },
     }),
     [current, status],
@@ -610,20 +806,42 @@ function TracksPage() {
 
         <NamedSongSearch species={species ?? []} player={player} />
 
-        <RecentPurchases player={player} />
-
         <section className="space-y-3">
+          <div className="flex flex-wrap gap-1 rounded-lg border border-white/[0.06] bg-surface/60 p-1 sm:inline-flex" role="tablist">
+            {(
+              [
+                ["species", "Species Songs", Music],
+                ["kings", "Kings", Crown],
+                ["shiny", "Shiny MIDI", Sparkles],
+              ] as const
+            ).map(([id, label, Icon]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={tab === id}
+                onClick={() => setTab(id)}
+                className={cn(
+                  "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors sm:flex-none",
+                  tab === id ? "bg-gold text-black" : "text-zinc-400 hover:text-white",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" /> {label}
+              </button>
+            ))}
+          </div>
           <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-bold text-white">Species Songs</h2>
-              <p className="text-sm text-zinc-400">
-                Played from each species&apos; King. Sound Checks use the King&apos;s own rarity effects.
-              </p>
-            </div>
+            <p className="max-w-2xl text-sm text-zinc-400">
+              {tab === "species"
+                ? "Each species' Species Song, played from its King, plus its Sound Check in the King's own rarity effects."
+                : tab === "kings"
+                  ? "The Rank 1 beast of each species. Its owner sets the effects and mode of the Species Song for everyone."
+                  : "The rarest preset (0.25%): Shiny art, MIDI notes and Mega + echo on every track they own."}
+            </p>
             <input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filter species"
+              placeholder={tab === "shiny" ? "Search names" : "Filter species"}
               className="w-full rounded-lg border border-white/10 bg-surface/60 px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:border-gold/50 focus:outline-none sm:w-48"
             />
           </div>
@@ -647,7 +865,11 @@ function TracksPage() {
             ))}
           </div>
 
-          {loadError ? (
+          {tab === "kings" ? (
+            <KingsList kings={kings} speciesIds={visible.map((sp) => sp.speciesId)} player={player} />
+          ) : tab === "shiny" ? (
+            <ShinyMidiList tier={tier} type={type as (typeof TYPES)[number] | null} search={filter} player={player} />
+          ) : loadError ? (
             <p className="text-sm text-red-400">Couldn&apos;t load the species list.</p>
           ) : !species ? (
             <div className="flex justify-center py-10">
@@ -669,13 +891,18 @@ function TracksPage() {
             </div>
           )}
         </section>
+
+        <RecentPurchases player={player} />
       </div>
+
+      {selected && <BeastModal beast={selected} ownerUsernames={ownerUsernames} onClose={() => setSelected(null)} />}
 
       <TrackPlayerBar
         item={current}
         toggleSignal={toggleSignal}
         onStatus={setStatus}
         onClose={() => setCurrent(null)}
+        onOpenBeast={player.open}
       />
     </AppLayout>
   );

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { mountBeastPlayer, type BeastPlayerHandle } from "@provable-games/collectables";
 import { Pause, Play, X } from "lucide-react";
 import type { Beast } from "../../services/beast";
@@ -24,6 +23,8 @@ type Props = {
   toggleSignal: number;
   onStatus: (status: PlayerStatus) => void;
   onClose: () => void;
+  /** Open the playing beast in the card modal. */
+  onOpenBeast: (beast: Beast) => void;
 };
 
 function attr(beast: Beast, trait: string): string | null {
@@ -36,7 +37,7 @@ function attr(beast: Beast, trait: string): string | null {
  * beast's card as a thumbnail plus transport. Uses the SDK player (the same
  * synth as the token's on-chain page) with its own button hidden.
  */
-export default function TrackPlayerBar({ item, toggleSignal, onStatus, onClose }: Props) {
+export default function TrackPlayerBar({ item, toggleSignal, onStatus, onClose, onOpenBeast }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<BeastPlayerHandle | null>(null);
   const onStatusRef = useRef(onStatus);
@@ -115,13 +116,14 @@ export default function TrackPlayerBar({ item, toggleSignal, onStatus, onClose }
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
       <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-2">
-        <Link
-          to={`/beasts/${encodeURIComponent(item.beast.tokenId)}`}
+        <button
+          type="button"
+          onClick={() => onOpenBeast(item.beast)}
           className="relative h-[67px] w-12 flex-shrink-0 overflow-hidden rounded"
           aria-label={`Open ${item.beast.name}`}
         >
           <div ref={containerRef} className="absolute inset-0" />
-        </Link>
+        </button>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-bold text-white">{item.title}</p>
           <p className="truncate text-[11px] text-zinc-400">
