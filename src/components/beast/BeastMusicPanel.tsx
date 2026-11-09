@@ -6,13 +6,17 @@ import { cn } from "../../lib/utils";
 import { lootSurvivorBeastUrl } from "../../services/beast/constants";
 import {
   fetchBeastMusic,
+  isKingSetTrack,
   trackRefOf,
+  EFFECT_NAMES,
+  EFFECT_TITLES,
   MUSIC_MODE_LABELS,
   type BeastMusic,
   type MusicTrack,
 } from "../../services/beast/music";
 import {
   buyTrackCalls,
+  fetchSharedSongPreset,
   fetchSkullBalance,
   formatSkull,
   musicContractsProblem,
@@ -26,6 +30,10 @@ import { normaliseStarknetAddress } from "../../utils/address";
 
 type Props = {
   tokenId: string;
+  /** species id, to read the King's effects for Species Songs */
+  speciesId?: number;
+  /** the token's `Sound Effects` preset (0-3), set by its rarity */
+  soundEffects?: number;
   /** current owner of the beast (only they can change its music) */
   owner: string | null;
   /** track currently loaded in the player (null = the token's default) */
@@ -72,6 +80,8 @@ const MODE_TITLES: Record<string, string> = {
  */
 export default function BeastMusicPanel({
   tokenId,
+  speciesId,
+  soundEffects,
   owner,
   selectedRef,
   playing,
@@ -87,6 +97,8 @@ export default function BeastMusicPanel({
   const [skull, setSkull] = useState<bigint | null>(null);
   const [skullState, setSkullState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [skullReload, setSkullReload] = useState(0);
+  /** King-set effects preset per Species Song ref (absent while loading / unreadable). */
+  const [kingPresets, setKingPresets] = useState<Record<string, number>>({});
 
   const canManage =
     Boolean(account && address && owner) &&
@@ -110,6 +122,24 @@ export default function BeastMusicPanel({
       });
     return () => ctrl.abort();
   }, [tokenId]);
+
+  // Species Songs use the King's effects, not the token's: read them on-chain.
+  const kingTrackIds = (music?.tracks ?? []).filter(isKingSetTrack).map((t) => t.id ?? 0).join(",");
+  useEffect(() => {
+    setKingPresets({});
+    if (!speciesId || !kingTrackIds) return;
+    let alive = true;
+    for (const id of kingTrackIds.split(",").map(Number)) {
+      fetchSharedSongPreset(speciesId, id)
+        .then((preset) => {
+          if (alive) setKingPresets((prev) => ({ ...prev, [`shared:${id}`]: preset }));
+        })
+        .catch((err) => console.warn(`[music] couldn't read Species Song ${id} effects:`, err));
+    }
+    return () => {
+      alive = false;
+    };
+  }, [speciesId, kingTrackIds]);
 
   // SKULL balance, for the owner's buy button.
   useEffect(() => {
@@ -209,6 +239,18 @@ export default function BeastMusicPanel({
   const buy = () =>
     run({ kind: "buy" }, "buy", buyTrackCalls(tokenId), (m) => m.tracks.length > trackCount);
 
+  /** A track's effects preset and an explanation, or null when unknown. */
+  const trackEffect = (track: MusicTrack): { name: string; title: string } | null => {
+    const king = isKingSetTrack(track);
+    const preset = king ? kingPresets[track.ref] : soundEffects;
+    if (preset == null || !EFFECT_NAMES[preset]) return null;
+    const source = king
+      ? "Set by the species' King for every beast of the species"
+      : "Set by this beast's rarity";
+    const echoNote = track.ref === "shared:0" && preset >= 2 ? " (Sound Checks skip the echo itself)" : "";
+    return { name: EFFECT_NAMES[preset], title: `${EFFECT_TITLES[preset]}${echoNote}. ${source}.` };
+  };
+
   const busyLabel = busy?.phase === "wallet" ? "Confirm in wallet…" : "Confirming…";
 
   return (
@@ -267,7 +309,20 @@ export default function BeastMusicPanel({
                     #{track.number} {track.label}
                   </p>
                   <p className="truncate text-[9px] text-zinc-500">
-                    {rowBusy ? busyLabel : blurb(track)}
+                    {rowBusy ? busyLabel : (() => {
+                      const fx = trackEffect(track);
+                      return (
+                        <>
+                          {blurb(track)}
+                          {fx && (
+                            <span title={fx.title}>
+                              {blurb(track) ? " · " : ""}
+                              <span className="text-gold/80">{fx.name}</span>
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()}
                   </p>
                 </div>
 

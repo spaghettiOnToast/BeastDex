@@ -59,6 +59,20 @@ export function setTrackModeCall(tokenId: string, ref: MusicTrackRef, mode: "liv
   };
 }
 
+/**
+ * The effects preset (0-3) the species' King set for a Species Song
+ * (`get_shared_song_preset`; reverts for the Sound Check, shared id 0).
+ */
+export async function fetchSharedSongPreset(speciesId: number, sharedId: number): Promise<number> {
+  const [preset = "0"] = await withReadProvider((p) =>
+    p.callContract(
+      { contractAddress: SOUND_MANAGER_ADDRESS, entrypoint: "get_shared_song_preset", calldata: [String(speciesId), String(sharedId)] },
+      "latest",
+    ),
+  );
+  return Number(BigInt(preset));
+}
+
 /** SKULL balance (wei) of an address. */
 export async function fetchSkullBalance(address: string): Promise<bigint> {
   // Explicit "latest": starknet.js v7 defaults to "pending", which RPC 0.8+

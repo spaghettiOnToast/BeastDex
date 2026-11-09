@@ -93,6 +93,7 @@ export function mapSdkBeast(sdkBeast: SdkBeast): Beast {
     animated,
     visual,
     visualEffects: sdkBeast.visualEffects,
+    soundEffects: sdkBeast.soundEffects,
     cardGrade: sdkBeast.cardGrade,
     soulbound: sdkBeast.soulbound,
     transferLockedUntil: sdkBeast.transferLockedUntil,

@@ -311,6 +311,8 @@ export function BeastDetailContent({
             {rightPanelTab === "music" && isV3 ? (
               <BeastMusicPanel
                 tokenId={beast.tokenId}
+                speciesId={beast.speciesId}
+                soundEffects={beast.soundEffects ?? beast.visualEffects}
                 owner={beast.owner}
                 onMusicChanged={handleMusicChanged}
                 selectedRef={selectedTrackRef}
