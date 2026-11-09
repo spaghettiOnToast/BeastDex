@@ -13,6 +13,8 @@ import { readRpcUrls } from "../../services/tx";
 import { fetchV3CardImgSrc, spriteSpeciesName } from "../../services/beast/cardImage";
 import { unrankedReason, UNRANKED_LABELS } from "../../utils/beast";
 import MidiNotesArt from "./MidiNotesArt";
+import GradedSlab from "./GradedSlab";
+import { isSlabbed } from "../../utils/slab";
 
 // On-chain card images for beasts without a bundled sprite (v3 species past the
 // bundled set), keyed by token id. Shared across cards to avoid repeat RPC reads.
@@ -152,6 +154,9 @@ const BeastCard = memo(function BeastCard({
     return () => { alive = false; };
   }, [cardInput, image, beast.visualEffects, beast.tokenId]);
 
+  // Grade 7+ v3 beasts are shown sealed in a graded-card slab.
+  const slabbed = isSlabbed(beast, missing);
+
   const renderOwner = () => {
     if (missing || !owned || !owner) return null;
     const address = owner.toLowerCase();
@@ -187,11 +192,9 @@ const BeastCard = memo(function BeastCard({
           boxShadow: "0 1px 4px rgba(0,0,0,0.5)",
         }}>{duplicateCount}</div>
       )}
-      <div style={{
-        position: "relative", width: "100%", aspectRatio: "250 / 350", lineHeight: 0,
-        borderRadius: 10, overflow: "hidden", background: "#1b1b1f",
-        boxShadow: hasAllVariants && !missing ? "0 0 0 2px #39ff14" : undefined,
-      }}>
+      {(() => {
+        const face = (
+      <>
         {cardImageSrc && (
           <img
             src={cardImageSrc}
@@ -212,7 +215,7 @@ const BeastCard = memo(function BeastCard({
         {/* Grade badge: gold for 10, dark for 1-9, red when the beast has no
             grade at all (legacy beast or missing data) so it stands out.
             Placeholder cards (no token id) and "missing" slots get none. */}
-        {!missing && beast.tokenId && (() => {
+        {!missing && beast.tokenId && !slabbed && (() => {
           const graded = beast.cardGrade != null && beast.cardGrade > 0;
           const perfect = beast.cardGrade === 10;
           return (
@@ -301,7 +304,34 @@ const BeastCard = memo(function BeastCard({
             }}>{overlayLabel}</span>
           </div>
         )}
-      </div>
+      </>
+        );
+        const ring = hasAllVariants && !missing ? "0 0 0 2px #39ff14" : undefined;
+        if (slabbed) {
+          return (
+            <div style={{ borderRadius: "4.5cqw", boxShadow: ring }}>
+              <GradedSlab
+                beast={beast}
+                speciesName={cardInput.name}
+                prefixName={cardInput.prefixName ?? null}
+                suffixName={cardInput.suffixName ?? null}
+                tier={cardInput.tier}
+                level={cardInput.level}
+              >
+                {face}
+              </GradedSlab>
+            </div>
+          );
+        }
+        return (
+          <div style={{
+            position: "relative", width: "100%", aspectRatio: "250 / 350", lineHeight: 0,
+            borderRadius: 10, overflow: "hidden", background: "#1b1b1f", boxShadow: ring,
+          }}>
+            {face}
+          </div>
+        );
+      })()}
 
       {renderOwner()}
     </div>
