@@ -7,8 +7,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Alert, AlertDescription } from "../ui/alert";
-import { checkRecipientInput } from "../../services/tokens/send";
-import { lookupProfileAddresses } from "../../services/walletNames";
+import { useRecipient } from "../../hooks/useRecipient";
 import { compareStarknetAddresses } from "../../utils/address";
 import { isUserRejection } from "../../utils/transaction";
 import { waitForTx } from "../../services/tx";
@@ -30,16 +29,12 @@ type Props = {
 export function SendGamesDialog({ open, onClose, games, onRemove, onSent, listedCount = 0, offersCount = 0 }: Props) {
   const { address, account } = useAccount();
   const [recipient, setRecipient] = useState("");
-  const [resolved, setResolved] = useState<string | null>(null);
-  const [resolving, setResolving] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
 
   const reset = useCallback(() => {
     setRecipient("");
-    setResolved(null);
-    setResolving(false);
     setSending(false);
     setError(null);
     setTxHash(null);
@@ -50,36 +45,10 @@ export function SendGamesDialog({ open, onClose, games, onRemove, onSent, listed
     onClose();
   }, [onClose, reset]);
 
-  // Resolve the recipient as the user types (addresses, Controller usernames, .brother names)
-  useEffect(() => {
-    const check = checkRecipientInput(recipient);
-    setResolved(null);
-    if (check.kind === "empty") return setError(null);
-    if (check.kind === "invalid") return setError(check.message);
-    if (check.kind === "address") {
-      setError(null);
-      return setResolved(check.address);
-    }
-    let alive = true;
-    setResolving(true);
-    const timer = setTimeout(async () => {
-      try {
-        const res = await lookupProfileAddresses([check.name]);
-        if (!alive) return;
-        const addr = res[check.name.toLowerCase()]?.[0] ?? null;
-        setResolved(addr);
-        setError(addr ? null : "Username not found.");
-      } catch {
-        if (alive) setError("Couldn't look up that name.");
-      } finally {
-        if (alive) setResolving(false);
-      }
-    }, 400);
-    return () => {
-      alive = false;
-      clearTimeout(timer);
-    };
-  }, [recipient]);
+  const recip = useRecipient(recipient);
+  const resolved = recip.resolved;
+  const resolving = recip.resolving;
+  useEffect(() => setError(recip.error), [recip.error]);
 
   const toSelf = !!resolved && !!address && compareStarknetAddresses(resolved, address);
 

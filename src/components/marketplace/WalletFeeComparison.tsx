@@ -21,14 +21,23 @@ const ROWS: WalletProfile[] = ["ready", "braavos", "controller", "controllerFirs
  * Estimated network fee of this transaction with each wallet (Ready X,
  * Braavos, Controller), from measured gas × the current gas price.
  */
-export function WalletFeeComparison({ actions, className }: { actions: ActionCounts; className?: string }) {
+export function WalletFeeComparison({
+  actions,
+  txCount = 1,
+  className,
+}: {
+  actions: ActionCounts;
+  /** the same calls sent as this many transactions (fee shown is the total) */
+  txCount?: number;
+  className?: string;
+}) {
   const { connector } = useAccount();
   const mine = profileForConnector(connector?.id, controllerConnector.id);
   const { usdPrice } = useSelectedToken(STRK_ADDRESS);
   const prices = useQuery({ queryKey: ["gasPrices"], queryFn: fetchGasPrices, staleTime: 60_000, refetchInterval: 120_000 });
 
   if (!prices.data || prices.data.l2Fri === 0n) return null;
-  const fees = ROWS.map((w) => ({ w, fri: estimateFeeFri(actions, w, prices.data) }));
+  const fees = ROWS.map((w) => ({ w, fri: estimateFeeFri(actions, w, prices.data, txCount) }));
   const strk = (fri: bigint) => Number(fri) / 1e18;
   const fmt = (fri: bigint) => {
     const s = strk(fri);
@@ -45,6 +54,7 @@ export function WalletFeeComparison({ actions, className }: { actions: ActionCou
         <Fuel className="h-3.5 w-3.5 flex-shrink-0" />
         <span className="flex-1">
           Network fee ≈ {fmt(yours?.fri ?? cheapest.fri).strk}
+          {txCount > 1 && ` total for ${txCount} transactions`}
           {yours ? ` with ${WALLET_LABELS[yours.w]}` : ` with ${WALLET_LABELS[cheapest.w]}`}
           {ratio && ratio > 1.15 && (
             <span className="text-amber-300">

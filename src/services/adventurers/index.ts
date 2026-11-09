@@ -6,3 +6,4 @@ export * from "./format";
 export * from "./rules";
 export * from "./items";
 export * from "./specials";
+export * from "./goldenPass";

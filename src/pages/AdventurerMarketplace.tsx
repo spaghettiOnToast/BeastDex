@@ -25,6 +25,9 @@ import { Button } from "../components/ui/button";
 import { AdventurerCard, GameStatusBadge } from "../components/adventurers/AdventurerCard";
 import { GameOffersDialog } from "../components/adventurers/GameOffersDialog";
 import { SendGamesDialog } from "../components/adventurers/SendGamesDialog";
+import { GoldenPassMintDialog } from "../components/adventurers/GoldenPassMintDialog";
+import { useGoldenPasses } from "../hooks/useGoldenPasses";
+import { GOLDEN_TOKEN_IMAGE_URL } from "../services/adventurers/goldenPass";
 import { WalletFeeComparison } from "../components/marketplace/WalletFeeComparison";
 import { BuyGameNotice, ConfirmTxDialog, ListGameNotice, NoticeBox, OfferGameNotice } from "../components/adventurers/TxNotices";
 import { useAdventurerListings, useMyGames, type AdventurerListing } from "../hooks/useAdventurerGames";
@@ -297,6 +300,9 @@ export default function AdventurerMarketplace() {
   const [mineSort, setMineSort] = useState<"newest" | "level" | "last-action">("newest");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sendOpen, setSendOpen] = useState(false);
+  const [goldenOpen, setGoldenOpen] = useState(false);
+  const golden = useGoldenPasses(tab === "mine" ? address : undefined);
+  const goldenReady = golden.data?.passes.filter((p) => p.usable).length ?? 0;
   const [listTarget, setListTarget] = useState<AdventurerGame | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [offersFor, setOffersFor] = useState<AdventurerGame | null>(null);
@@ -644,6 +650,20 @@ export default function AdventurerMarketplace() {
                     <option value="level">Level</option>
                     <option value="last-action">Last played</option>
                   </select>
+                  {(golden.data?.passes.length ?? 0) > 0 && (
+                    <Button
+                      size="sm"
+                      className="ml-auto h-8 border border-gold bg-gold/15 text-xs font-bold text-gold hover:bg-gold/20"
+                      onClick={() => setGoldenOpen(true)}
+                      title="Mint a free Beast Mode game with each ready Golden Token"
+                    >
+                      <img src={GOLDEN_TOKEN_IMAGE_URL} alt="" className="mr-1.5 h-4 w-4" />
+                      Golden Tokens
+                      <span className="ml-1.5 rounded bg-gold/20 px-1 text-[10px]">
+                        {goldenReady}/{golden.data!.passes.length} ready
+                      </span>
+                    </Button>
+                  )}
                 </div>
                 {selected.size > 0 && (
                   <div className="flex items-center gap-2">
@@ -914,6 +934,12 @@ export default function AdventurerMarketplace() {
         offers={offersFor ? (offersByToken.get(offersFor.tokenId) ?? []) : []}
         acceptingId={actions.acceptingOfferId}
         onAccept={acceptOffer}
+      />
+
+      <GoldenPassMintDialog
+        open={goldenOpen}
+        onClose={() => setGoldenOpen(false)}
+        onMinted={() => setTimeout(() => void myGames.refetch(), 4000)}
       />
 
       <SendGamesDialog

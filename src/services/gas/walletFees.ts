@@ -31,6 +31,8 @@ export const ACTION_L2_GAS = {
   approveToken: 200_960, // ERC20 approve
   approveCollection: 155_840, // set_approval_for_all
   nftTransfer: 1_171_200, // Beasts transfer_from (games ~971k)
+  /** Beast Mode `new_game` paid with a Golden Token (simulated 2026-11-09: 3.82M total from a Ready account) */
+  goldenPassMint: 2_220_000,
   /** one Ekubo swap: transfer in + multihop + clear_minimum + clear */
   swap: 440_960 + 8_199_360 + 800_960 + 200_000,
 } as const;
@@ -83,10 +85,16 @@ export function callsL2Gas(actions: ActionCounts): number {
   );
 }
 
-/** Estimated fee in fri (1e-18 STRK) for a wallet sending these calls as one transaction. */
-export function estimateFeeFri(actions: ActionCounts, wallet: WalletProfile, prices: GasPrices): bigint {
-  const l2 = BigInt(callsL2Gas(actions) + WALLET_OVERHEAD_L2[wallet]);
-  return l2 * prices.l2Fri + BigInt(L1_DATA_GAS) * prices.l1DataFri;
+/**
+ * Estimated fee in fri (1e-18 STRK) for a wallet sending these calls as one
+ * transaction, or `txCount` transactions of them in a row. Controller's
+ * first-after-login premium is paid only on the first of those.
+ */
+export function estimateFeeFri(actions: ActionCounts, wallet: WalletProfile, prices: GasPrices, txCount = 1): bigint {
+  const n = Math.max(1, Math.floor(txCount));
+  const later = wallet === "controllerFirstSocial" || wallet === "controllerFirstPasskey" ? "controller" : wallet;
+  const l2 = BigInt(n * callsL2Gas(actions) + WALLET_OVERHEAD_L2[wallet] + (n - 1) * WALLET_OVERHEAD_L2[later]);
+  return l2 * prices.l2Fri + BigInt(n * L1_DATA_GAS) * prices.l1DataFri;
 }
 
 /** Which profile the connected wallet is (by starknet-react connector id), if known. */
