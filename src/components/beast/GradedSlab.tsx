@@ -13,6 +13,8 @@ const GRADE_DESCRIPTORS: Record<number, string> = {
 
 /** The v3 card's shiny-rim colours (renderBeastCardV3Svg's `shinyRim` gradient). */
 const RAINBOW_STOPS = "#73FF73, #FFFF73, #FFBE73, #FF7373, #C073DC, #7373FF, #73FF73";
+/** Gold rim for Shiny MIDI, from the card's `gold` gradient (#e5d8b2 → #b79a5e → #8a6d3b). */
+const GOLD_STOPS = "#e5d8b2, #b79a5e, #8a6d3b, #f3e7c4, #b79a5e, #8a6d3b, #e5d8b2";
 
 /** Short certification number: the last 8 digits of the token id. */
 function certNumber(tokenId: string): string {
@@ -30,8 +32,8 @@ type Props = {
  * label carrying the grade, its descriptor, the species catalog, the card's
  * name/variant and a certification number. All sizes are in container units
  * (the outer wrapper is the size container) so the slab scales with its width.
- * Grade 10 Shiny / Shiny MIDI beasts get a rotating rainbow rim in the same
- * colours as the card's own shiny rim.
+ * Grade 10 Shiny beasts get a rotating rim in the card's shiny-rim rainbow;
+ * grade 10 Shiny MIDI beasts get the same rim in gold.
  */
 export default function GradedSlab({ beast, children }: Props) {
   const speciesName = getAttributeValue(beast, "Beast") ?? beast.name;
@@ -55,7 +57,9 @@ export default function GradedSlab({ beast, children }: Props) {
     : "linear-gradient(180deg, #fbfaf6 0%, #efece4 100%)";
   const ink = gem ? "#2b1d00" : "#16161a";
   const accent = gem ? "#5c3d00" : "#9f1d24";
-  const rainbow = gem && (beast.visual === "Shiny" || beast.visual === "Shiny MIDI");
+  // Grade 10 rims: rainbow for Shiny, gold for Shiny MIDI.
+  const rimStops = !gem ? null : beast.visual === "Shiny" ? RAINBOW_STOPS : beast.visual === "Shiny MIDI" ? GOLD_STOPS : null;
+  const rainbow = rimStops != null;
 
   return (
     <div style={{ width: "100%", containerType: "inline-size" }}>
@@ -84,7 +88,7 @@ export default function GradedSlab({ beast, children }: Props) {
           <div className="animate-spin" style={{
             position: "absolute", width: "180cqw", height: "180cqw",
             left: "calc(50% - 90cqw)", top: "calc(50% - 90cqw)", animationDuration: "6s",
-            background: `conic-gradient(${RAINBOW_STOPS})`,
+            background: `conic-gradient(${rimStops})`,
           }} />
         </div>
       )}
