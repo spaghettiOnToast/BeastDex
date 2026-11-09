@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { beastV3Catalog } from "@provable-games/collectables";
 import type { Beast } from "../../services/beast";
+import { getAttributeValue } from "../../utils/beast";
 
 /** Grading-scale descriptors (the standard trading-card grading scale). */
 const GRADE_DESCRIPTORS: Record<number, string> = {
@@ -10,30 +11,16 @@ const GRADE_DESCRIPTORS: Record<number, string> = {
   7: "NM",
 };
 
+/** The v3 card's shiny-rim colours (renderBeastCardV3Svg's `shinyRim` gradient). */
+const RAINBOW_STOPS = "#73FF73, #FFFF73, #FFBE73, #FF7373, #C073DC, #7373FF, #73FF73";
+
 /** Short certification number: the last 8 digits of the token id. */
 function certNumber(tokenId: string): string {
   return tokenId.slice(-8).padStart(8, "0");
 }
 
-/** Decorative barcode whose bar widths come from the token id's digits. */
-function Barcode({ tokenId, color }: { tokenId: string; color: string }) {
-  const digits = tokenId.slice(-24).split("").map((d) => Number(d) || 0);
-  return (
-    <div aria-hidden style={{ display: "flex", alignItems: "stretch", height: "100%", gap: "0.45cqw" }}>
-      {digits.map((d, i) => (
-        <span key={i} style={{ width: `${0.35 + (d % 3) * 0.35}cqw`, background: color }} />
-      ))}
-    </div>
-  );
-}
-
 type Props = {
   beast: Beast;
-  speciesName: string;
-  prefixName: string | null;
-  suffixName: string | null;
-  tier: number;
-  level: number;
   /** The card face (art + overlays), rendered inside the slab's well. */
   children: ReactNode;
 };
@@ -42,9 +29,16 @@ type Props = {
  * A graded-card slab around high-grade (7+) v3 beasts: a clear case with a
  * label carrying the grade, its descriptor, the species catalog, the card's
  * name/variant and a certification number. All sizes are in container units
- * so the slab scales with the card (BeastCard's root is an @container).
+ * (the outer wrapper is the size container) so the slab scales with its width.
+ * Grade 10 Shiny / Shiny MIDI beasts get a rotating rainbow rim in the same
+ * colours as the card's own shiny rim.
  */
-export default function GradedSlab({ beast, speciesName, prefixName, suffixName, tier, level, children }: Props) {
+export default function GradedSlab({ beast, children }: Props) {
+  const speciesName = getAttributeValue(beast, "Beast") ?? beast.name;
+  const prefixName = getAttributeValue(beast, "Prefix");
+  const suffixName = getAttributeValue(beast, "Suffix");
+  const tier = getAttributeValue(beast, "Tier") ?? "?";
+  const level = getAttributeValue(beast, "Level") ?? "?";
   const grade = beast.cardGrade ?? 0;
   const gem = grade === 10;
   const catalog = beast.speciesId ? beastV3Catalog(beast.speciesId) : "Original";
@@ -61,8 +55,10 @@ export default function GradedSlab({ beast, speciesName, prefixName, suffixName,
     : "linear-gradient(180deg, #fbfaf6 0%, #efece4 100%)";
   const ink = gem ? "#2b1d00" : "#16161a";
   const accent = gem ? "#5c3d00" : "#9f1d24";
+  const rainbow = gem && (beast.visual === "Shiny" || beast.visual === "Shiny MIDI");
 
   return (
+    <div style={{ width: "100%", containerType: "inline-size" }}>
     <div
       title={`Graded ${grade} ${GRADE_DESCRIPTORS[grade] ?? ""} · ${catalog} catalog`}
       style={{
@@ -71,11 +67,27 @@ export default function GradedSlab({ beast, speciesName, prefixName, suffixName,
         padding: "3.2cqw", boxSizing: "border-box", borderRadius: "4.5cqw",
         // Clear acrylic case.
         background: "linear-gradient(160deg, rgba(255,255,255,0.22) 0%, rgba(210,220,235,0.10) 40%, rgba(255,255,255,0.16) 100%)",
-        border: "1px solid rgba(255,255,255,0.35)",
+        border: rainbow ? "none" : "1px solid rgba(255,255,255,0.35)",
         boxShadow: "inset 0 0 0 1.2cqw rgba(255,255,255,0.06), inset 0 1px 0 rgba(255,255,255,0.5), 0 2px 10px rgba(0,0,0,0.55)",
         backdropFilter: "blur(2px)",
       }}
     >
+      {rainbow && (
+        <div aria-hidden style={{
+          position: "absolute", inset: 0, borderRadius: "inherit", padding: "1.4cqw",
+          overflow: "hidden", pointerEvents: "none",
+          // Show only the padding ring: the content box is masked out.
+          WebkitMask: "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
+          WebkitMaskComposite: "xor",
+          mask: "linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0)",
+        }}>
+          <div className="animate-spin" style={{
+            position: "absolute", width: "180cqw", height: "180cqw",
+            left: "calc(50% - 90cqw)", top: "calc(50% - 90cqw)", animationDuration: "6s",
+            background: `conic-gradient(${RAINBOW_STOPS})`,
+          }} />
+        </div>
+      )}
       {/* Label */}
       <div
         style={{
@@ -96,11 +108,8 @@ export default function GradedSlab({ beast, speciesName, prefixName, suffixName,
           <div style={{ fontSize: "3.4cqw", fontWeight: 600, opacity: 0.8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textTransform: "uppercase" }}>
             {variant} · T{tier} · LV {level}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "1.6cqw", height: "3.6cqw", marginTop: "0.4cqw" }}>
-            <Barcode tokenId={beast.tokenId} color={ink} />
-            <span style={{ fontSize: "3cqw", fontWeight: 700, fontVariantNumeric: "tabular-nums", letterSpacing: "0.2cqw", whiteSpace: "nowrap" }}>
-              {certNumber(beast.tokenId)}
-            </span>
+          <div style={{ fontSize: "3cqw", fontWeight: 700, fontVariantNumeric: "tabular-nums", letterSpacing: "0.2cqw", whiteSpace: "nowrap", marginTop: "0.4cqw", opacity: 0.85 }}>
+            CERT #{certNumber(beast.tokenId)}
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "space-between" }}>
@@ -128,6 +137,7 @@ export default function GradedSlab({ beast, speciesName, prefixName, suffixName,
         position: "absolute", inset: 0, borderRadius: "inherit", pointerEvents: "none", zIndex: 25,
         background: "linear-gradient(115deg, rgba(255,255,255,0) 30%, rgba(255,255,255,0.13) 42%, rgba(255,255,255,0) 52%)",
       }} />
+    </div>
     </div>
   );
 }

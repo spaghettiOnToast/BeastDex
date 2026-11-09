@@ -57,6 +57,8 @@ type Props = {
   hasAllVariants?: boolean;
   /** Draw the MIDI notes background on MIDI beasts (default true). */
   showNotes?: boolean;
+  /** Never wrap in a graded slab (the caller draws its own). */
+  noSlab?: boolean;
   className?: string;
 };
 
@@ -88,6 +90,7 @@ const BeastCard = memo(function BeastCard({
   duplicateCount,
   hasAllVariants = false,
   showNotes = true,
+  noSlab = false,
   className,
 }: Props) {
   const { image, owner, attributes, power } = beast;
@@ -155,7 +158,7 @@ const BeastCard = memo(function BeastCard({
   }, [cardInput, image, beast.visualEffects, beast.tokenId]);
 
   // Grade 7+ v3 beasts are shown sealed in a graded-card slab.
-  const slabbed = isSlabbed(beast, missing);
+  const slabbed = !noSlab && isSlabbed(beast, missing);
 
   const renderOwner = () => {
     if (missing || !owned || !owner) return null;
@@ -310,14 +313,7 @@ const BeastCard = memo(function BeastCard({
         if (slabbed) {
           return (
             <div style={{ borderRadius: "4.5cqw", boxShadow: ring }}>
-              <GradedSlab
-                beast={beast}
-                speciesName={cardInput.name}
-                prefixName={cardInput.prefixName ?? null}
-                suffixName={cardInput.suffixName ?? null}
-                tier={cardInput.tier}
-                level={cardInput.level}
-              >
+              <GradedSlab beast={beast}>
                 {face}
               </GradedSlab>
             </div>

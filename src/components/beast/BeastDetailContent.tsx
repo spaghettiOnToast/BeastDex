@@ -10,6 +10,8 @@ import { beastConditionRows } from "../../services/beast/condition";
 import { fetchTrackSound, type MusicTrack } from "../../services/beast/music";
 import type { BeastPlayerHandle, BeastSoundData } from "@provable-games/collectables";
 import BeastPlayerCard from "./BeastPlayerCard";
+import GradedSlab from "./GradedSlab";
+import { isSlabbed } from "../../utils/slab";
 import BeastMusicPanel from "./BeastMusicPanel";
 import { SUMMIT_ENABLED } from "../../services/summitApi/constants";
 
@@ -219,18 +221,22 @@ export function BeastDetailContent({
         {/* Left: CometCard (green glow + tilt) with BeastCard content overlaid */}
         <div className="w-[360px] flex-shrink-0 flex items-center justify-start">
           <CometCard className="w-full">
-            {isV3 ? (
-              <BeastPlayerCard
-                key={playerKey}
-                beast={beast}
-                trackSound={trackSound}
-                onStateChange={(st) => setPlaying(st.playing)}
-                onPlayer={(p) => {
-                  playerRef.current = p;
-                  if (!p) setPlaying(false);
-                }}
-              />
-            ) : (
+            {isV3 ? (() => {
+              const player = (
+                <BeastPlayerCard
+                  key={playerKey}
+                  beast={beast}
+                  trackSound={trackSound}
+                  onStateChange={(st) => setPlaying(st.playing)}
+                  onPlayer={(p) => {
+                    playerRef.current = p;
+                    if (!p) setPlaying(false);
+                  }}
+                />
+              );
+              // Grade 7+: the playable card sealed in its graded slab.
+              return isSlabbed(beast) ? <GradedSlab beast={beast}>{player}</GradedSlab> : player;
+            })() : (
               <BeastCard beast={beast} owned={false} />
             )}
           </CometCard>
