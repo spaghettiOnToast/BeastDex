@@ -11,10 +11,26 @@ const GRADE_DESCRIPTORS: Record<number, string> = {
   7: "NM",
 };
 
-/** The v3 card's shiny-rim colours (renderBeastCardV3Svg's `shinyRim` gradient). */
-const RAINBOW_STOPS = "#73FF73, #FFFF73, #FFBE73, #FF7373, #C073DC, #7373FF, #73FF73";
 /** Gold rim for Shiny MIDI, from the card's `gold` gradient (#e5d8b2 → #b79a5e → #8a6d3b). */
 const GOLD_STOPS = "#e5d8b2, #b79a5e, #8a6d3b, #f3e7c4, #b79a5e, #8a6d3b, #e5d8b2";
+
+/**
+ * Small BeastDex mark for the label: the header logo (components/common/Logo)
+ * with flat colours, so no gradient ids clash when many slabs share a page.
+ */
+function BeastDexMark() {
+  return (
+    <svg viewBox="0 0 220 160" aria-hidden style={{ height: "3.6cqw", width: "auto", display: "block" }}>
+      <path d="M32 76 L12 52 C8 47 11 40 18 40h32" fill="none" stroke="#1fae0b" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M188 76 L208 52 C212 47 209 40 202 40h-32" fill="none" stroke="#1fae0b" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="28" y="32" width="164" height="96" rx="32" fill="#0b1120" stroke="#1fae0b" strokeWidth="6" />
+      <circle cx="110" cy="80" r="30" fill="#062a12" stroke="#39ff14" strokeWidth="5" />
+      <circle cx="110" cy="80" r="13" fill="#39ff14" />
+      <circle cx="72" cy="56" r="8" fill="#2ce0ff" />
+      <circle cx="148" cy="56" r="8" fill="#2ce0ff" />
+    </svg>
+  );
+}
 
 /** Short certification number: the last 8 digits of the token id. */
 function certNumber(tokenId: string): string {
@@ -32,8 +48,7 @@ type Props = {
  * label carrying the grade, its descriptor, the species catalog, the card's
  * name/variant and a certification number. All sizes are in container units
  * (the outer wrapper is the size container) so the slab scales with its width.
- * Grade 10 Shiny beasts get a rotating rim in the card's shiny-rim rainbow;
- * grade 10 Shiny MIDI beasts get the same rim in gold.
+ * Grade 10 Shiny MIDI beasts get a rotating gold rim.
  */
 export default function GradedSlab({ beast, children }: Props) {
   const speciesName = getAttributeValue(beast, "Beast") ?? beast.name;
@@ -57,9 +72,8 @@ export default function GradedSlab({ beast, children }: Props) {
     : "linear-gradient(180deg, #fbfaf6 0%, #efece4 100%)";
   const ink = gem ? "#2b1d00" : "#16161a";
   const accent = gem ? "#5c3d00" : "#9f1d24";
-  // Grade 10 rims: rainbow for Shiny, gold for Shiny MIDI.
-  const rimStops = !gem ? null : beast.visual === "Shiny" ? RAINBOW_STOPS : beast.visual === "Shiny MIDI" ? GOLD_STOPS : null;
-  const rainbow = rimStops != null;
+  // Grade 10 Shiny MIDI gets a rotating gold rim; every other slab a clear edge.
+  const goldRim = gem && beast.visual === "Shiny MIDI";
 
   return (
     <div style={{ width: "100%", containerType: "inline-size" }}>
@@ -71,12 +85,12 @@ export default function GradedSlab({ beast, children }: Props) {
         padding: "3.2cqw", boxSizing: "border-box", borderRadius: "4.5cqw",
         // Clear acrylic case.
         background: "linear-gradient(160deg, rgba(255,255,255,0.22) 0%, rgba(210,220,235,0.10) 40%, rgba(255,255,255,0.16) 100%)",
-        border: rainbow ? "none" : "1px solid rgba(255,255,255,0.35)",
+        border: goldRim ? "none" : "1px solid rgba(255,255,255,0.35)",
         boxShadow: "inset 0 0 0 1.2cqw rgba(255,255,255,0.06), inset 0 1px 0 rgba(255,255,255,0.5), 0 2px 10px rgba(0,0,0,0.55)",
         backdropFilter: "blur(2px)",
       }}
     >
-      {rainbow && (
+      {goldRim && (
         <div aria-hidden style={{
           position: "absolute", inset: 0, borderRadius: "inherit", padding: "1.4cqw",
           overflow: "hidden", pointerEvents: "none",
@@ -88,7 +102,7 @@ export default function GradedSlab({ beast, children }: Props) {
           <div className="animate-spin" style={{
             position: "absolute", width: "180cqw", height: "180cqw",
             left: "calc(50% - 90cqw)", top: "calc(50% - 90cqw)", animationDuration: "6s",
-            background: `conic-gradient(${rimStops})`,
+            background: `conic-gradient(${GOLD_STOPS})`,
           }} />
         </div>
       )}
@@ -121,7 +135,10 @@ export default function GradedSlab({ beast, children }: Props) {
             {GRADE_DESCRIPTORS[grade] ?? `GRADE`}
           </div>
           <div style={{ fontSize: "13cqw", fontWeight: 900, lineHeight: 0.9, letterSpacing: "-0.4cqw" }}>{grade}</div>
-          <div style={{ fontSize: "2.6cqw", fontWeight: 800, letterSpacing: "0.3cqw", opacity: 0.7 }}>BEASTDEX</div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.8cqw" }}>
+            <BeastDexMark />
+            <span style={{ fontSize: "2.6cqw", fontWeight: 800, letterSpacing: "0.3cqw", opacity: 0.7 }}>BEASTDEX</span>
+          </div>
         </div>
       </div>
 
