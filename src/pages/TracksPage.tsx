@@ -39,7 +39,7 @@ type Player = {
   open: (beast: Beast) => void;
 };
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 15;
 
 /** A beast's name that opens its card modal. */
 function BeastLink({ beast, player, className, children }: { beast: Beast; player: Player; className?: string; children?: React.ReactNode }) {
