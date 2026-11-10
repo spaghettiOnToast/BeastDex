@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { useAccount } from "@starknet-react/core";
 import { beastImageUrl, hasBundledBeastImage, type BeastSpecies } from "@provable-games/collectables";
-import { Crown, ExternalLink, Music, Pause, Play, Search, ShoppingBag, Sparkles } from "lucide-react";
+import { Crown, ExternalLink, Music, Search, Star, ShoppingBag, Sparkles } from "lucide-react";
 import BeastModal from "../components/beast/BeastModal";
 import TopBar from "../components/header/TopBar";
 import { AppLayout } from "../components/layout/AppLayout";
 import TrackPlayerBar, { type NowPlaying, type PlayerStatus } from "../components/tracks/TrackPlayerBar";
+import { PlayButton, type Player } from "../components/tracks/PlayButton";
+import MyMusic from "../components/tracks/MyMusic";
+import { Pager, PAGE_SIZE } from "../components/tracks/Pager";
 import { cn } from "../lib/utils";
 import { fetchBeastById, fetchBeastSpecies, fetchBeastsByIds, type Beast } from "../services/beast";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
@@ -30,16 +34,7 @@ import {
   type SpeciesSongSettings,
 } from "../services/beast/tracks";
 
-type Player = {
-  current: NowPlaying | null;
-  status: PlayerStatus;
-  /** Play an item, or toggle it when it's already the current one. */
-  play: (item: NowPlaying) => void;
-  /** Open a beast in the card modal (instead of leaving the page). */
-  open: (beast: Beast) => void;
-};
 
-const PAGE_SIZE = 15;
 
 /** A beast's name that opens its card modal. */
 function BeastLink({ beast, player, className, children }: { beast: Beast; player: Player; className?: string; children?: React.ReactNode }) {
@@ -54,25 +49,6 @@ function BeastLink({ beast, player, className, children }: { beast: Beast; playe
   );
 }
 
-/** Prev / page x of y / Next. */
-function Pager({ page, pages, onPage }: { page: number; pages: number; onPage: (page: number) => void }) {
-  if (pages <= 1) return null;
-  const btn =
-    "rounded-md border border-white/10 px-3 py-1 text-xs font-semibold text-zinc-300 transition-colors hover:border-gold/50 hover:text-gold disabled:opacity-40 disabled:hover:border-white/10 disabled:hover:text-zinc-300";
-  return (
-    <div className="flex items-center justify-center gap-3 pt-1">
-      <button type="button" className={btn} disabled={page <= 0} onClick={() => onPage(page - 1)}>
-        Prev
-      </button>
-      <span className="text-xs text-zinc-500">
-        Page {page + 1} of {pages}
-      </span>
-      <button type="button" className={btn} disabled={page >= pages - 1} onClick={() => onPage(page + 1)}>
-        Next
-      </button>
-    </div>
-  );
-}
 
 const TYPES = ["Magic", "Hunter", "Brute"] as const;
 const TIERS = [1, 2, 3, 4, 5] as const;
@@ -112,42 +88,6 @@ function useSeen<T extends Element>(): [React.RefObject<T | null>, boolean] {
   return [ref, seen];
 }
 
-function PlayButton({
-  player,
-  item,
-  label,
-  disabled,
-}: {
-  player: Player;
-  item: NowPlaying | null;
-  label: string;
-  disabled?: boolean;
-}) {
-  const isCurrent = item != null && player.current?.key === item.key;
-  const playing = isCurrent && player.status === "playing";
-  const loading = isCurrent && player.status === "loading";
-  return (
-    <button
-      type="button"
-      disabled={disabled || !item}
-      onClick={() => item && player.play(item)}
-      aria-label={`${playing ? "Pause" : "Play"} ${label}`}
-      className={cn(
-        "flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 text-[11px] font-semibold transition-colors disabled:opacity-40",
-        isCurrent ? "border-gold bg-gold/15 text-gold" : "border-white/10 text-zinc-300 hover:border-gold/50 hover:text-gold",
-      )}
-    >
-      {loading ? (
-        <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-      ) : playing ? (
-        <Pause className="h-3 w-3" />
-      ) : (
-        <Play className="h-3 w-3" />
-      )}
-      {label}
-    </button>
-  );
-}
 
 function Pill({ children, title, tone = "default" }: { children: React.ReactNode; title?: string; tone?: "default" | "gold" }) {
   return (
@@ -698,7 +638,25 @@ function TracksPage() {
   const [current, setCurrent] = useState<NowPlaying | null>(null);
   const [status, setStatus] = useState<PlayerStatus>("loading");
   const [toggleSignal, setToggleSignal] = useState(0);
-  const [tab, setTab] = useState<"species" | "kings" | "shiny">("species");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = (["species", "kings", "shiny", "mine"] as const).find((t) => t === searchParams.get("tab")) ?? "species";
+  const setTab = (next: typeof tab) =>
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        if (next === "species") p.delete("tab");
+        else p.set("tab", next);
+        return p;
+      },
+      { replace: true },
+    );
+  const { address } = useAccount();
+  const tabsRef = useRef<HTMLElement>(null);
+  // Arriving on ?tab=mine (from "Manage tracks"): scroll the tabs into view.
+  const arrivedOnMine = useRef(tab === "mine");
+  useEffect(() => {
+    if (arrivedOnMine.current) tabsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
   const [selected, setSelected] = useState<Beast | null>(null);
   const { usernames: ownerUsernames } = useControllerUsernames([selected?.owner]);
 
@@ -738,6 +696,9 @@ function TracksPage() {
       (s) => (tier == null || s.tier === tier) && (type == null || s.type === type) && (!f || s.name.toLowerCase().includes(f)),
     );
   }, [species, tier, type, filter]);
+
+  const [speciesPage, setSpeciesPage] = useState(0);
+  useEffect(() => setSpeciesPage(0), [tier, type, filter]);
 
   const chip = (active: boolean) =>
     cn(
@@ -806,13 +767,14 @@ function TracksPage() {
 
         <NamedSongSearch species={species ?? []} player={player} />
 
-        <section className="space-y-3">
+        <section ref={tabsRef} className="scroll-mt-20 space-y-3">
           <div className="flex flex-wrap gap-1 rounded-lg border border-white/[0.06] bg-surface/60 p-1 sm:inline-flex" role="tablist">
             {(
               [
                 ["species", "Species Songs", Music],
                 ["kings", "Kings", Crown],
                 ["shiny", "Shiny MIDI", Sparkles],
+                ["mine", "My Music", Star],
               ] as const
             ).map(([id, label, Icon]) => (
               <button
@@ -830,6 +792,14 @@ function TracksPage() {
               </button>
             ))}
           </div>
+          {tab === "mine" ? (
+            address ? (
+              <MyMusic address={address} player={player} kings={kings} />
+            ) : (
+              <p className="text-sm text-zinc-400">Connect your wallet to see and manage your beasts&apos; music.</p>
+            )
+          ) : (
+          <>
           <div className="flex flex-wrap items-end justify-between gap-3">
             <p className="max-w-2xl text-sm text-zinc-400">
               {tab === "species"
@@ -879,7 +849,7 @@ function TracksPage() {
             <p className="text-sm text-zinc-500">No species match these filters.</p>
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {visible.map((s) => (
+              {visible.slice(speciesPage * PAGE_SIZE, (speciesPage + 1) * PAGE_SIZE).map((s) => (
                 <SpeciesCard
                   key={s.speciesId}
                   species={s}
@@ -889,6 +859,11 @@ function TracksPage() {
                 />
               ))}
             </div>
+          )}
+          {tab === "species" && species && (
+            <Pager page={speciesPage} pages={Math.ceil(visible.length / PAGE_SIZE)} onPage={setSpeciesPage} />
+          )}
+          </>
           )}
         </section>
 

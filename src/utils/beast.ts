@@ -208,8 +208,9 @@ export function getBeastRank(beast: Beast | null | undefined): number | null {
  * Why a beast has no rank (rank 0), or null when it is ranked:
  * - "genesis": the 75 original Genesis mints (never ranked by design)
  * - "new": v3 mints with no legacy origin (minterData 0). Ranks are set by an
- *   admin `update_rankings` call on the Beasts contract, last run at the v3
- *   migration (2026-11-03), so every beast minted since is still rank 0
+ *   `update_rankings` call on the Beasts contract (permissionless: anyone can
+ *   submit a species' full, correctly ordered list — see services/beast/rankings),
+ *   so a beast minted since its species was last re-ranked is still rank 0
  *   on-chain. BeastDex shows the API's projectedRank instead (`shownRank`);
  *   "new" only shows for a beast the API hasn't projected yet.
  * - "unranked": anything else without a rank

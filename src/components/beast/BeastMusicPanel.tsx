@@ -6,6 +6,7 @@ import { cn } from "../../lib/utils";
 import { lootSurvivorBeastUrl } from "../../services/beast/constants";
 import {
   clearTrackSounds,
+  emitMusicChange,
   fetchBeastMusic,
   isKingSetTrack,
   trackRefOf,
@@ -24,16 +25,29 @@ import {
   setDefaultTrackCall,
   setSharedSongPresetCall,
   setTrackModeCall,
+  txErrorMessage,
   waitForMusic,
   TRACK_PRICE_WEI,
 } from "../../services/beast/musicActions";
 import { waitForTx } from "../../services/tx";
+import {
+  estimateCallsFeeFri,
+  fetchRankingInfo,
+  fetchSpeciesRankedIds,
+  formatStrk,
+  rankingsStale,
+  revertReason,
+  updateRankingsCall,
+  type RankingInfo,
+} from "../../services/beast/rankings";
 import { normaliseStarknetAddress } from "../../utils/address";
 
 type Props = {
   tokenId: string;
   /** species id, to read the King's effects for Species Songs */
   speciesId?: number;
+  /** species name ("Titan"), for the King's ranking notice */
+  speciesName?: string;
   /** the token's `Sound Effects` preset (0-3), set by its rarity */
   soundEffects?: number;
   /** this beast is its species' King (Rank 1): its owner sets the Species Songs' effects */
@@ -51,6 +65,26 @@ type Props = {
   onMusicChanged?: () => void;
 };
 
+/**
+ * Pre-flight for a King's staged effects change: are the species' on-chain
+ * rankings current, and what will the transaction cost? When stale, the
+ * transaction re-ranks the species first (`update_rankings`).
+ */
+type RankCheck =
+  | { state: "checking" }
+  | { state: "fresh"; feeFri: bigint | null }
+  | { state: "stale"; info: RankingInfo; ids: string[]; feeFri: bigint }
+  | { state: "error"; message: string };
+
+/** The contract's revert reasons around King actions, in plain words. */
+function kingFailureMessage(reason: string): string {
+  if (/stale rankings/i.test(reason)) return "This species' rankings changed while checking. Try again.";
+  if (/not strictly ranked|wrong count/i.test(reason))
+    return "The ranking list from the indexer doesn't match the chain yet (a beast was just minted or changed). Try again in a minute.";
+  if (/leader|king|rank/i.test(reason)) return `Only the species' Rank 1 beast can change this (${reason}).`;
+  return reason.length > 160 ? `${reason.slice(0, 160)}…` : reason;
+}
+
 type Busy = { kind: "default" | "mode" | "buy" | "preset"; ref?: string; phase: "wallet" | "confirming" };
 
 const TRACK_BLURBS: Record<string, string> = {
@@ -59,20 +93,12 @@ const TRACK_BLURBS: Record<string, string> = {
   named: "Unique to this beast",
 };
 
+/** `shared:<id>` -> id. */
+const parseSharedId = (ref: string) => Number(ref.split(":")[1] ?? 0);
+
 function blurb(track: MusicTrack): string {
   if (track.status === "pending") return "Composing…";
   return TRACK_BLURBS[track.ref] ?? (track.kind === "individual" ? "Purchased song" : "");
-}
-
-function txErrorMessage(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err ?? "");
-  // Wallets wrap their own failures (e.g. Ready's WalletRPCError) with the real reason in `cause`.
-  const cause = err instanceof Error && err.cause instanceof Error ? err.cause.message : "";
-  if (/timeout|timed out/i.test(`${msg} ${cause}`))
-    return "Your wallet didn't respond in time. Check its popup isn't hidden or the wallet locked, then try again.";
-  if (/reject|denied|cancel|abort/i.test(msg)) return "Cancelled in wallet. Nothing was sent.";
-  if (/insufficient|balance/i.test(msg)) return "Not enough funds for this transaction.";
-  return msg.length > 140 ? `${msg.slice(0, 140)}…` : msg || "Transaction failed.";
 }
 
 const MODE_TITLES: Record<string, string> = {
@@ -89,6 +115,7 @@ const MODE_TITLES: Record<string, string> = {
 export default function BeastMusicPanel({
   tokenId,
   speciesId,
+  speciesName,
   soundEffects,
   isKing = false,
   owner,
@@ -110,11 +137,49 @@ export default function BeastMusicPanel({
   const [kingPresets, setKingPresets] = useState<Record<string, number>>({});
   /** The King's staged (not yet applied) effects choice for a Species Song. */
   const [stagedPreset, setStagedPreset] = useState<{ ref: string; preset: number } | null>(null);
+  const [rankCheck, setRankCheck] = useState<RankCheck | null>(null);
+  const [rankCheckRun, setRankCheckRun] = useState(0);
 
   const canManage =
     Boolean(account && address && owner) &&
     normaliseStarknetAddress(address) === normaliseStarknetAddress(owner);
   const canKing = canManage && isKing;
+
+  // King staged an effects change: check the species' rankings and price the transaction.
+  const stagedKey = stagedPreset ? `${stagedPreset.ref}:${stagedPreset.preset}` : null;
+  useEffect(() => {
+    setRankCheck(null);
+    if (!stagedPreset || !canKing || !address || speciesId == null) return;
+    const presetCall = setSharedSongPresetCall(tokenId, parseSharedId(stagedPreset.ref), stagedPreset.preset);
+    let alive = true;
+    setRankCheck({ state: "checking" });
+    (async () => {
+      const info = await fetchRankingInfo(speciesId);
+      if (!rankingsStale(info)) {
+        const feeFri = await estimateCallsFeeFri(address, [presetCall]).catch((err) => {
+          // A revert here is worth showing; a flaky estimate is not.
+          const reason = revertReason(err);
+          if (/stale|rank|leader|king/i.test(reason)) throw new Error(kingFailureMessage(reason));
+          return null;
+        });
+        return { state: "fresh", feeFri } as const;
+      }
+      const ids = await fetchSpeciesRankedIds(speciesId, info.total);
+      const feeFri = await estimateCallsFeeFri(address, [updateRankingsCall(speciesId, ids), presetCall]).catch((err) => {
+        throw new Error(kingFailureMessage(revertReason(err)));
+      });
+      return { state: "stale", info, ids, feeFri } as const;
+    })()
+      .then((check) => alive && setRankCheck(check))
+      .catch((err) => {
+        console.warn("[music] King pre-flight failed:", err);
+        if (alive) setRankCheck({ state: "error", message: err instanceof Error ? err.message : String(err) });
+      });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run per staged change / retry
+  }, [stagedKey, canKing, address, speciesId, tokenId, rankCheckRun]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -201,7 +266,10 @@ export default function BeastMusicPanel({
         const outcome = await waitForTx(res.transaction_hash);
         if (outcome === "reverted" || outcome === "rejected") throw new Error(`Transaction ${outcome}.`);
         const latest = await waitForMusic(tokenId, reflected);
-        if (latest) setMusic(latest);
+        if (latest) {
+          setMusic(latest);
+          emitMusicChange({ kind: "token", tokenId, music: latest });
+        }
         if (latest && !reflected(latest)) {
           setError({ at: errorKey, message: "Your change was sent but isn't showing yet. Check back in a moment." });
         }
@@ -275,7 +343,13 @@ export default function BeastMusicPanel({
     setError(null);
     setBusy({ ...next, phase: "wallet" });
     try {
-      const res = await account.execute([setSharedSongPresetCall(tokenId, track.id ?? 0, preset)]);
+      const presetCall = setSharedSongPresetCall(tokenId, track.id ?? 0, preset);
+      // Stale rankings: re-rank the species in the same transaction, or the King call reverts.
+      const calls =
+        rankCheck?.state === "stale" && speciesId != null
+          ? [updateRankingsCall(speciesId, rankCheck.ids), presetCall]
+          : [presetCall];
+      const res = await account.execute(calls);
       setBusy({ ...next, phase: "confirming" });
       const outcome = await waitForTx(res.transaction_hash);
       if (outcome === "reverted" || outcome === "rejected") throw new Error(`Transaction ${outcome}.`);
@@ -284,7 +358,10 @@ export default function BeastMusicPanel({
         if (i > 0) await new Promise((r) => setTimeout(r, 2500));
         current = await fetchSharedSongPreset(speciesId ?? 0, track.id ?? 0).catch(() => current);
       }
-      if (current != null) setKingPresets((prev) => ({ ...prev, [track.ref]: current }));
+      if (current != null) {
+        setKingPresets((prev) => ({ ...prev, [track.ref]: current }));
+        if (speciesId != null) emitMusicChange({ kind: "speciesPreset", speciesId, sharedId: track.id ?? 0, preset: current });
+      }
       if (current !== preset) {
         setError({ at: track.ref, message: "Your change was sent but isn't showing yet. Check back in a moment." });
       }
@@ -464,31 +541,71 @@ export default function BeastMusicPanel({
                         </button>
                       ))}
                     </div>
-                    {staged != null && (
-                      <div className="mt-1.5 flex items-center justify-between gap-2 rounded-md border border-gold/30 bg-gold/[0.06] px-2 py-1">
-                        <span className="truncate text-[10px] font-semibold text-zinc-200">
-                          {EFFECT_NAMES[saved]} → {EFFECT_NAMES[staged]}
-                        </span>
-                        <div className="flex flex-shrink-0 items-center gap-1.5">
-                          <button
-                            type="button"
-                            disabled={busy !== null}
-                            onClick={() => setStagedPreset(null)}
-                            className="text-[9px] font-semibold uppercase text-zinc-400 hover:text-zinc-200 disabled:opacity-50"
-                          >
-                            Discard
-                          </button>
-                          <button
-                            type="button"
-                            disabled={busy !== null}
-                            onClick={() => applyPreset(track, staged)}
-                            className="rounded bg-gold px-2 py-0.5 text-[9px] font-bold uppercase text-black hover:bg-gold/90 disabled:opacity-60"
-                          >
-                            {applying ? busyLabel : "Apply"}
-                          </button>
+                    {staged != null && (() => {
+                      const check = rankCheck;
+                      const stale = check?.state === "stale";
+                      const blocked = check == null || check.state === "checking" || check.state === "error";
+                      const species = speciesName ?? "beast";
+                      const newCount = stale ? check.info.total - check.info.ranked : 0;
+                      return (
+                        <div className="mt-1.5 space-y-1.5 rounded-md border border-gold/30 bg-gold/[0.06] px-2 py-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate text-[10px] font-semibold text-zinc-200">
+                              {EFFECT_NAMES[saved]} → {EFFECT_NAMES[staged]}
+                            </span>
+                            <div className="flex flex-shrink-0 items-center gap-1.5">
+                              <button
+                                type="button"
+                                disabled={busy !== null}
+                                onClick={() => setStagedPreset(null)}
+                                className="text-[9px] font-semibold uppercase text-zinc-400 hover:text-zinc-200 disabled:opacity-50"
+                              >
+                                Discard
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busy !== null || blocked}
+                                onClick={() => applyPreset(track, staged)}
+                                className="rounded bg-gold px-2 py-0.5 text-[9px] font-bold uppercase text-black hover:bg-gold/90 disabled:opacity-60"
+                              >
+                                {applying ? busyLabel : stale ? "Re-rank & apply" : "Apply"}
+                              </button>
+                            </div>
+                          </div>
+                          {check?.state === "checking" && (
+                            <p className="text-[9px] text-zinc-400">Checking {species} rankings and the network fee…</p>
+                          )}
+                          {check?.state === "fresh" && check.feeFri != null && (
+                            <p className="text-[9px] text-zinc-400">Network fee ≈ {formatStrk(check.feeFri)} STRK</p>
+                          )}
+                          {stale && (
+                            <div className="space-y-1 rounded border border-amber-400/30 bg-amber-400/[0.07] px-2 py-1.5 text-[9px] leading-snug text-amber-100">
+                              <p className="font-bold text-amber-300">
+                                Higher fee: this also re-ranks every {species} (≈ {formatStrk(check.feeFri)} STRK)
+                              </p>
+                              <p>
+                                {newCount === 1 ? "A new " + species + " was" : `${newCount} new ${species}s were`} minted since the
+                                rankings were last saved on-chain. The contract only accepts King changes while every {species} is
+                                ranked, so this transaction first saves the full ranking of all{" "}
+                                {check.info.total.toLocaleString()} {species}s, then applies your effects.
+                              </p>
+                              <p className="text-amber-100/70">
+                                Writing {check.info.total.toLocaleString()} beasts on-chain is what makes the fee higher. It's a
+                                one-off: King changes cost the usual small fee again until the next new {species} is minted.
+                              </p>
+                            </div>
+                          )}
+                          {check?.state === "error" && (
+                            <p className="text-[9px] text-red-400">
+                              {check.message}{" "}
+                              <button type="button" className="text-gold hover:underline" onClick={() => setRankCheckRun((n) => n + 1)}>
+                                Check again
+                              </button>
+                            </p>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 );
               })()}
