@@ -4,6 +4,8 @@ type Owned = {
   tokenId: string;
   name: string; // species
   rank: number;
+  projectedRank?: number;
+  genesis?: boolean;
   cardGrade: number;
   visualEffects: number; // 0 regular, 1 shiny, 2 animated, 3 shiny animated
   power: number;
@@ -103,6 +105,16 @@ describe("fetchOwnerBeastHighlights", () => {
     ];
     const h = await fetchOwnerBeastHighlights("0x2");
     expect(h.highestRanked?.name).toBe("r5-strong");
+  });
+
+  it("highest rank uses the projected rank; Genesis never counts", async () => {
+    store.owned = [
+      beast({ tokenId: "new-mint", rank: 0, projectedRank: 3 }),
+      beast({ tokenId: "stale-r2", rank: 2, projectedRank: 4 }),
+      beast({ tokenId: "genesis", rank: 0, projectedRank: 1, genesis: true }),
+    ];
+    const h = await fetchOwnerBeastHighlights("0x4");
+    expect(h.highestRanked?.name).toBe("new-mint");
   });
 
   it("no ranked beasts -> no highest rank; last collected is the most recent", async () => {

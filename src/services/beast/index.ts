@@ -1,5 +1,6 @@
 import {
   mapSdkBeast,
+  shownRank,
   hasCompleteMetadata,
   beastVisual,
   VISUAL_TO_EFFECTS,
@@ -49,8 +50,8 @@ function _mapSort(sort: string): { sort: BeastQuery["sort"]; order: "asc" | "des
     case "beast": return { sort: "name", order: "asc" };
     case "tier": return { sort: "tier", order: "asc" };
     case "health": return { sort: "health", order: "desc" };
-    case "rank": return { sort: "rank", order: "asc" };
-    case "rank-desc": return { sort: "rank", order: "desc" };
+    case "rank": return { sort: "projected_rank", order: "asc" };
+    case "rank-desc": return { sort: "projected_rank", order: "desc" };
     case "last-death": return { sort: "last_death_timestamp", order: "desc" };
     default: return { sort: "power", order: "desc" };
   }
@@ -111,8 +112,10 @@ function _mapAttributeFilters(filters: AttributeFiltersInput): Partial<BeastQuer
     } else if (key === "rank") {
       const nums = values.map(Number).filter((n) => Number.isFinite(n) && n > 0);
       if (nums.length > 0) {
-        q.rankGte = Math.min(...nums);
-        q.rankLte = Math.max(...nums);
+        q.projectedRankGte = Math.min(...nums);
+        q.projectedRankLte = Math.max(...nums);
+        // Genesis beasts show no rank (see shownRank), so a rank range leaves them out.
+        q.genesis ??= false;
       }
     } else if (key === "adventurers killed" && values.length >= 2) {
       q.adventurersKilledGte = Number(values[0]);
@@ -133,7 +136,6 @@ import { fetchBeastStats } from "./stats";
 import { fetchBeastHighlights, fetchBeastCollectedByName } from "./highlights";
 export type { BeastNameCount } from "./highlights";
 import { apiCache } from "../apiCache";
-import { ensureProjectedRanks, projectedRankFor } from "./projectedRank";
 
 import { MAX_BEASTS_PER_TYPE } from "./constants";
 export { MAX_BEASTS_PER_TYPE, CARD_GRADE_MIN, CARD_GRADE_MAX } from "./constants";
@@ -176,7 +178,6 @@ export async function fetchBeasts({
   page = 1,
   sort = "default",
 }: FetchBeastsOptions = {}): Promise<FetchBeastsResponse> {
-  await ensureProjectedRanks();
   const { sort: sdkSort, order } = _mapSort(sort);
   const filterParams = _mapAttributeFilters(attributeFilters as AttributeFiltersInput);
 
@@ -190,12 +191,6 @@ export async function fetchBeasts({
     limit: Math.min(limit, ownerAddress ? 1000 : 100),
     includeOwner: true,
   };
-
-  // Rank sort: the API orders rank 0 (not ranked yet) before rank 1, so page
-  // through ranked beasts first and append the unranked ones after them.
-  if (sdkSort === "rank") {
-    return _fetchRankSorted(ownerAddress, baseQuery, page);
-  }
 
   const result = await _fetchPage(ownerAddress, baseQuery, page);
   return {
@@ -215,72 +210,6 @@ async function _fetchPage(ownerAddress: string | null, baseQuery: BeastQuery, pa
   return result;
 }
 
-/** Most unranked beasts appended to a rank-sorted list (there are ~100 in total). */
-const MAX_UNRANKED_APPENDED = 2000;
-
-/** Every unranked (rank 0) beast matching `baseQuery`, strongest first. */
-function _fetchAllUnranked(ownerAddress: string | null, baseQuery: BeastQuery) {
-  const query: BeastQuery = { ...baseQuery, rank: 0, sort: "power", order: "desc" };
-  delete query.rankGte;
-  delete query.rankLte;
-  return apiCache.get("beast-query", { unranked: true, ownerAddress, query }, async () => {
-    const items: Awaited<ReturnType<typeof collectablesClient.beasts.list>>["items"] = [];
-    let cursor: string | undefined;
-    do {
-      const q: BeastQuery = cursor ? { ...query, cursor } : query;
-      const r = ownerAddress
-        ? await collectablesClient.beasts.byOwner(ownerAddress, q)
-        : await collectablesClient.beasts.list(q);
-      items.push(...r.items);
-      cursor = r.nextCursor ?? undefined;
-    } while (cursor && items.length < MAX_UNRANKED_APPENDED);
-    return items;
-  });
-}
-
-/** Ranked-beast totals per query, so pages past the ranked set skip that request. */
-const _rankedTotals = new Map<string, number>();
-
-async function _fetchRankSorted(
-  ownerAddress: string | null,
-  baseQuery: BeastQuery,
-  page: number
-): Promise<FetchBeastsResponse> {
-  const limit = baseQuery.limit ?? 20;
-  const start = (page - 1) * limit;
-  // A rank filter (always >= 1) already excludes unranked beasts.
-  const rankFiltered = baseQuery.rankGte != null && baseQuery.rankGte >= 1;
-  const rankedQuery: BeastQuery = { ...baseQuery, rankGte: Math.max(1, baseQuery.rankGte ?? 1) };
-  const rankedKey = _sdkQueryKey(rankedQuery) + (ownerAddress ?? "");
-
-  let rankedItems: Awaited<ReturnType<typeof collectablesClient.beasts.list>>["items"] = [];
-  let rankedTotal = _rankedTotals.get(rankedKey);
-  if (rankedTotal === undefined || start < rankedTotal) {
-    const r = await _fetchPage(ownerAddress, rankedQuery, page);
-    rankedItems = r.items;
-    rankedTotal = r.total;
-    _rankedTotals.set(rankedKey, rankedTotal);
-  }
-
-  // Order the appended new beasts by projected rank (the API sorts them by power).
-  const dir = baseQuery.order === "desc" ? -1 : 1;
-  const unranked = rankFiltered
-    ? []
-    : [...(await _fetchAllUnranked(ownerAddress, baseQuery))].sort((a, b) => {
-        const pa = projectedRankFor(a), pb = projectedRankFor(b);
-        if (pa == null || pb == null) return (pa == null ? 1 : 0) - (pb == null ? 1 : 0); // Genesis last
-        return dir * (pa - pb);
-      });
-  const need = limit - rankedItems.length;
-  const unrankedStart = Math.max(0, start - rankedTotal);
-  const unrankedItems = need > 0 ? unranked.slice(unrankedStart, unrankedStart + need) : [];
-
-  return {
-    beasts: [...rankedItems, ...unrankedItems].map(mapSdkBeast),
-    total: rankedTotal + unranked.length,
-  };
-}
-
 /**
  * Fetch top N beasts by power - optimized for fast initial page load.
  * Cached aggressively (30 min) since top beasts rarely change.
@@ -288,7 +217,6 @@ async function _fetchRankSorted(
  */
 export async function fetchTopBeasts(limit: number = 10): Promise<Beast[]> {
   return apiCache.get("top-beasts", { limit }, async () => {
-    await ensureProjectedRanks();
     const result = await collectablesClient.beasts.list({
       sort: "power",
       order: "desc",
@@ -319,7 +247,6 @@ export async function fetchBeastById(
   if (tokenId === null) return null;
 
   return apiCache.get("beast-by-id", { id: tokenId }, async () => {
-    await ensureProjectedRanks();
     try {
       const sdkBeast = await collectablesClient.beasts.get(tokenId);
       return mapSdkBeast(sdkBeast);
@@ -342,7 +269,6 @@ export async function fetchBeastsByIds(
 
   if (tokenIds.length === 0) return [];
 
-  await ensureProjectedRanks();
   // The API rejects token_id_in arrays over 50 elements outright (400), so
   // this must stay <= 50 — it's not just a page size.
   const BATCH_SIZE = 50;
@@ -493,7 +419,7 @@ export async function fetchBeastSlayerLeaderboard({
         rank: offset + i + 1,
         beastId: twin ? toTokenIdString(twin.tokenId) ?? String(twin.tokenId) : String(legacy.tokenId),
         beastName: mapSdkBeast((twin ?? legacy) as SdkV3Beast).name,
-        beastRank: twin?.rank ?? legacy.rank ?? 0,
+        beastRank: twin ? shownRank(twin) : legacy.rank ?? 0,
         owner,
         kills: (legacy.adventurersKilled ?? 0) + (twin?.adventurersKilled ?? 0),
         inV3: Boolean(twin),
@@ -568,7 +494,6 @@ export type CollectionGlance = {
 /** Collection-wide figures for the Statistics tab (cached 10 min). */
 export async function fetchCollectionGlance(): Promise<CollectionGlance> {
   return apiCache.get("collection-glance", {}, async () => {
-    await ensureProjectedRanks();
     const [stats, perfect, strongest, names, prefixes] = await Promise.all([
       collectablesClient.beasts.stats(),
       collectablesClient.beasts.list({ cardGrade: 10, visualEffects: VISUAL_TO_EFFECTS["Shiny MIDI"], limit: 1 }),
@@ -677,18 +602,25 @@ function maxBy<T extends { power?: number | null }>(items: T[], key: (t: T) => n
 
 /** Owner highlights computed from their full holding (one owner-scoped query). */
 export function pickOwnerHighlights(items: SdkOwnedBeast[], collectedBySpecies: ReadonlyMap<string, number> = new Map()) {
-  const ranked = items.filter((b) => (b.rank ?? 0) >= 1);
+  const ranked = items.filter((b) => shownRank(b) >= 1);
   // v3 shiny/animated live in visualEffects; beastVisual normalises both formats
   let rarest: SdkOwnedBeast | null = null;
   for (const item of items) {
-    if (!rarest || compareOwnedRarity({ ...item, ...beastVisual(item) }, { ...rarest, ...beastVisual(rarest) }, collectedBySpecies) < 0) {
+    if (
+      !rarest ||
+      compareOwnedRarity(
+        { ...item, ...beastVisual(item), rank: shownRank(item) },
+        { ...rarest, ...beastVisual(rarest), rank: shownRank(rarest) },
+        collectedBySpecies
+      ) < 0
+    ) {
       rarest = item;
     }
   }
   return {
     rarest,
     // rank 1 is the best; unranked (0) beasts can't be "highest ranked"
-    highestRanked: maxBy(ranked, (b) => -(b.rank ?? 0)),
+    highestRanked: maxBy(ranked, (b) => -shownRank(b)),
     lastCollected: maxBy(items, (b) => Number(b.lastDeathTimestamp ?? 0)),
   };
 }
@@ -707,7 +639,6 @@ export async function fetchOwnerBeastHighlights(
   }
 
   return apiCache.get("owner-beast-highlights", { address: normalised }, async () => {
-    await ensureProjectedRanks();
     const addr = normalizeAddress(normalised);
 
     // Owner-scoped queries return the whole holding by default. Species

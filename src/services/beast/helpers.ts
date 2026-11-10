@@ -10,7 +10,6 @@ import {
 } from "@provable-games/collectables";
 import type { Beast, BeastAttribute, BeastVisual } from "./types";
 import { spriteSpeciesName } from "./cardImage";
-import { projectedRankFor } from "./projectedRank";
 
 const COLLECTABLES_BASE_URL = "/collectables";
 
@@ -45,19 +44,31 @@ export function beastVisual(sdkBeast: Pick<SdkBeast, "shiny" | "animated" | "vis
   return { shiny, animated, visual: VISUALS[(shiny ? 1 : 0) + (animated ? 2 : 0)] };
 }
 
+/**
+ * The rank BeastDex shows: the API's `projectedRank` (always current; on-chain
+ * ranks only move when someone calls `update_rankings`), else the on-chain
+ * rank. Genesis beasts are never ranked on-chain, so they stay 0 rather than
+ * taking the API's last place.
+ */
+export function shownRank(b: Pick<SdkBeast, "rank" | "projectedRank" | "genesis">): number {
+  if (b.genesis) return 0;
+  return b.projectedRank != null && b.projectedRank > 0 ? b.projectedRank : b.rank;
+}
+
 export function mapSdkBeast(sdkBeast: SdkBeast): Beast {
   const tokenId = normalizeTokenId(sdkBeast.tokenId);
   const fullName = beastFullName(sdkBeast);
   const v3 = isV3Beast(sdkBeast);
   const { shiny, animated, visual } = beastVisual(sdkBeast);
 
-  const traits = v3 ? beastV3Traits(sdkBeast) : beastTraits(sdkBeast);
-  // v3 on-chain ranks are stale since the last `update_rankings`; show the projection.
-  const projected = v3 ? projectedRankFor(sdkBeast) : null;
-  const rankProjected = projected != null && projected !== sdkBeast.rank;
+  // The "Rank" trait carries shownRank (see above).
+  const rank = shownRank(sdkBeast);
+  const rankSource = rank === sdkBeast.rank ? "onchain" : "projected";
+  const traits = v3 ? beastV3Traits(sdkBeast, { rankSource }) : beastTraits(sdkBeast, { rankSource });
+  const rankProjected = rank !== sdkBeast.rank;
   const attributes: BeastAttribute[] = traits.map((t) => ({
     trait_type: t.trait_type,
-    value: rankProjected && t.trait_type === "Rank" ? String(projected) : t.value,
+    value: t.value,
   }));
   if (v3) {
     // v3 token_uri has no Shiny/Animated traits (they live in visualEffects).

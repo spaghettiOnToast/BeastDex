@@ -210,8 +210,8 @@ export function getBeastRank(beast: Beast | null | undefined): number | null {
  * - "new": v3 mints with no legacy origin (minterData 0). Ranks are set by an
  *   admin `update_rankings` call on the Beasts contract, last run at the v3
  *   migration (2026-11-03), so every beast minted since is still rank 0
- *   on-chain. BeastDex shows a projected rank instead (services/beast/
- *   projectedRank.ts); "new" only shows if that projection couldn't load.
+ *   on-chain. BeastDex shows the API's projectedRank instead (`shownRank`);
+ *   "new" only shows for a beast the API hasn't projected yet.
  * - "unranked": anything else without a rank
  * (Festival beasts — Tiddy Mun / Black Shuck — are separate collections with
  * their own Festival badge.)
