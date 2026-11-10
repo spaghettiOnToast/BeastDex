@@ -6,6 +6,7 @@
 import type { Beast } from "./types";
 import { collectablesClient } from "./collectablesClient";
 import { mapSdkBeast } from "./helpers";
+import { ensureProjectedRanks } from "./projectedRank";
 import { fetchBeastMusic, type MusicMode } from "./music";
 import { hash } from "starknet";
 import { fetchSharedSongPreset, SOUND_MANAGER_ADDRESS } from "./musicActions";
@@ -21,6 +22,7 @@ export const NAMED_SONG_REF = "named";
 /** Every species' King (Rank 1 beast), keyed by species id. */
 export async function fetchSpeciesKings(): Promise<Map<number, Beast>> {
   return apiCache.get("species-kings", {}, async () => {
+    await ensureProjectedRanks();
     const kings = new Map<number, Beast>();
     let cursor: string | undefined;
     // 100 per page (the API max); one page covers the original 75 species.
@@ -42,6 +44,7 @@ export async function fetchSpeciesKings(): Promise<Map<number, Beast>> {
  */
 export async function fetchSpeciesStandIn(speciesId: number): Promise<Beast | null> {
   return apiCache.get("species-stand-in", { speciesId }, async () => {
+    await ensureProjectedRanks();
     const res = await collectablesClient.beasts.list({ beastId: speciesId, limit: 1 });
     return res.items[0] ? mapSdkBeast(res.items[0]) : null;
   });
@@ -71,6 +74,7 @@ export async function fetchSpeciesSongSettings(speciesId: number, tokenId: strin
  * optionally within one species. Genesis beasts have no Named Song.
  */
 export async function searchNamedSongs(query: string, speciesId?: number): Promise<Beast[]> {
+  await ensureProjectedRanks();
   const search = query.trim();
   const res = await collectablesClient.beasts.list({
     search,
@@ -173,6 +177,7 @@ export async function fetchShinyMidiPage(opts: {
   type?: "Magic" | "Hunter" | "Brute";
   search?: string;
 }): Promise<{ beasts: Beast[]; total: number; nextCursor: string | null }> {
+  await ensureProjectedRanks();
   const res = await collectablesClient.beasts.list({
     visualEffects: 3,
     limit: opts.limit,

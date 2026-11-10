@@ -45,6 +45,14 @@ export type Beast = {
   genesis?: boolean;
   /** v3 minter data: legacy token id for migrated beasts, 0 for new v3 mints */
   minterData?: number;
+  /**
+   * The on-chain rank. The "Rank" attribute holds the projected rank (see
+   * services/beast/projectedRank.ts), so read this for anything the contract
+   * checks, like King status.
+   */
+  onchainRank?: number;
+  /** True when the "Rank" attribute is a projection that differs from the on-chain rank. */
+  rankProjected?: boolean;
   mega?: boolean;
   midi?: boolean;
   /** false when the package has no bundled sprite (v3 species past the bundled set) */
