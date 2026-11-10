@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buyTrackCalls,
+  bulkBuyTrackCalls,
   setDefaultTrackCall,
   setTrackModeCall,
   musicContractsProblem,
@@ -21,6 +22,19 @@ describe("Sound Manager calldata (matches ABI + lootsurvivor.io)", () => {
       calldata: [SOUND_MANAGER_ADDRESS, "0xde0b6b3a7640000", "0x0"], // u256(1e18)
     });
     expect(purchase).toEqual({ contractAddress: SOUND_MANAGER_ADDRESS, entrypoint: "purchase_track", calldata: [TOKEN] });
+  });
+
+  it("bulk-buys: one approve for the total, then a purchase_track per token", () => {
+    const calls = bulkBuyTrackCalls([TOKEN, "5", "6"]);
+    expect(calls).toHaveLength(4);
+    expect(calls[0]).toEqual({
+      contractAddress: SKULL_ADDRESS,
+      entrypoint: "approve",
+      calldata: [SOUND_MANAGER_ADDRESS, "0x29a2241af62c0000", "0x0"], // u256(3e18)
+    });
+    expect(calls.slice(1).map((c) => c.calldata[0])).toEqual([TOKEN, "5", "6"]);
+    expect(calls.slice(1).every((c) => c.entrypoint === "purchase_track")).toBe(true);
+    expect(bulkBuyTrackCalls([])).toEqual([]);
   });
 
   it("encodes TrackRef: Shared=0, Individual=1, Named=2 (no id)", () => {

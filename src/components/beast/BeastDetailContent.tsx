@@ -312,6 +312,7 @@ export function BeastDetailContent({
               <BeastMusicPanel
                 tokenId={beast.tokenId}
                 speciesId={beast.speciesId}
+                speciesName={String(beast.attributes.find((a) => a.trait_type === "Beast")?.value ?? "") || undefined}
                 soundEffects={beast.soundEffects ?? beast.visualEffects}
                 isKing={(beast.onchainRank ?? Number(beast.attributes.find((a) => a.trait_type.toLowerCase() === "rank")?.value)) === 1}
                 owner={beast.owner}

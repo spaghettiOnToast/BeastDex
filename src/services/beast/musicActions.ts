@@ -47,6 +47,39 @@ export function buyTrackCalls(tokenId: string): Call[] {
   ];
 }
 
+/** Most beasts one bulk music transaction touches (keeps the multicall well inside step limits). */
+export const MAX_BULK_MUSIC_BEASTS = 50;
+
+/**
+ * Buy one new track for each token: a single approve for the total, then a
+ * `purchase_track` per token (the Sound Manager has no batch entrypoint).
+ */
+export function bulkBuyTrackCalls(tokenIds: string[]): Call[] {
+  if (tokenIds.length === 0) return [];
+  return [
+    {
+      contractAddress: SKULL_ADDRESS,
+      entrypoint: "approve",
+      calldata: [SOUND_MANAGER_ADDRESS, ...toUint256Hex(TRACK_PRICE_WEI * BigInt(tokenIds.length))],
+    },
+    ...tokenIds.map((id) => ({ contractAddress: SOUND_MANAGER_ADDRESS, entrypoint: "purchase_track", calldata: [id] })),
+  ];
+}
+
+/** A wallet / transaction error as a short message for the music UI. */
+export function txErrorMessage(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  // Wallets wrap their own failures (e.g. Ready's WalletRPCError) with the real reason in `cause`.
+  const cause = err instanceof Error && err.cause instanceof Error ? err.cause.message : "";
+  if (/timeout|timed out/i.test(`${msg} ${cause}`))
+    return "Your wallet didn't respond in time. Check its popup isn't hidden or the wallet locked, then try again.";
+  if (/reject|denied|cancel|abort/i.test(msg)) return "Cancelled in wallet. Nothing was sent.";
+  if (/stale rankings/i.test(`${msg} ${cause}`))
+    return "This species' rankings are out of date, so King changes can't go through yet. Reopen the effects to include a ranking refresh.";
+  if (/insufficient|balance/i.test(msg)) return "Not enough funds for this transaction.";
+  return msg.length > 140 ? `${msg.slice(0, 140)}…` : msg || "Transaction failed.";
+}
+
 export function setDefaultTrackCall(tokenId: string, ref: MusicTrackRef): Call {
   return { contractAddress: SOUND_MANAGER_ADDRESS, entrypoint: "set_default_track", calldata: [tokenId, ...trackRefCalldata(ref)] };
 }

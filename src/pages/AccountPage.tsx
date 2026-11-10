@@ -37,6 +37,7 @@ import { ProfileHeader } from "../components/profile/ProfileHeader";
 import { BROTHER_ID_URL } from "../services/walletNames";
 import { useAccount } from "@starknet-react/core";
 import { Grid, Table } from "lucide-react";
+import { ManageTracksLink } from "../components/tracks/ManageTracksLink";
 import { Button } from "../components/ui/button";
 
 import { useSpeciesCount } from "../hooks/useBeastQueries";
@@ -630,6 +631,7 @@ function AccountPage() {
             </h2>
           )}
           <div className="flex items-center gap-2">
+            {isOwnProfile && ownedBeasts.length > 0 && <ManageTracksLink className="h-8" />}
             <SortDropdown value={sortOption} onChange={setSortOption} />
             {filtersControl}
             <div className="flex items-center border border-white/[0.06] rounded-lg bg-white/[0.04]">

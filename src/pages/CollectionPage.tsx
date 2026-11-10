@@ -27,6 +27,7 @@ import BeastCard from "../components/beast/BeastCard";
 import BeastModal from "../components/beast/BeastModal";
 import { BeastTableView } from "../components/beast/BeastTableView";
 import { Grid, RefreshCw, Table } from "lucide-react";
+import { ManageTracksLink } from "../components/tracks/ManageTracksLink";
 import {
   fetchBeastAttributeFilters,
   fetchBeasts,
@@ -1305,6 +1306,7 @@ function CollectionPage() {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {isOwnProfile && ownedBeasts.length > 0 && <ManageTracksLink />}
               <button
                 type="button"
                 onClick={handleRefreshCollection}

@@ -199,6 +199,17 @@ export async function fetchBeasts({
   };
 }
 
+/** Every beast an address owns (paged 1000 at a time, capped at `max`). */
+export async function fetchAllOwnedBeasts(owner: string, max = 5000): Promise<Beast[]> {
+  const all: Beast[] = [];
+  for (let page = 1; all.length < max; page++) {
+    const { beasts, total } = await fetchBeasts({ limit: 1000, page, ownerAddresses: [owner], sort: "default" });
+    all.push(...beasts);
+    if (beasts.length === 0 || all.length >= total) break;
+  }
+  return all;
+}
+
 /** One emulated page of a query (cursor chained from the previous page). */
 async function _fetchPage(ownerAddress: string | null, baseQuery: BeastQuery, page: number) {
   const cursor = _getCursor(baseQuery, page);
