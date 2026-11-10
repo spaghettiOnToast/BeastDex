@@ -6,6 +6,7 @@ import { cn } from "../../lib/utils";
 import { lootSurvivorBeastUrl } from "../../services/beast/constants";
 import {
   clearTrackSounds,
+  emitMusicChange,
   fetchBeastMusic,
   isKingSetTrack,
   trackRefOf,
@@ -265,7 +266,10 @@ export default function BeastMusicPanel({
         const outcome = await waitForTx(res.transaction_hash);
         if (outcome === "reverted" || outcome === "rejected") throw new Error(`Transaction ${outcome}.`);
         const latest = await waitForMusic(tokenId, reflected);
-        if (latest) setMusic(latest);
+        if (latest) {
+          setMusic(latest);
+          emitMusicChange({ kind: "token", tokenId, music: latest });
+        }
         if (latest && !reflected(latest)) {
           setError({ at: errorKey, message: "Your change was sent but isn't showing yet. Check back in a moment." });
         }
@@ -354,7 +358,10 @@ export default function BeastMusicPanel({
         if (i > 0) await new Promise((r) => setTimeout(r, 2500));
         current = await fetchSharedSongPreset(speciesId ?? 0, track.id ?? 0).catch(() => current);
       }
-      if (current != null) setKingPresets((prev) => ({ ...prev, [track.ref]: current }));
+      if (current != null) {
+        setKingPresets((prev) => ({ ...prev, [track.ref]: current }));
+        if (speciesId != null) emitMusicChange({ kind: "speciesPreset", speciesId, sharedId: track.id ?? 0, preset: current });
+      }
       if (current !== preset) {
         setError({ at: track.ref, message: "Your change was sent but isn't showing yet. Check back in a moment." });
       }

@@ -27,3 +27,15 @@ describe("withRetry", () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("music change events", () => {
+  it("delivers changes to subscribers until they unsubscribe", async () => {
+    const { emitMusicChange, onMusicChange } = await import("../src/services/beast/music");
+    const seen: unknown[] = [];
+    const off = onMusicChange((c) => seen.push(c));
+    emitMusicChange({ kind: "speciesPreset", speciesId: 56, sharedId: 1, preset: 3 });
+    off();
+    emitMusicChange({ kind: "speciesPreset", speciesId: 56, sharedId: 1, preset: 0 });
+    expect(seen).toEqual([{ kind: "speciesPreset", speciesId: 56, sharedId: 1, preset: 3 }]);
+  });
+});

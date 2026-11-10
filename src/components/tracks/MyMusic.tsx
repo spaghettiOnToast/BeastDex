@@ -9,13 +9,17 @@ import {
   clearTrackSounds,
   fetchBeastMusic,
   fetchTrackLists,
+  onMusicChange,
   parseTrackRef,
   trackRefOf,
+  EFFECT_NAMES,
+  EFFECT_TITLES,
   type BeastMusic,
   type TrackList,
 } from "../../services/beast/music";
 import {
   bulkBuyTrackCalls,
+  fetchSharedSongPreset,
   fetchSkullBalance,
   formatSkull,
   setDefaultTrackCall,
@@ -44,6 +48,18 @@ function playingKind(ref: string | null): Playing | null {
 
 const speciesName = (b: Beast) => String(b.attributes.find((a) => a.trait_type === "Beast")?.value ?? b.name);
 const isBought = (t: BeastTrackInfo) => t.ref.startsWith("individual:");
+/** `shared:<id>` with id ≥ 1: a Species Song, whose effects the species' King sets. */
+const speciesSongId = (ref: string | null): number | null => {
+  const m = ref ? /^shared:(\d+)$/.exec(ref) : null;
+  return m && Number(m[1]) >= 1 ? Number(m[1]) : null;
+};
+const sameToken = (a: string, b: string) => {
+  try {
+    return BigInt(a) === BigInt(b);
+  } catch {
+    return a === b;
+  }
+};
 const boughtId = (t: BeastTrackInfo) => Number(t.ref.split(":")[1] ?? 0);
 
 /** The track `target` means for this beast, when it has it ready. */
@@ -150,6 +166,25 @@ export default function MyMusic({ address, player, kings }: Props) {
     };
   }, [address, reload]);
 
+  /** King-set effects per Species Song, keyed `speciesId:sharedId` (read on-chain as rows need them). */
+  const [kingPresets, setKingPresets] = useState<Record<string, number | null>>({});
+
+  // A beast's music changed from its card (or a King changed Species Song effects): keep the table current.
+  useEffect(
+    () =>
+      onMusicChange((change) => {
+        if (change.kind === "token") {
+          setLists((prev) => {
+            const key = Object.keys(prev).find((id) => sameToken(id, change.tokenId));
+            return key ? { ...prev, [key]: toList(change.music) } : prev;
+          });
+        } else {
+          setKingPresets((prev) => ({ ...prev, [`${change.speciesId}:${change.sharedId}`]: change.preset }));
+        }
+      }),
+    [],
+  );
+
   const isKing = useCallback(
     (b: Beast) => b.speciesId != null && kings?.get(b.speciesId)?.tokenId === b.tokenId,
     [kings],
@@ -194,6 +229,42 @@ export default function MyMusic({ address, player, kings }: Props) {
   }, [all, matches, filter, species, query]);
 
   useEffect(() => setPage(0), [filter, species, query]);
+
+  const pageRows = useMemo(() => shown.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE), [shown, page]);
+
+  // Species Songs on this page: read their King's effects (once per species + song).
+  const neededPresets = pageRows
+    .map((b) => {
+      const id = speciesSongId(lists[b.tokenId]?.effective ?? null);
+      return id != null && b.speciesId != null ? `${b.speciesId}:${id}` : null;
+    })
+    .filter((k): k is string => k != null && !(k in kingPresets))
+    .filter((k, i, a) => a.indexOf(k) === i)
+    .join(",");
+  useEffect(() => {
+    if (!neededPresets) return;
+    const keys = neededPresets.split(",");
+    setKingPresets((prev) => Object.fromEntries([...Object.entries(prev), ...keys.map((k) => [k, prev[k] ?? null])]));
+    for (const key of keys) {
+      const [speciesId, sharedId] = key.split(":").map(Number);
+      fetchSharedSongPreset(speciesId, sharedId)
+        .then((preset) => setKingPresets((prev) => ({ ...prev, [key]: preset })))
+        .catch((err) => console.warn(`[my music] couldn't read Species Song effects ${key}:`, err));
+    }
+  }, [neededPresets]);
+
+  /** The effects a beast's default track plays with, and who set them. */
+  const effectOf = (b: Beast, list: TrackList | null | undefined) => {
+    if (!list?.effective) return null;
+    const songId = speciesSongId(list.effective);
+    if (songId != null) {
+      const preset = b.speciesId != null ? kingPresets[`${b.speciesId}:${songId}`] : null;
+      return { preset: preset ?? null, source: "Set by the species' King for every beast of the species" };
+    }
+    const preset = b.soundEffects ?? b.visualEffects ?? null;
+    const echoNote = list.effective === "shared:0" && preset != null && preset >= 2 ? " (Sound Checks skip the echo itself)" : "";
+    return { preset, source: `Set by this beast's rarity${echoNote}` };
+  };
 
   const chosen = useMemo(() => all.filter((b) => selected.has(b.tokenId)), [all, selected]);
   const chosenReady = useMemo(() => chosen.filter((b) => lists[b.tokenId]), [chosen, lists]);
@@ -529,6 +600,7 @@ export default function MyMusic({ address, player, kings }: Props) {
               <th className="px-2 py-2">Beast</th>
               <th className="px-2 py-2">Species</th>
               <th className="px-2 py-2">Default track</th>
+              <th className="px-2 py-2">Effects</th>
               <th className="px-2 py-2 text-right">Tracks</th>
               <th className="px-2 py-2 text-right">Bought</th>
             </tr>
@@ -536,13 +608,14 @@ export default function MyMusic({ address, player, kings }: Props) {
           <tbody className="divide-y divide-white/[0.04]">
             {shown.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-zinc-500">
+                <td colSpan={7} className="px-3 py-6 text-center text-zinc-500">
                   {listsLoading && filter !== "all" ? "Still loading tracks…" : "No beasts match."}
                 </td>
               </tr>
             ) : (
-              shown.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((b) => {
+              pageRows.map((b) => {
                 const list = lists[b.tokenId];
+                const effect = effectOf(b, list);
                 const def = list?.tracks.find((t) => t.ref === list.effective);
                 const on = selected.has(b.tokenId);
                 return (
@@ -582,6 +655,23 @@ export default function MyMusic({ address, player, kings }: Props) {
                             subtitle: "Default track",
                           }}
                         />
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {effect == null ? (
+                        <span className="text-zinc-600">{list === undefined ? "…" : "—"}</span>
+                      ) : effect.preset == null || !EFFECT_NAMES[effect.preset] ? (
+                        <span className="text-zinc-600">…</span>
+                      ) : (
+                        <span
+                          title={`${EFFECT_TITLES[effect.preset]}. ${effect.source}.`}
+                          className={cn(
+                            "whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[10px] font-semibold",
+                            effect.preset > 0 ? "border-gold/40 bg-gold/10 text-gold" : "border-white/10 bg-white/[0.04] text-zinc-400",
+                          )}
+                        >
+                          {EFFECT_NAMES[effect.preset]}
+                        </span>
                       )}
                     </td>
                     <td className="px-2 py-1.5 text-right tabular-nums text-zinc-400">{list?.tracks.length ?? ""}</td>

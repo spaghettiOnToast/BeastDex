@@ -183,3 +183,25 @@ export function parseTrackRef(ref: string): MusicTrackRef | null {
   const m = /^(shared|individual):(\d+)$/.exec(ref);
   return m ? { kind: m[1] as "shared" | "individual", id: Number(m[2]) } : null;
 }
+
+/**
+ * A beast's music changed on-chain from somewhere in the app (its card's
+ * Music tab): the token's new music, or a King's new Species Song effects.
+ * Lists that show music (the My Music table) listen so they stay current.
+ */
+export type MusicChange =
+  | { kind: "token"; tokenId: string; music: BeastMusic }
+  | { kind: "speciesPreset"; speciesId: number; sharedId: number; preset: number };
+
+const musicChanges = new EventTarget();
+
+export function emitMusicChange(change: MusicChange): void {
+  musicChanges.dispatchEvent(new CustomEvent<MusicChange>("change", { detail: change }));
+}
+
+/** Subscribe to music changes; returns the unsubscribe function. */
+export function onMusicChange(fn: (change: MusicChange) => void): () => void {
+  const listener = (e: Event) => fn((e as CustomEvent<MusicChange>).detail);
+  musicChanges.addEventListener("change", listener);
+  return () => musicChanges.removeEventListener("change", listener);
+}
