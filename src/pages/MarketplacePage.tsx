@@ -8,6 +8,7 @@ import { useGlobalCart } from "../contexts/GlobalCartContext";
 import { useTermsOfService } from "../contexts/TermsOfServiceContext";
 import { Button } from "../components/ui/button";
 import ListingCard from "../components/marketplace/ListingCard";
+import { AccountLink } from "../components/ui/AccountLink";
 import BeastCard from "../components/beast/BeastCard";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { useOffersForToken, useOffersReceivedForListings, useUserOffers } from "../hooks/useArcadeOrders";
@@ -1518,8 +1519,7 @@ function BeastMarketplace() {
                                       </div>
                                     </td>
                                     <td className="px-3 py-2.5 text-zinc-400">
-                                      {getUsername(listing.seller) ||
-                                        `${listing.seller?.slice(0, 6)}...${listing.seller?.slice(-4)}`}
+                                      <AccountLink address={listing.seller} name={getUsername(listing.seller)} />
                                     </td>
                                     <td className="px-3 py-2.5">
                                       <div className="flex items-center justify-end gap-1.5">
@@ -1748,8 +1748,7 @@ function BeastMarketplace() {
                                     </div>
                                   </td>
                                   <td className="px-3 py-2.5 text-zinc-400">
-                                    {getUsername(listing.seller) ||
-                                      `${listing.seller?.slice(0, 6)}...${listing.seller?.slice(-4)}`}
+                                    <AccountLink address={listing.seller} name={getUsername(listing.seller)} />
                                   </td>
                                   <td className="px-3 py-2.5">
                                     <div className="flex items-center justify-end gap-1.5">
@@ -1885,7 +1884,7 @@ function BeastMarketplace() {
                               )}
                             </div>
                             <p className="text-xs text-zinc-500 truncate">
-                              {getUsername(from) || `${from.slice(0, 6)}...${from.slice(-4)}`} → {getUsername(to) || `${to.slice(0, 6)}...${to.slice(-4)}`}
+                              <AccountLink address={from} name={getUsername(from)} /> → <AccountLink address={to} name={getUsername(to)} />
                             </p>
                           </div>
                           {/* Time & Date */}
@@ -2127,13 +2126,11 @@ function BeastMarketplace() {
                           <td className="px-3 py-2.5 text-zinc-400">
                             <div className="flex flex-col">
                               <span>
-                                {getUsername(activity.from) ||
-                                  `${activity.from?.slice(0, 6)}...${activity.from?.slice(-4)}`}
+                                <AccountLink address={activity.from} name={getUsername(activity.from)} />
                               </span>
                               {activity.to && (
                                 <span className="text-[10px] text-zinc-500">
-                                  → {getUsername(activity.to) ||
-                                    `${activity.to?.slice(0, 6)}...${activity.to?.slice(-4)}`}
+                                  → <AccountLink address={activity.to} name={getUsername(activity.to)} />
                                 </span>
                               )}
                             </div>
