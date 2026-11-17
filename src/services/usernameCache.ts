@@ -31,13 +31,6 @@ class UsernameCache {
     return Date.now() - entry.timestamp > config.cache.usernameTtl;
   }
 
-  private truncateAddress(address: string): string {
-    if (address.length > 10) {
-      return `${address.slice(0, 6)}...${address.slice(-4)}`;
-    }
-    return address;
-  }
-
   async getUsernames(addresses: Array<string | null | undefined>): Promise<Record<string, string>> {
     const normalizedAddresses = normaliseStarknetAddresses(addresses);
 
@@ -52,7 +45,7 @@ class UsernameCache {
     for (const address of normalizedAddresses) {
       const cached = this.cache.get(address);
       if (cached && !this.isExpired(cached)) {
-        result[address] = cached.username;
+        if (cached.username) result[address] = cached.username;
       } else {
         addressesToFetch.push(address);
       }
@@ -115,36 +108,26 @@ class UsernameCache {
       // Cache individual results
       const now = Date.now();
       for (const address of addressesToFetch) {
-        const username = fetchedUsernames[address] || this.truncateAddress(address);
-        this.cache.set(address, { username, timestamp: now });
+        // "" = looked up, no name. Callers show/link the full address then; a
+        // shortened address here was once mistaken for a username and linked
+        // to /collection/0x1234...abcd (a page that can't resolve).
+        this.cache.set(address, { username: fetchedUsernames[address] || "", timestamp: now });
       }
 
       // Resolve all waiters with their requested addresses
       for (const waiter of waiters) {
         const result: Record<string, string> = {};
         for (const address of waiter.addresses) {
-          const cached = this.cache.get(address);
-          result[address] = cached?.username || this.truncateAddress(address);
+          const username = this.cache.get(address)?.username;
+          if (username) result[address] = username;
         }
         waiter.resolve(result);
       }
     } catch (error) {
       console.warn("Failed to fetch Cartridge usernames:", error);
 
-      // On error, return truncated addresses as fallback
-      const now = Date.now();
-      for (const address of addressesToFetch) {
-        const truncated = this.truncateAddress(address);
-        this.cache.set(address, { username: truncated, timestamp: now });
-      }
-
-      for (const waiter of waiters) {
-        const result: Record<string, string> = {};
-        for (const address of waiter.addresses) {
-          result[address] = this.truncateAddress(address);
-        }
-        waiter.resolve(result);
-      }
+      // On error, return no names (not cached, so the next call retries).
+      for (const waiter of waiters) waiter.resolve({});
     }
   }
 
