@@ -269,6 +269,7 @@ async function loadStakedLootBeasts(owner: string): Promise<StakedLootBeast[]> {
 }
 
 type Taking = Omit<TakenLootBeast, "beast">;
+type DungeonEvent = { keys: string[]; data: string[]; block_number?: number; transaction_hash: string };
 
 /**
  * `BeastClaimed` layout: keys [selector, adventurer_id, token_id.low, token_id.high];
@@ -276,7 +277,7 @@ type Taking = Omit<TakenLootBeast, "beast">;
  * taken_token_id.low, taken_token_id.high, taken_from].
  * Returns the claims that took a beast from someone, or null for ordinary mints.
  */
-export function parseTaking(e: { keys: string[]; data: string[]; block_number?: number; transaction_hash: string }): Taking | null {
+export function parseTaking(e: DungeonEvent): Taking | null {
   const takenFrom = BigInt(e.data[9] ?? "0x0");
   if (takenFrom === 0n) return null;
   const lo = BigInt(e.data[7] ?? "0x0");
@@ -294,40 +295,113 @@ export function parseTaking(e: { keys: string[]; data: string[]; block_number?: 
   };
 }
 
-// Every taking so far, scanned incrementally from the chain.
-let takings: { list: Taking[]; nextBlock: number; at: number } = { list: [], nextBlock: LOOT_DUNGEON_START_BLOCK, at: 0 };
-let takingsScan: Promise<Taking[]> | null = null;
+/** A `BeastClaimed`: the recipient slew (claimed) a beast, possibly taking it from someone. */
+type Claim = { recipient: string; taking: Taking | null };
+/** A `BeastStaked`: keys [selector, token_id.low, token_id.high]; data [staker, staked_at, transforms_at, unsafe]. */
+type Stake = { tokenId: string; staker: string };
 
-async function scanTakings(): Promise<Taking[]> {
-  if (Date.now() - takings.at < TOKEN_IDS_TTL_MS) return takings.list;
-  if (takingsScan) return takingsScan;
-  takingsScan = withReadProvider(async (p) => {
+export function parseStakeEvent(e: DungeonEvent): Stake {
+  const id = BigInt(e.keys[1] ?? "0x0") + (BigInt(e.keys[2] ?? "0x0") << 128n);
+  return { tokenId: id.toString(), staker: `0x${BigInt(e.data[0] ?? "0x0").toString(16)}` };
+}
+
+// Every claim and stake so far, scanned incrementally from the chain.
+type DungeonLog = { claims: Claim[]; stakes: Stake[] };
+let dungeonLog: DungeonLog & { nextBlock: number; at: number } = {
+  claims: [],
+  stakes: [],
+  nextBlock: LOOT_DUNGEON_START_BLOCK,
+  at: 0,
+};
+let dungeonScan: Promise<DungeonLog> | null = null;
+
+async function scanDungeon(): Promise<DungeonLog> {
+  if (Date.now() - dungeonLog.at < TOKEN_IDS_TTL_MS) return dungeonLog;
+  if (dungeonScan) return dungeonScan;
+  dungeonScan = withReadProvider(async (p) => {
     const head = await p.getBlockNumber();
-    const selectorKey = selector("BeastClaimed");
-    const found: Taking[] = [];
+    const claimedKey = BigInt(selector("BeastClaimed"));
+    const stakedKey = BigInt(selector("BeastStaked"));
+    const claims: Claim[] = [];
+    const stakes: Stake[] = [];
     let token: string | undefined;
     for (let page = 0; page < 500; page++) {
       const res = await p.getEvents({
         address: LOOT_DUNGEON_ADDRESS,
-        keys: [[selectorKey]],
-        from_block: { block_number: takings.nextBlock },
+        keys: [[selector("BeastClaimed"), selector("BeastStaked")]],
+        from_block: { block_number: dungeonLog.nextBlock },
         to_block: { block_number: head },
         chunk_size: 1000,
         continuation_token: token,
       });
       for (const e of res.events) {
-        const t = parseTaking(e);
-        if (t) found.push(t);
+        const key = BigInt(e.keys[0]);
+        if (key === claimedKey) {
+          claims.push({ recipient: `0x${BigInt(e.data[6] ?? "0x0").toString(16)}`, taking: parseTaking(e) });
+        } else if (key === stakedKey) {
+          stakes.push(parseStakeEvent(e));
+        }
       }
       token = res.continuation_token;
       if (!token) break;
     }
-    takings = { list: [...takings.list, ...found], nextBlock: head + 1, at: Date.now() };
-    return takings.list;
+    dungeonLog = {
+      claims: [...dungeonLog.claims, ...claims],
+      stakes: [...dungeonLog.stakes, ...stakes],
+      nextBlock: head + 1,
+      at: Date.now(),
+    };
+    return dungeonLog;
   }).finally(() => {
-    takingsScan = null;
+    dungeonScan = null;
   });
-  return takingsScan;
+  return dungeonScan;
+}
+
+async function scanTakings(): Promise<Taking[]> {
+  const { claims } = await scanDungeon();
+  return claims.flatMap((c) => (c.taking ? [c.taking] : []));
+}
+
+export type LootLeaderboardEntry = { address: string; count: number };
+export type LootLeaderboards = {
+  /** Loot beasts slain (claimed) per player */
+  slain: LootLeaderboardEntry[];
+  /** Beasts staked for Mega per player, all time */
+  staked: LootLeaderboardEntry[];
+  /** Staked beasts lost to other players' claims */
+  lost: LootLeaderboardEntry[];
+};
+
+function rank(addresses: string[]): LootLeaderboardEntry[] {
+  const counts = new Map<string, number>();
+  for (const a of addresses) {
+    const k = `0x${BigInt(a).toString(16)}`;
+    if (k === "0x0") continue;
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([address, count]) => ({ address, count }))
+    .sort((a, b) => b.count - a.count || a.address.localeCompare(b.address));
+}
+
+/** Pure aggregation of the dungeon's event log into the three leaderboards. */
+export function buildLootLeaderboards(log: DungeonLog): LootLeaderboards {
+  // A taken beast counts as a lost stake when its owner had staked it.
+  const stakedBy = new Set(log.stakes.map((s) => `${s.tokenId}:${BigInt(s.staker)}`));
+  const lost = log.claims.flatMap((c) =>
+    c.taking && stakedBy.has(`${c.taking.tokenId}:${BigInt(c.taking.takenFrom)}`) ? [c.taking.takenFrom] : [],
+  );
+  return {
+    slain: rank(log.claims.map((c) => c.recipient)),
+    staked: rank(log.stakes.map((s) => s.staker)),
+    lost: rank(lost),
+  };
+}
+
+/** Loot Dungeon leaderboards: most beasts slain, most staked, most staked beasts lost. */
+export async function fetchLootLeaderboards(): Promise<LootLeaderboards> {
+  return buildLootLeaderboards(await scanDungeon());
 }
 
 /** Beasts taken from `owner` by other players' Loot Dungeon claims, newest first. */

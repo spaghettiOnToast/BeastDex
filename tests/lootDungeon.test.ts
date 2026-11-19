@@ -8,7 +8,7 @@ vi.mock("../src/services/beast/species", () => ({
 }));
 
 import { beastsV3 } from "@provable-games/collectables";
-import { fetchLootStakes, lootSpecies, parseTaking } from "../src/services/lootDungeon";
+import { buildLootLeaderboards, fetchLootStakes, lootSpecies, parseStakeEvent, parseTaking } from "../src/services/lootDungeon";
 
 const ME = "0xa2621ff2b0317ac99b881541b96aa75a7e118901b45025aad22a23633cccbe";
 const OTHER = "0x419d649f349f191ded9ae98f63627082d2d3bb6888af8fb7cd387ff54a054fc";
@@ -76,5 +76,42 @@ describe("Loot Dungeon takings", () => {
     // The killer gets a new token (the claim's token_id); the taken one is burned.
     expect(t!.newTokenId).toBe((BigInt(keys[2]) + (BigInt(keys[3]) << 128n)).toString());
     expect(BigInt(t!.takenFrom)).toBe(BigInt(ME));
+  });
+});
+
+describe("Loot Bag leaderboards", () => {
+  const THIRD = "0x123";
+  const taking = (tokenId: string, takenFrom: string, takenBy: string) => ({
+    tokenId, newTokenId: "9", takenFrom, takenBy, adventurerId: "1", block: 1, txHash: "0x1",
+  });
+
+  it("parses BeastStaked", () => {
+    expect(parseStakeEvent({ keys: ["0xsel", "0x5", "0x1"], data: [ME, "0x1", "0x2", "0x0"], transaction_hash: "0x" })).toEqual({
+      tokenId: (5n + (1n << 128n)).toString(),
+      staker: ME,
+    });
+  });
+
+  it("counts slain per recipient, stakes per staker, and only staked beasts as lost", () => {
+    const boards = buildLootLeaderboards({
+      claims: [
+        { recipient: ME, taking: null },
+        { recipient: ME, taking: null },
+        { recipient: OTHER, taking: taking("10", ME, OTHER) }, // ME staked 10: a lost stake
+        { recipient: OTHER, taking: taking("11", THIRD, OTHER) }, // 11 wasn't staked by THIRD
+        { recipient: "0x0", taking: null },
+      ],
+      stakes: [
+        { tokenId: "10", staker: ME },
+        { tokenId: "12", staker: ME },
+        { tokenId: "11", staker: OTHER },
+      ],
+    });
+    expect(boards.slain).toEqual([
+      { address: OTHER, count: 2 },
+      { address: ME, count: 2 },
+    ].sort((a, b) => a.address.localeCompare(b.address)));
+    expect(boards.staked).toEqual([{ address: ME, count: 2 }, { address: OTHER, count: 1 }]);
+    expect(boards.lost).toEqual([{ address: ME, count: 1 }]);
   });
 });
