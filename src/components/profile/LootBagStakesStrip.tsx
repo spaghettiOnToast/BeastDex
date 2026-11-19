@@ -206,6 +206,11 @@ export function LootBagStakesStrip({ owner }: { owner: string | null | undefined
   const takenIds = new Set(taken.map((t) => t.tokenId));
   const staked = items.filter((i) => !takenIds.has(i.tokenId));
 
+  // Clicking "N lost" narrows the strip to the lost beasts, so they aren't stuck at the end of the row.
+  const [lostOnly, setLostOnly] = useState(false);
+  useEffect(() => setLostOnly(false), [owner]);
+  const showLostOnly = lostOnly && taken.length > 0;
+
   // Buyback prices move continuously (GDA), so refresh them with the countdown.
   useEffect(() => {
     if (items.length === 0) return;
@@ -236,14 +241,40 @@ export function LootBagStakesStrip({ owner }: { owner: string | null | undefined
         <h3 className="text-[11px] font-bold uppercase tracking-wider text-gold">
           {staked.length > 0 ? "Transforming in the Loot Bag" : "Loot Bag"}
           {staked.length > 0 && <span className="text-zinc-500"> · {staked.length}</span>}
-          {taken.length > 0 && <span className="text-red-400"> · {taken.length} lost</span>}
+          {taken.length > 0 && (
+            <>
+              <span className="text-zinc-500"> · </span>
+              {staked.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setLostOnly((v) => !v)}
+                  aria-pressed={showLostOnly}
+                  className={`uppercase tracking-wider text-red-400 hover:text-red-300 ${showLostOnly ? "underline underline-offset-2" : ""}`}
+                  title={showLostOnly ? "Show all Loot Bag beasts" : "Show only lost beasts"}
+                >
+                  {taken.length} lost
+                </button>
+              ) : (
+                <span className="text-red-400">{taken.length} lost</span>
+              )}
+              {showLostOnly && (
+                <button
+                  type="button"
+                  onClick={() => setLostOnly(false)}
+                  className="ml-2 normal-case tracking-normal text-zinc-500 hover:text-gold"
+                >
+                  Show all
+                </button>
+              )}
+            </>
+          )}
         </h3>
         <a href={LOOT_BAG_URL} target="_blank" rel="noreferrer" className="text-[10px] text-zinc-500 hover:text-gold">
-          Open Loot Bag →
+          Play Loot Dungeon →
         </a>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {staked.map((item) => (
+        {!showLostOnly && staked.map((item) => (
           <StakedCard key={item.tokenId} item={item} nowMs={nowMs} quotes={quotes.get(item.tokenId)} ethUsd={ethUsd} />
         ))}
         {taken.map((item) => (
