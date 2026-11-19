@@ -15,6 +15,7 @@ import { SoldListingsProvider } from "./contexts/SoldListingsContext";
 import { FloatingCarts } from "./components/marketplace/FloatingCarts";
 import { GlobalCartDialogs } from "./components/marketplace/GlobalCartDialogs";
 import { TermsOfServiceDialog } from "./components/legal/TermsOfServiceDialog";
+import SiteMusicPlayer from "./components/music/SiteMusicPlayer";
 import { Toaster } from "sonner";
 import { Analytics } from "@vercel/analytics/react";
 import { resolveRpcUrl } from "./services/tx";
@@ -153,6 +154,7 @@ function App() {
                 </>
               )}
             </Suspense>
+            <SiteMusicPlayer />
             {/* Terms of Service dialog */}
             <TermsOfServiceDialog />
             <Analytics />

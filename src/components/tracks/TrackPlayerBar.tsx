@@ -4,6 +4,7 @@ import { Pause, Play, X } from "lucide-react";
 import type { Beast } from "../../services/beast";
 import { fetchV3CardImgSrc } from "../../services/beast/cardImage";
 import { fetchTrackSound } from "../../services/beast/music";
+import { announcePlayback, onPlayback } from "../../services/music/playbackBus";
 
 export type NowPlaying = {
   /** unique per playable item, e.g. `species:12:shared:1` */
@@ -84,6 +85,7 @@ export default function TrackPlayerBar({ item, toggleSignal, onStatus, onClose, 
               setError(s.error);
               report("error");
             } else if (s.ready) {
+              if (s.playing) announcePlayback("beast");
               report(s.playing ? "playing" : "paused");
             }
           },
@@ -107,6 +109,9 @@ export default function TrackPlayerBar({ item, toggleSignal, onStatus, onClose, 
   useEffect(() => {
     if (toggleSignal > 0) playerRef.current?.toggle();
   }, [toggleSignal]);
+
+  // The site playlist started: pause this track.
+  useEffect(() => onPlayback((source) => source !== "beast" && playerRef.current?.pause()), []);
 
   if (!item) return null;
 

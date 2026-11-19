@@ -10,6 +10,7 @@ import type { Beast } from "../../services/beast";
 import { fetchV3CardImgSrc } from "../../services/beast/cardImage";
 import { fetchBeastSpecies } from "../../services/beast/species";
 import { beastSoundLoader } from "../../services/beast/music";
+import { announcePlayback, onPlayback } from "../../services/music/playbackBus";
 import BeastCard from "./BeastCard";
 
 type Props = {
@@ -74,7 +75,10 @@ export default function BeastPlayerCard({ beast, trackSound, onStateChange, onPl
           notes: hasNotesBackground(beast.visualEffects ?? 0, notesPresets),
           autoplay: trackSound != null,
           alt: beast.name,
-          onStateChange: (s) => onStateRef.current?.(s),
+          onStateChange: (s) => {
+            if (s.playing) announcePlayback("beast");
+            onStateRef.current?.(s);
+          },
           onArtReady: () => alive && setArtReady(true),
         });
         onPlayerRef.current?.(playerRef.current);
@@ -91,6 +95,9 @@ export default function BeastPlayerCard({ beast, trackSound, onStateChange, onPl
       onPlayerRef.current?.(null);
     };
   }, [beast.tokenId, beast.speciesId, beast.visualEffects, beast.name, speciesName, prefixName, suffixName, rank, trackSound]);
+
+  // The site playlist started: pause this card.
+  useEffect(() => onPlayback((source) => source !== "beast" && playerRef.current?.pause()), []);
 
   return (
     <div style={{ position: "relative", width: "100%", aspectRatio: "250 / 350" }}>
