@@ -29,6 +29,18 @@ export type Dungeon = {
 
 export const DUNGEONS: Dungeon[] = [
   {
+    id: "lootbag",
+    name: "Loot Bag",
+    tagline: "Hunt the beasts · enter with a Loot bag",
+    image: "/images/dungeons/lootbag.png",
+    accentColor: "#d4a017",
+    status: "online",
+    entryCost: "Loot Bag",
+    difficulty: "Easy",
+    reward: "Beasts + ETH",
+    tags: ["Collectables", "Endless"],
+  },
+  {
     id: "beastmode",
     name: "Beast Mode",
     tagline: "Hunt and collect beasts",
@@ -113,17 +125,5 @@ export const DUNGEONS: Dungeon[] = [
     reward: "Black Shuck Beast",
     tags: ["Free", "Collectables"],
     festivalSlug: "black-shuck",
-  },
-  {
-    id: "lootbag",
-    name: "Loot Bag",
-    tagline: "Fight for your share",
-    image: "/images/dungeons/lootbag.png",
-    accentColor: "#d4a017",
-    status: "closed",
-    entryCost: "Loot Bag",
-    difficulty: "Easy",
-    reward: "$SURVIVOR",
-    tags: ["Endless"],
   },
 ];

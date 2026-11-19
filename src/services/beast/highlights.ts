@@ -1,6 +1,6 @@
 import { collectablesClient } from "./collectablesClient";
 import { BEAST_STATS_CACHE_TTL_MS } from "./constants";
-import { VISUAL_TO_EFFECTS } from "./helpers";
+import { visualsQuery } from "./presets";
 import { fetchBeastSpecies } from "./species";
 import type { BeastHighlights } from "./types";
 
@@ -15,12 +15,12 @@ export async function fetchBeastHighlights(forceRefresh = false): Promise<BeastH
   }
 
   // v3 encodes shiny/animated in visualEffects (the SDK's `animated` flag is
-  // always true on v3), so count by preset.
+  // always true on v3), whose meaning is per species: count by visual label.
   const [animatedShiny, shinyOnly, animatedOnly, standard] = await Promise.all([
-    collectablesClient.beasts.list({ visualEffects: VISUAL_TO_EFFECTS["Shiny MIDI"], limit: 1 }),
-    collectablesClient.beasts.list({ visualEffects: VISUAL_TO_EFFECTS.Shiny, limit: 1 }),
-    collectablesClient.beasts.list({ visualEffects: VISUAL_TO_EFFECTS.MIDI, limit: 1 }),
-    collectablesClient.beasts.list({ visualEffects: VISUAL_TO_EFFECTS.Regular, limit: 1 }),
+    collectablesClient.beasts.list({ ...visualsQuery(["Shiny MIDI"]), limit: 1 }),
+    collectablesClient.beasts.list({ ...visualsQuery(["Shiny"]), limit: 1 }),
+    collectablesClient.beasts.list({ ...visualsQuery(["MIDI"]), limit: 1 }),
+    collectablesClient.beasts.list({ ...visualsQuery(["Regular"]), limit: 1 }),
   ]);
 
   const data: BeastHighlights = {

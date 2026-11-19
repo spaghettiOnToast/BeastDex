@@ -3,9 +3,10 @@ import {
   shownRank,
   hasCompleteMetadata,
   beastVisual,
-  VISUAL_TO_EFFECTS,
+  BEAST_VISUALS,
 } from "./helpers";
 export { hasCompleteMetadata, beastVisual };
+import { visualsQuery } from "./presets";
 import { collectablesClient, legacyCollectablesClient } from "./collectablesClient";
 import {
   ITEM_NAME_PREFIXES,
@@ -80,10 +81,7 @@ function _mapAttributeFilters(filters: AttributeFiltersInput): Partial<BeastQuer
     } else if (key === "suffix") {
       q.suffixNameIn = values.map(String);
     } else if (key === "visual") {
-      const effects = values
-        .map((v) => VISUAL_TO_EFFECTS[String(v) as BeastVisual])
-        .filter((n): n is number => typeof n === "number");
-      if (effects.length > 0) q.visualEffectsIn = effects;
+      Object.assign(q, visualsQuery(values.map(String) as BeastVisual[]));
     } else if (key === "card grade") {
       // [min, max] range, or a single value meaning "at least"; [g, g] = exactly g.
       const lo = Number(values[0]);
@@ -344,7 +342,7 @@ export async function fetchBeastAttributeFilters(): Promise<BeastAttributeFilter
     Tier: uniqueTiers,
     Prefix: uniquePrefixes,
     Suffix: uniqueSuffixes,
-    Visual: Object.keys(VISUAL_TO_EFFECTS),
+    Visual: [...BEAST_VISUALS],
     "Card Grade": grades,
     // Boolean toggles must use "1"/"0" — FiltersDrawer's boolean-toggle
     // detection and _boolFilter both key off that format.
@@ -507,7 +505,7 @@ export async function fetchCollectionGlance(): Promise<CollectionGlance> {
   return apiCache.get("collection-glance", {}, async () => {
     const [stats, perfect, strongest, names, prefixes] = await Promise.all([
       collectablesClient.beasts.stats(),
-      collectablesClient.beasts.list({ cardGrade: 10, visualEffects: VISUAL_TO_EFFECTS["Shiny MIDI"], limit: 1 }),
+      collectablesClient.beasts.list({ cardGrade: 10, ...visualsQuery(["Shiny MIDI"]), limit: 1 }),
       collectablesClient.beasts.list({ sort: "power", order: "desc", limit: 1, includeOwner: true }),
       collectablesClient.beasts.groups({ groupBy: "full_name", limit: 5 }),
       collectablesClient.beasts.groups({ groupBy: "prefix", limit: 5 }),

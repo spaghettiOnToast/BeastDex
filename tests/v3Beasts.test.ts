@@ -9,6 +9,7 @@ import {
 } from "../src/utils/tokenId";
 import { matchesBeastFilters } from "../src/utils/beast";
 import { beastVisual } from "../src/services/beast/helpers";
+import { rememberSpecies, speciesPresetMasks, visualsQuery } from "../src/services/beast/presets";
 import type { Beast } from "../src/services/beast";
 
 // A v3-sized (251-bit) token id, well past Number.MAX_SAFE_INTEGER.
@@ -67,6 +68,36 @@ describe("v3 visual presets", () => {
 
   it("falls back to legacy flags without visualEffects", () => {
     expect(beastVisual({ shiny: true, animated: false }).visual).toBe("Shiny");
+  });
+
+  it("reads Loot Dungeon species (78-107) with their swapped masks: Mega art on 2/3, notes on 1/3", () => {
+    const loot = (visualEffects: number) => beastVisual({ shiny: false, animated: true, visualEffects, beastId: 82 }).visual;
+    expect([0, 1, 2, 3].map(loot)).toEqual(["Regular", "MIDI", "Shiny", "Shiny MIDI"]);
+    // Tiddy Mun / Black Shuck (76-77) use the classic renderer.
+    const classic = (visualEffects: number) => beastVisual({ shiny: false, animated: true, visualEffects, beastId: 77 }).visual;
+    expect([0, 1, 2, 3].map(classic)).toEqual(["Regular", "Shiny", "MIDI", "Shiny MIDI"]);
+  });
+
+  it("prefers the registry's masks once the species catalog has loaded", () => {
+    rememberSpecies([{ speciesId: 500, name: "Test", tier: 1, type: "Magic", renderer: "0x1", rainbowPresets: 12, notesPresets: 10 }]);
+    expect(speciesPresetMasks(500)).toEqual({ rainbow: 12, notes: 10 });
+    expect(beastVisual({ shiny: false, animated: true, visualEffects: 2, beastId: 500 }).visual).toBe("Shiny");
+  });
+});
+
+describe("visual filter → API query", () => {
+  it("maps single labels exactly across both renderers", () => {
+    expect(visualsQuery(["Regular"])).toEqual({ visualEffectsIn: [0] });
+    expect(visualsQuery(["Shiny"])).toEqual({ visualEffectsIn: [1, 2], midi: false });
+    expect(visualsQuery(["MIDI"])).toEqual({ visualEffectsIn: [1, 2], midi: true });
+    expect(visualsQuery(["Shiny MIDI"])).toEqual({ visualEffectsIn: [3] });
+  });
+
+  it("combines labels", () => {
+    expect(visualsQuery(["Shiny", "MIDI"])).toEqual({ visualEffectsIn: [1, 2] });
+    expect(visualsQuery(["Regular", "Shiny"])).toEqual({ visualEffectsIn: [0, 1, 2], midi: false });
+    expect(visualsQuery(["MIDI", "Shiny MIDI"])).toEqual({ visualEffectsIn: [1, 2, 3], midi: true });
+    expect(visualsQuery([])).toEqual({});
   });
 });
 

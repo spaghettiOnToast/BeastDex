@@ -6,8 +6,9 @@
  * it, embed the bundled sprite as a data URI, and run the SDK's port of the
  * on-chain `beast_svg.cairo` renderer. No RPC call per card.
  */
-import { beastImageUrl, beastsV3, hasBundledBeastImage, svgToDataUri } from "@provable-games/collectables";
+import { beastImageUrl, beastsV3, hasBundledBeastImage, svgToDataUri, type BeastSpecies } from "@provable-games/collectables";
 import { fetchBeastSpecies } from "./species";
+import { speciesPresetMasks } from "./presets";
 
 const COLLECTABLES_BASE_URL = "/collectables";
 
@@ -25,19 +26,25 @@ export function spriteSpeciesName(name: string): string {
   return SPRITE_NAME_ALIASES[name] ?? name;
 }
 
-/** Renderer masks the original catalog uses when the registry doesn't report them. */
-const ORIGINAL_RAINBOW_PRESETS = 10; // presets 1 and 3
-const ORIGINAL_SPECIES_COUNT = 75;
-
-async function rainbowPresetsFor(speciesId: number): Promise<number> {
+/**
+ * The species' renderer settings: its rainbow mask and card theme (the Loot
+ * Dungeon renderer draws species 78-107 in the Loot theme). Registry values when
+ * available, else the mainnet renderer the species id falls under.
+ */
+async function rendererFor(speciesId: number): Promise<{
+  rainbowPresets: number;
+  theme: beastsV3.BeastCardV3Theme | undefined;
+}> {
+  let species: BeastSpecies | undefined;
   try {
-    const species = await fetchBeastSpecies();
-    const s = species.find((x) => x.speciesId === speciesId);
-    if (s?.rainbowPresets != null) return s.rainbowPresets;
+    species = (await fetchBeastSpecies()).find((x) => x.speciesId === speciesId);
   } catch {
-    // fall through to the original-catalog default
+    // fall through to the species-range defaults
   }
-  return speciesId >= 1 && speciesId <= ORIGINAL_SPECIES_COUNT ? ORIGINAL_RAINBOW_PRESETS : 0;
+  return {
+    rainbowPresets: species?.rainbowPresets ?? speciesPresetMasks(speciesId).rainbow,
+    theme: beastsV3.beastCardV3Theme(species ?? { speciesId }),
+  };
 }
 
 // Sprite URL -> data URI (sprites are shared by every card of a species+variant).
@@ -103,20 +110,18 @@ export function fetchV3CardImgSrc(input: V3CardInput): Promise<string> {
   const rank = input.rank ?? 0;
   return cached(`${input.tokenId}:${rank}`, async () => {
     const beast = beastsV3.decodeTokenId(BigInt(input.tokenId));
-    const ve = beast.visualEffects;
+    const { rainbowPresets, theme } = await rendererFor(Number(beast.speciesId));
     const sprite = {
       name: spriteSpeciesName(input.speciesName),
-      // Original art: presets 1/3 are the shiny set; every original is a GIF.
-      shiny: ve === 1 || ve === 3,
+      // The species' rainbow presets use the alternate ("shiny") art: 1/3 on
+      // the classic renderer, 2/3 (Mega) on the Loot one. Every sprite is a GIF.
+      shiny: beastsV3.presetSelected(rainbowPresets, beast.visualEffects),
       animated: true,
     };
     if (!hasBundledBeastImage(sprite)) {
       throw new Error(`no bundled sprite for ${input.speciesName}`);
     }
-    const [art, rainbowPresets] = await Promise.all([
-      spriteDataUri(beastImageUrl(sprite, { baseUrl: COLLECTABLES_BASE_URL })),
-      rainbowPresetsFor(Number(beast.speciesId)),
-    ]);
+    const art = await spriteDataUri(beastImageUrl(sprite, { baseUrl: COLLECTABLES_BASE_URL }));
     const svg = beastsV3.renderBeastCardV3Svg({
       beast,
       prefixName: input.prefixName ?? "",
@@ -125,6 +130,7 @@ export function fetchV3CardImgSrc(input: V3CardInput): Promise<string> {
       rank,
       beastImage: art,
       rainbowPresets,
+      theme,
     });
     return svgToDataUri(svg);
   });
