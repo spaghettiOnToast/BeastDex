@@ -48,13 +48,17 @@ export type StakedLootBeast = LootStake & { beast: Beast };
 
 /**
  * A beast taken from a player by someone else's Loot Dungeon claim
- * (`BeastClaimed` with a non-zero `taken_from`). The beast changes hands, it
- * isn't burned.
+ * (`BeastClaimed` with a non-zero `taken_from`). The claim burns the taken
+ * token (clearing any Mega stake, however close it was) and mints the killer a
+ * new token of the same beast, unstaked.
  */
 export type TakenLootBeast = {
+  /** the burned token */
   tokenId: string;
+  /** the killer's new token of the same beast */
+  newTokenId: string;
   takenFrom: string;
-  /** the claim's recipient, who now holds it */
+  /** the claim's recipient, who holds the new token */
   takenBy: string;
   adventurerId: string;
   block: number;
@@ -156,6 +160,32 @@ async function lootTokenIds(species: readonly BeastSpecies[]): Promise<string[]>
   return ids;
 }
 
+function parseStake(tokenId: string, r: string[]): LootStake | null {
+  const [staker, stakedAt, transformsAt, unsafe] = r.map((x) => BigInt(x));
+  if (!staker) return null;
+  return {
+    tokenId,
+    staker: `0x${staker.toString(16)}`,
+    stakedAt: Number(stakedAt),
+    transformsAt: Number(transformsAt),
+    unsafeStake: unsafe === 1n,
+  };
+}
+
+export function isLootDungeon(address: string | null | undefined): boolean {
+  try {
+    return !!address && BigInt(address) === BigInt(LOOT_DUNGEON_ADDRESS);
+  } catch {
+    return false;
+  }
+}
+
+/** One beast's Loot Bag stake (who staked it, when the Mega is ready), or null if not staked. */
+export async function fetchLootStake(tokenId: string): Promise<LootStake | null> {
+  const [r] = await batchCall([{ contract: LOOT_DUNGEON_ADDRESS, entrypoint: "beast_stake", calldata: u256Calldata(tokenId) }]);
+  return parseStake(tokenId, r);
+}
+
 /** Loot beasts `owner` has staked in the Loot Dungeon (transforming or ready). */
 export async function fetchLootStakes(owner: string): Promise<LootStake[]> {
   const me = BigInt(owner);
@@ -167,15 +197,8 @@ export async function fetchLootStakes(owner: string): Promise<LootStake[]> {
   );
   const out: LootStake[] = [];
   stakes.forEach((r, i) => {
-    const [staker, stakedAt, transformsAt, unsafe] = r.map((x) => BigInt(x));
-    if (staker === 0n || staker !== me) return;
-    out.push({
-      tokenId: ids[i],
-      staker: `0x${staker.toString(16)}`,
-      stakedAt: Number(stakedAt),
-      transformsAt: Number(transformsAt),
-      unsafeStake: unsafe === 1n,
-    });
+    const stake = parseStake(ids[i], r);
+    if (stake && BigInt(stake.staker) === me) out.push(stake);
   });
   return out.sort((a, b) => a.transformsAt - b.transformsAt);
 }
@@ -262,6 +285,7 @@ export function parseTaking(e: { keys: string[]; data: string[]; block_number?: 
   const taken = lo + (hi << 128n);
   return {
     tokenId: (taken === 0n ? claimed : taken).toString(),
+    newTokenId: claimed.toString(),
     takenFrom: `0x${takenFrom.toString(16)}`,
     takenBy: `0x${BigInt(e.data[6] ?? "0x0").toString(16)}`,
     adventurerId: BigInt(e.keys[1] ?? "0x0").toString(),
@@ -314,5 +338,5 @@ export async function fetchTakenLootBeasts(owner: string): Promise<TakenLootBeas
   return all
     .filter((t) => BigInt(t.takenFrom) === me)
     .sort((a, b) => b.block - a.block)
-    .map((t) => ({ ...t, beast: beastFromToken(t.tokenId, names, t.takenBy) }));
+    .map((t) => ({ ...t, beast: beastFromToken(t.tokenId, names, "0x0") }));
 }

@@ -122,7 +122,11 @@ function StakedCard({
   );
 }
 
-/** A beast another player's Loot Dungeon claim took from the owner: card under the Loot Survivor skull. */
+/**
+ * A beast another player's Loot Dungeon claim took from the owner: the token
+ * was burned (with any Mega progress) and the killer minted a new copy. Card
+ * under the Loot Survivor skull; it links to the killer's copy.
+ */
 function TakenCard({ item }: { item: TakenLootBeast }) {
   const { beast } = item;
   const src = useCardSrc(beast);
@@ -141,9 +145,9 @@ function TakenCard({ item }: { item: TakenLootBeast }) {
   return (
     <div
       className="w-36 flex-shrink-0 overflow-hidden rounded-lg border border-red-500/30 bg-black"
-      title={`${beast.name} was taken by ${item.takenBy}${when ? ` on ${when}` : ""}`}
+      title={`${beast.name} was killed${when ? ` on ${when}` : ""} and burned, losing any Mega progress. ${item.takenBy} got a new copy.`}
     >
-      <Link to={`/beasts/${beast.tokenId}`} className="relative block">
+      <Link to={`/beasts/${item.newTokenId}`} className="relative block" aria-label={`The killer's copy of ${beast.name}`}>
         {src ? (
           <img src={src} alt={beast.name} className="w-full opacity-40 grayscale" />
         ) : (
@@ -159,7 +163,7 @@ function TakenCard({ item }: { item: TakenLootBeast }) {
       <div className="border-t border-white/[0.06] px-1.5 py-1">
         <p className="truncate text-[10px] font-semibold text-zinc-400 line-through">{beast.name}</p>
         <p className="truncate text-[10px] text-red-400">
-          Taken by{" "}
+          Killed by{" "}
           <Link to={`/collection/${item.takenBy}`} className="underline hover:text-gold">
             {shortAddr(item.takenBy)}
           </Link>

@@ -73,6 +73,8 @@ describe("Loot Dungeon takings", () => {
     const hi = `0x${(id >> 128n).toString(16)}`;
     const t = parseTaking({ keys, data: [...data.slice(0, 6), OTHER, lo, hi, ME], block_number: 18200000, transaction_hash: "0xdef" });
     expect(t).toMatchObject({ tokenId: id.toString(), takenBy: OTHER, block: 18200000, txHash: "0xdef" });
+    // The killer gets a new token (the claim's token_id); the taken one is burned.
+    expect(t!.newTokenId).toBe((BigInt(keys[2]) + (BigInt(keys[3]) << 128n)).toString());
     expect(BigInt(t!.takenFrom)).toBe(BigInt(ME));
   });
 });
