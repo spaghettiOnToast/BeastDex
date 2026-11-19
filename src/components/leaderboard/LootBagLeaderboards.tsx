@@ -119,8 +119,6 @@ function Board({
       ) : (
         <div className="divide-y divide-white/[0.06]">
           {entries.slice(0, shown).map((e, i) => {
-            const addr = normaliseStarknetAddress(e.address) ?? e.address;
-            const name = usernames[addr.toLowerCase()];
             const r = ranks[i];
             return (
               <div
@@ -136,13 +134,7 @@ function Board({
                 >
                   #{r}
                 </span>
-                <Link
-                  to={`/collection/${encodeURIComponent(addr)}`}
-                  className={`truncate transition-colors hover:text-gold ${name ? "text-zinc-200" : "font-mono text-zinc-300"}`}
-                  title={addr}
-                >
-                  {name ?? `${addr.slice(0, 6)}…${addr.slice(-4)}`}
-                </Link>
+                <PlayerLink address={e.address} usernames={usernames} className="truncate" />
                 <span className={`text-base font-black tabular-nums ${board.color}`}>{e.count.toLocaleString()}</span>
               </div>
             );
@@ -159,5 +151,28 @@ function Board({
         </button>
       )}
     </div>
+  );
+}
+
+/** A player's username (else short address), linking to their collection. */
+function PlayerLink({
+  address,
+  usernames,
+  className = "",
+}: {
+  address: string;
+  usernames: Record<string, string>;
+  className?: string;
+}) {
+  const addr = normaliseStarknetAddress(address) ?? address;
+  const name = usernames[addr.toLowerCase()];
+  return (
+    <Link
+      to={`/collection/${encodeURIComponent(addr)}`}
+      className={`transition-colors hover:text-gold ${name ? "text-zinc-200" : "font-mono text-zinc-300"} ${className}`}
+      title={addr}
+    >
+      {name ?? `${addr.slice(0, 6)}…${addr.slice(-4)}`}
+    </Link>
   );
 }

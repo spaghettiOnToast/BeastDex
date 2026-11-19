@@ -5,9 +5,9 @@ import { HallOfFame } from "../components/leaderboard/HallOfFame";
 import { RemainingToCollect } from "../components/leaderboard/RemainingToCollect";
 import { BeastCollectionStats } from "../components/leaderboard/BeastCollectionStats";
 import { BeastSlayerLeaderboard } from "../components/leaderboard/BeastSlayerLeaderboard";
-import { LootBagLeaderboards } from "../components/leaderboard/LootBagLeaderboards";
+import { LootBeastsStats } from "../components/leaderboard/LootBeastsStats";
 
-type LeaderboardTab = "stats" | "remaining" | "hallOfFame" | "slayer" | "lootBag";
+type LeaderboardTab = "stats" | "remaining" | "hallOfFame" | "slayer" | "lootBeasts";
 
 function LeaderboardPage() {
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("stats");
@@ -19,7 +19,7 @@ function LeaderboardPage() {
     { id: "remaining" as const, label: "Remaining" },
     { id: "hallOfFame" as const, label: "Hall of Fame" },
     { id: "slayer" as const, label: "Slayer" },
-    { id: "lootBag" as const, label: "Loot Bag" },
+    { id: "lootBeasts" as const, label: "Loot Beasts" },
   ];
 
   return (
@@ -65,7 +65,7 @@ function LeaderboardPage() {
             {activeTab === "remaining" && <RemainingToCollect />}
             {activeTab === "hallOfFame" && <HallOfFame />}
             {activeTab === "slayer" && <BeastSlayerLeaderboard />}
-            {activeTab === "lootBag" && <LootBagLeaderboards />}
+            {activeTab === "lootBeasts" && <LootBeastsStats />}
           </div>
         </div>
       </div>

@@ -112,28 +112,13 @@ export async function lookupControllerAddresses(
     .map((username) => (typeof username === "string" ? username.trim() : ""))
     .filter((username) => username.length > 0);
 
-  const uniqueUsernames = Array.from(new Set(processed));
+  // The lookup matches lowercase names only ("Beamo" finds nothing), and mobile
+  // keyboards capitalise the first letter: always send the normalised form.
+  const names = Array.from(new Set(processed.map(normaliseUsername)));
+  if (names.length === 0) return {};
 
-  if (uniqueUsernames.length === 0) {
-    return {};
-  }
+  const toFetch = names.filter((n) => !usernameToAddressesCache.has(n));
+  if (toFetch.length > 0) await executeLookup({ usernames: toFetch });
 
-  const normalisedPairs = uniqueUsernames.map((username) => ({
-    original: username,
-    normalised: normaliseUsername(username),
-  }));
-
-  const toFetch = normalisedPairs
-    .filter(({ normalised }) => !usernameToAddressesCache.has(normalised))
-    .map(({ original }) => original);
-
-  if (toFetch.length > 0) {
-    await executeLookup({ usernames: toFetch });
-  }
-
-  return normalisedPairs.reduce<Record<string, string[]>>((acc, { normalised }) => {
-    const cached = usernameToAddressesCache.get(normalised) ?? [];
-    acc[normalised] = cached;
-    return acc;
-  }, {});
+  return Object.fromEntries(names.map((n) => [n, usernameToAddressesCache.get(n) ?? []]));
 }

@@ -1,27 +1,9 @@
 import { useApi } from "./useApi";
 import {
-  fetchBeastStats,
-  fetchBeastHighlights,
   fetchBeastAttributeFilters,
   fetchBeastSpecies,
 } from "../services/beast";
 import { ORIGINAL_SPECIES_COUNT } from "../utils/beastCollection";
-
-export function useBeastStats(enabled: boolean = true) {
-  return useApi(
-    fetchBeastStats,
-    [],
-    { enabled, immediate: enabled }
-  );
-}
-
-export function useBeastHighlights(enabled: boolean = true) {
-  return useApi(
-    fetchBeastHighlights,
-    [],
-    { enabled, immediate: enabled }
-  );
-}
 
 export function useBeastAttributeFilters(enabled: boolean = true) {
   return useApi(

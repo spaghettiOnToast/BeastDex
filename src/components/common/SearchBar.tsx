@@ -27,7 +27,11 @@ export default function SearchBar({ value, onChange, onSubmit }: Props) {
     >
       <div className="relative flex-1">
         <Input
-          type="text"
+          type="search"
+          enterKeyHint="search"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           placeholder="Search BeastDex"
           value={value}
           onChange={(e) => onChange(e.target.value)}

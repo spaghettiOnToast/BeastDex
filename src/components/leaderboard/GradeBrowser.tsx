@@ -12,7 +12,8 @@ const PAGE_SIZE = 24;
  * Statistics: one button per card grade (0 = ungraded) with its beast count;
  * pick a grade to browse those beasts (strongest first).
  */
-export function GradeBrowser() {
+export function GradeBrowser({ filters }: { filters?: Record<string, string[]> } = {}) {
+  const filtersKey = JSON.stringify(filters ?? {});
   const [counts, setCounts] = useState<Record<number, number> | null>(null);
   const [grade, setGrade] = useState<number>(10);
   const [page, setPage] = useState(1);
@@ -20,16 +21,20 @@ export function GradeBrowser() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchCardGradeCounts()
+    setCounts(null);
+    fetchCardGradeCounts(JSON.parse(filtersKey))
       .then((c) => !cancelled && setCounts(c))
       .catch(() => !cancelled && setCounts({}));
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [filtersKey]);
 
   // [g, g] = exactly grade g (see _mapAttributeFilters)
-  const attributeFilters = useMemo(() => ({ "Card Grade": [String(grade), String(grade)] }), [grade]);
+  const attributeFilters = useMemo(
+    () => ({ ...JSON.parse(filtersKey), "Card Grade": [String(grade), String(grade)] }),
+    [grade, filtersKey]
+  );
   const { beasts, total, loading, error } = useBeasts({ limit: PAGE_SIZE, attributeFilters, page });
   const { usernames } = useControllerUsernames(
     beasts.map((b) => b.owner),

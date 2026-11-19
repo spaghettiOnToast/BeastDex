@@ -15,17 +15,12 @@ import { RefreshCw } from "lucide-react";
 import { useBeasts } from "../hooks/useBeasts";
 import {
   fetchBeastAttributeFilters,
-  fetchBeastStats,
-  fetchBeastHighlights,
-  fetchTierCollectionStats,
   fetchTopBeasts,
   hasCompleteMetadata,
   type BeastAttributeFilters,
-  type BeastStats,
-  type BeastHighlights,
   type Beast,
-  type TierCollectionStats,
 } from "../services/beast";
+import { fetchSetCollectionStats, type CollectionSet, type SetCollectionStats } from "../services/beast/setStats";
 import { useControllerUsernames } from "../hooks/useControllerUsernames";
 import { getUserFriendlyErrorMessage } from "../utils/error";
 import { config } from "../config";
@@ -68,15 +63,12 @@ function HomePage() {
   const [filtersLoading, setFiltersLoading] = useState(true);
   const [filtersError, setFiltersError] = useState<string | null>(null);
   const [ownerAddressFilters] = useState<string[]>([]);
-  const [beastStats, setBeastStats] = useState<BeastStats | null>(null);
-  const [mintedLoading, setMintedLoading] = useState(true);
-  const [mintedError, setMintedError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [highlights, setHighlights] = useState<BeastHighlights | null>(null);
-  const [highlightsLoading, setHighlightsLoading] = useState(true);
-  const [highlightsError, setHighlightsError] = useState<string | null>(null);
-  const [tierStats, setTierStats] = useState<TierCollectionStats[]>([]);
-  const [tierStatsLoading, setTierStatsLoading] = useState(true);
+  const [setStats, setSetStats] = useState<SetCollectionStats[]>([]);
+  const [setStatsLoading, setSetStatsLoading] = useState(true);
+  const [setStatsError, setSetStatsError] = useState<string | null>(null);
+  // Originals / Loot Beasts toggle: drives the stats panel and narrows the grid to that set.
+  const [activeSet, setActiveSet] = useState<CollectionSet>("original");
   const [selectedBeast, setSelectedBeast] = useState<Beast | null>(null);
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -99,6 +91,16 @@ function HomePage() {
   const [purchasingListing, setPurchasingListing] = useState<Listing | null>(null);
   const [purchaseProcessing, setPurchaseProcessing] = useState(false);
 
+  const setFilters = useMemo(
+    () => setStats.find((s) => s.set === activeSet)?.filters ?? {},
+    [setStats, activeSet]
+  );
+  const gridFilters = useMemo(() => ({ ...attributeFilters, ...setFilters }), [attributeFilters, setFilters]);
+  const selectSet = useCallback((set: CollectionSet) => {
+    setActiveSet(set);
+    setPage(1);
+  }, []);
+
   // Phase 1: Fetch top beasts immediately (fast, heavily cached)
   useEffect(() => {
     let mounted = true;
@@ -111,7 +113,7 @@ function HomePage() {
 
     if (isInitialLoad) {
       setInitialLoading(true);
-      fetchTopBeasts(10)
+      fetchTopBeasts(10, setFilters)
         .then((topBeasts) => {
           if (mounted) {
             setInitialBeasts(topBeasts);
@@ -131,13 +133,13 @@ function HomePage() {
     }
 
     return () => { mounted = false; };
-  }, [page, search, attributeFilters, sortOption]);
+  }, [page, search, attributeFilters, setFilters, sortOption]);
 
   // Phase 2: Fetch full paginated list (slower, but complete)
   const { beasts: fullBeasts, loading: fullLoading, error, reload, total } = useBeasts({
     limit: PAGE_SIZE,
     search,
-    attributeFilters,
+    attributeFilters: gridFilters,
     ownerAddresses: ownerAddressFilters,
     page,
     sort: sortOptionToBeastSortField(sortOption),
@@ -202,50 +204,19 @@ function HomePage() {
       }
     }
 
-    async function loadBeastStats() {
+    async function loadSetStats() {
       try {
-        setMintedLoading(true);
-        setMintedError(null);
-        const stats = await fetchBeastStats();
+        setSetStatsLoading(true);
+        setSetStatsError(null);
+        const data = await fetchSetCollectionStats();
         if (!mounted) return;
-        setBeastStats(stats);
+        setSetStats(data);
       } catch (error: unknown) {
-        console.error("Failed to load minted beast count", error);
+        console.error("Failed to load collection stats", error);
         if (!mounted) return;
-        setMintedError(getUserFriendlyErrorMessage(error, "Failed to load beast stats"));
+        setSetStatsError(getUserFriendlyErrorMessage(error, "Failed to load collection stats"));
       } finally {
-        if (mounted) setMintedLoading(false);
-      }
-    }
-
-    async function loadHighlights() {
-      try {
-        setHighlightsLoading(true);
-        setHighlightsError(null);
-        const highlightsData = await fetchBeastHighlights();
-        if (!mounted) return;
-        setHighlights(highlightsData);
-      } catch (error: unknown) {
-        console.error("Failed to load beast highlights", error);
-        if (!mounted) return;
-        setHighlightsError(
-          getUserFriendlyErrorMessage(error, "Failed to load beast highlights")
-        );
-      } finally {
-        if (mounted) setHighlightsLoading(false);
-      }
-    }
-
-    async function loadTierStats() {
-      try {
-        setTierStatsLoading(true);
-        const data = await fetchTierCollectionStats();
-        if (!mounted) return;
-        setTierStats(data);
-      } catch (err) {
-        console.error("Failed to load tier stats:", err);
-      } finally {
-        if (mounted) setTierStatsLoading(false);
+        if (mounted) setSetStatsLoading(false);
       }
     }
 
@@ -256,23 +227,13 @@ function HomePage() {
     }, 300);
 
     const statsTimer = setTimeout(() => {
-      if (mounted) loadBeastStats();
+      if (mounted) loadSetStats();
     }, 800);
-
-    const highlightsTimer = setTimeout(() => {
-      if (mounted) loadHighlights();
-    }, 1500);
-
-    const tierStatsTimer = setTimeout(() => {
-      if (mounted) loadTierStats();
-    }, 2000);
 
     return () => {
       mounted = false;
       clearTimeout(filtersTimer);
       clearTimeout(statsTimer);
-      clearTimeout(highlightsTimer);
-      clearTimeout(tierStatsTimer);
     };
   }, []);
 
@@ -548,16 +509,11 @@ function HomePage() {
   return (
     <AppLayout topBar={topBar}>
       <StatsPanel
-        mintedCount={beastStats?.mintedCount || 0}
-        uniqueOwners={beastStats?.uniqueOwners || 0}
-        mintedLoading={mintedLoading}
-        mintedError={mintedError}
-        highlights={highlights}
-        highlightsLoading={highlightsLoading}
-        highlightsError={highlightsError}
-        tierStats={tierStats}
-        tierStatsLoading={tierStatsLoading}
-        globalError={error}
+        sets={setStats}
+        loading={setStatsLoading}
+        error={error || setStatsError}
+        activeSet={activeSet}
+        onActiveSetChange={selectSet}
       />
 
       {/* Slim controls bar */}
