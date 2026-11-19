@@ -186,21 +186,23 @@ export async function fetchLootStake(tokenId: string): Promise<LootStake | null>
   return parseStake(tokenId, r);
 }
 
-/** Loot beasts `owner` has staked in the Loot Dungeon (transforming or ready). */
-export async function fetchLootStakes(owner: string): Promise<LootStake[]> {
-  const me = BigInt(owner);
+/** Every beast currently staked in the Loot Dungeon (transforming or ready). */
+export async function fetchAllLootStakes(): Promise<LootStake[]> {
   const species = await fetchBeastSpecies();
   const ids = await lootTokenIds(species);
   if (ids.length === 0) return [];
   const stakes = await batchCall(
     ids.map((id) => ({ contract: LOOT_DUNGEON_ADDRESS, entrypoint: "beast_stake", calldata: u256Calldata(id) })),
   );
-  const out: LootStake[] = [];
-  stakes.forEach((r, i) => {
-    const stake = parseStake(ids[i], r);
-    if (stake && BigInt(stake.staker) === me) out.push(stake);
-  });
-  return out.sort((a, b) => a.transformsAt - b.transformsAt);
+  return stakes.flatMap((r, i) => parseStake(ids[i], r) ?? []);
+}
+
+/** Loot beasts `owner` has staked in the Loot Dungeon (transforming or ready). */
+export async function fetchLootStakes(owner: string): Promise<LootStake[]> {
+  const me = BigInt(owner);
+  return (await fetchAllLootStakes())
+    .filter((s) => BigInt(s.staker) === me)
+    .sort((a, b) => a.transformsAt - b.transformsAt);
 }
 
 /** Display data decoded from a v3 token id (no indexer needed). */
@@ -389,13 +391,15 @@ function rank(addresses: string[]): LootLeaderboardEntry[] {
 export function buildLootLeaderboards(log: DungeonLog): LootLeaderboards {
   // A taken beast counts as a lost stake when its owner had staked it.
   const stakedBy = new Set(log.stakes.map((s) => `${s.tokenId}:${BigInt(s.staker)}`));
-  const lost = log.claims.flatMap((c) =>
-    c.taking && stakedBy.has(`${c.taking.tokenId}:${BigInt(c.taking.takenFrom)}`) ? [c.taking.takenFrom] : [],
+  const lost = rank(
+    log.claims.flatMap((c) =>
+      c.taking && stakedBy.has(`${c.taking.tokenId}:${BigInt(c.taking.takenFrom)}`) ? [c.taking.takenFrom] : [],
+    ),
   );
   return {
     slain: rank(log.claims.map((c) => c.recipient)),
     staked: rank(log.stakes.map((s) => s.staker)),
-    lost: rank(lost),
+    lost,
   };
 }
 

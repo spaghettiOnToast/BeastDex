@@ -115,6 +115,10 @@ function _mapAttributeFilters(filters: AttributeFiltersInput): Partial<BeastQuer
         // Genesis beasts show no rank (see shownRank), so a rank range leaves them out.
         q.genesis ??= false;
       }
+    } else if (key === "species id" && values.length >= 2) {
+      // [lo, hi] species range (a species set: Originals 1-77, Loot 78-107)
+      q.beastIdGte = Number(values[0]);
+      q.beastIdLte = Number(values[1]);
     } else if (key === "adventurers killed" && values.length >= 2) {
       q.adventurersKilledGte = Number(values[0]);
       q.adventurersKilledLte = Number(values[1]);
@@ -134,8 +138,6 @@ import { fetchBeastStats } from "./stats";
 import { fetchBeastHighlights, fetchBeastCollectedByName } from "./highlights";
 export type { BeastNameCount } from "./highlights";
 import { apiCache } from "../apiCache";
-
-import { MAX_BEASTS_PER_TYPE } from "./constants";
 export { MAX_BEASTS_PER_TYPE, CARD_GRADE_MIN, CARD_GRADE_MAX } from "./constants";
 export { fetchBeastSpecies, fetchBeastSupply } from "./species";
 export type { BeastSupply } from "./species";
@@ -224,9 +226,11 @@ async function _fetchPage(ownerAddress: string | null, baseQuery: BeastQuery, pa
  * Cached aggressively (30 min) since top beasts rarely change.
  * Use this for the initial render, then load full paginated data in background.
  */
-export async function fetchTopBeasts(limit: number = 10): Promise<Beast[]> {
-  return apiCache.get("top-beasts", { limit }, async () => {
+/** Strongest beasts, optionally narrowed by attribute filters (e.g. a species set). */
+export async function fetchTopBeasts(limit: number = 10, filters: AttributeFiltersInput = {}): Promise<Beast[]> {
+  return apiCache.get("top-beasts", { limit, ...filters }, async () => {
     const result = await collectablesClient.beasts.list({
+      ..._mapAttributeFilters(filters),
       sort: "power",
       order: "desc",
       limit,
@@ -474,12 +478,13 @@ export type TierCollectionStats = {
 /** Card grades shown on the Statistics tab (0 = ungraded). */
 export const STAT_CARD_GRADES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 
-/** Number of beasts at each card grade (grade -> count), cached 30 min. */
-export async function fetchCardGradeCounts(): Promise<Record<number, number>> {
-  return apiCache.get("beast-grade-counts", {}, async () => {
+/** Number of beasts at each card grade (grade -> count), cached 30 min; `filters` narrows to a species set. */
+export async function fetchCardGradeCounts(filters: AttributeFiltersInput = {}): Promise<Record<number, number>> {
+  return apiCache.get("beast-grade-counts", filters, async () => {
+    const base = _mapAttributeFilters(filters);
     const totals = await Promise.all(
       STAT_CARD_GRADES.map((cardGrade) =>
-        collectablesClient.beasts.list({ cardGrade, limit: 1 }).then((r) => r.total ?? 0)
+        collectablesClient.beasts.list({ ...base, cardGrade, limit: 1 }).then((r) => r.total ?? 0)
       )
     );
     return Object.fromEntries(STAT_CARD_GRADES.map((g, i) => [g, totals[i]]));
@@ -488,9 +493,10 @@ export async function fetchCardGradeCounts(): Promise<Record<number, number>> {
 
 export type CollectionGlance = {
   holders: number;
+  /** holders couldn't be narrowed to the filtered set (the API counts them collection-wide) */
+  holdersAllSets: boolean;
   totalBeasts: number;
   midi: number;
-  genesis: number;
   /** shiny + animated shiny */
   shiny: number;
   /** Grade 10 + Animated Shiny */
@@ -500,15 +506,26 @@ export type CollectionGlance = {
   topPrefix: { label: string; count: number } | null;
 };
 
-/** Collection-wide figures for the Statistics tab (cached 10 min). */
-export async function fetchCollectionGlance(): Promise<CollectionGlance> {
-  return apiCache.get("collection-glance", {}, async () => {
-    const [stats, perfect, strongest, names, prefixes] = await Promise.all([
+/**
+ * Collection figures for the Statistics tab (cached 10 min). With `filters`
+ * (a species set) every figure is a filtered count, except holders.
+ */
+export async function fetchCollectionGlance(filters: AttributeFiltersInput = {}): Promise<CollectionGlance> {
+  return apiCache.get("collection-glance", filters, async () => {
+    // Attribute filters never set `sort`/`owner`, so the base also fits group queries.
+    const base = _mapAttributeFilters(filters) as Omit<BeastQuery, "sort" | "owner" | "includeOwner">;
+    const filtered = Object.keys(base).length > 0;
+    const count = (q: Partial<BeastQuery>) =>
+      collectablesClient.beasts.list({ ...base, ...q, limit: 1 }).then((r) => r.total ?? 0);
+    const [stats, perfect, strongest, names, prefixes, setCounts] = await Promise.all([
       collectablesClient.beasts.stats(),
-      collectablesClient.beasts.list({ cardGrade: 10, ...visualsQuery(["Shiny MIDI"]), limit: 1 }),
-      collectablesClient.beasts.list({ sort: "power", order: "desc", limit: 1, includeOwner: true }),
-      collectablesClient.beasts.groups({ groupBy: "full_name", limit: 5 }),
-      collectablesClient.beasts.groups({ groupBy: "prefix", limit: 5 }),
+      count({ cardGrade: 10, ...visualsQuery(["Shiny MIDI"]) }),
+      collectablesClient.beasts.list({ ...base, sort: "power", order: "desc", limit: 1, includeOwner: true }),
+      collectablesClient.beasts.groups({ ...base, groupBy: "full_name", limit: 5 }),
+      collectablesClient.beasts.groups({ ...base, groupBy: "prefix", limit: 5 }),
+      filtered
+        ? Promise.all([count({}), count({ midi: true }), count(visualsQuery(["Shiny"])), count(visualsQuery(["Shiny MIDI"]))])
+        : null,
     ]);
     const num = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0);
     // "__none__" = beasts without a special name
@@ -518,29 +535,15 @@ export async function fetchCollectionGlance(): Promise<CollectionGlance> {
     };
     return {
       holders: num(stats.holders),
-      totalBeasts: num(stats.totalTokens),
-      midi: num(stats.midi),
-      genesis: num(stats.genesis),
-      shiny: num(stats.shiny),
-      perfectCards: perfect.total ?? 0,
+      holdersAllSets: filtered,
+      totalBeasts: setCounts ? setCounts[0] : num(stats.totalTokens),
+      midi: setCounts ? setCounts[1] : num(stats.midi),
+      shiny: setCounts ? setCounts[2] + setCounts[3] : num(stats.shiny),
+      perfectCards: perfect,
       strongest: strongest.items[0] ? mapSdkBeast(strongest.items[0]) : null,
       topName: top(names),
       topPrefix: top(prefixes),
     };
-  });
-}
-
-export async function fetchTierCollectionStats(): Promise<TierCollectionStats[]> {
-  return apiCache.get("tier-collection-stats", {}, async () => {
-    const species = await fetchBeastSpecies();
-    const results = await Promise.all(
-      [1, 2, 3, 4, 5].map(async (tier) => {
-        const page = await collectablesClient.beasts.list({ tier, limit: 1 });
-        const speciesInTier = species.filter((s) => s.tier === tier).length;
-        return { tier, collected: page.total, maxSupply: speciesInTier * MAX_BEASTS_PER_TYPE };
-      })
-    );
-    return results.sort((a, b) => b.tier - a.tier);
   });
 }
 

@@ -12,8 +12,9 @@ import BeastModal from "../beast/BeastModal";
 
 const pct = (n: number, d: number) => (d > 0 ? `${((n / d) * 100).toFixed(1)}%` : "—");
 
-/** "Collection at a glance": fun collection-wide figures across all players. */
-export function CollectionGlance() {
+/** "Collection at a glance": fun figures across all players, optionally for one species set. */
+export function CollectionGlance({ filters, title = "Collection at a glance" }: { filters?: Record<string, string[]>; title?: string } = {}) {
+  const filtersKey = JSON.stringify(filters ?? {});
   const [glance, setGlance] = useState<Glance | null>(null);
   const [grade10, setGrade10] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
@@ -21,16 +22,19 @@ export function CollectionGlance() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchCollectionGlance()
+    const f = JSON.parse(filtersKey) as Record<string, string[]>;
+    setGlance(null);
+    setGrade10(null);
+    fetchCollectionGlance(f)
       .then((g) => !cancelled && setGlance(g))
       .catch(() => !cancelled && setFailed(true));
-    fetchCardGradeCounts()
+    fetchCardGradeCounts(f)
       .then((c) => !cancelled && setGrade10(c[10] ?? 0))
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [filtersKey]);
 
   const strongest = glance?.strongest ?? null;
   const { usernames } = useControllerUsernames([strongest?.owner]);
@@ -41,11 +45,11 @@ export function CollectionGlance() {
   const v = (n: number | undefined | null) => (n == null ? "…" : n.toLocaleString());
   const total = glance?.totalBeasts ?? 0;
 
-  const tiles = [
+  const tiles: GlanceTile[] = [
     {
       label: "Holders",
       value: v(glance?.holders),
-      sub: glance && glance.holders > 0 ? `~${Math.round(total / glance.holders)} beasts each` : "",
+      sub: !glance ? "" : glance.holdersAllSets ? "across all sets" : glance.holders > 0 ? `~${Math.round(total / glance.holders)} beasts each` : "",
       accent: "text-white",
     },
     {
@@ -91,59 +95,85 @@ export function CollectionGlance() {
 
   return (
     <div className="rounded-xl border border-white/[0.06] bg-surface-raised p-4">
-      <div className="mb-3 text-xs uppercase tracking-[0.35em] text-zinc-500">Collection at a glance</div>
+      <div className="mb-3 text-xs uppercase tracking-[0.35em] text-zinc-500">{title}</div>
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2.4fr)]">
-        {/* Strongest beast */}
-        <button
-          type="button"
-          disabled={!strongest}
-          onClick={() => strongest && setSelected(strongest)}
-          className="flex items-center gap-3 rounded-lg border border-[#e2b94c]/25 bg-gradient-to-br from-[#e2b94c]/10 to-transparent p-3 text-left transition-colors enabled:hover:border-[#e2b94c]/50"
-        >
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black">
-            {strongest?.image ? (
-              <img src={strongest.image} alt="" className="h-14 w-14 object-contain" style={{ imageRendering: "pixelated" }} />
-            ) : (
-              <span className="text-zinc-700">?</span>
-            )}
-          </div>
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">Strongest beast</p>
-            <p className="truncate text-base font-bold text-white">{strongest?.name ?? "…"}</p>
-            <p className="text-xs text-[#e2b94c]">⚡ {strongest?.power?.toLocaleString() ?? "…"} power</p>
-            {strongest?.owner && (
-              <p className="truncate text-[11px] text-zinc-500">
-                Owned by{" "}
-                <Link
-                  to={`/account/${strongest.owner}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-zinc-300 hover:text-white hover:underline"
-                >
-                  {ownerName ?? `${strongest.owner.slice(0, 6)}…${strongest.owner.slice(-4)}`}
-                </Link>
-              </p>
-            )}
-          </div>
-        </button>
+        <StrongestBeastCard beast={strongest} ownerName={ownerName} onSelect={setSelected} />
 
         {/* Figures */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {tiles.map((t) => (
-            <div
-              key={t.label}
-              className={`min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.02] p-3 ${"wide" in t && t.wide ? "sm:col-span-2" : ""}`}
-            >
-              <p className="truncate text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">{t.label}</p>
-              <p className={`mt-1 truncate font-bold leading-tight ${t.accent} ${t.small ? "text-sm" : "text-xl"}`} title={t.value}>
-                {t.value}
-              </p>
-              {t.sub && <p className="mt-0.5 truncate text-[11px] text-zinc-500">{t.sub}</p>}
-            </div>
-          ))}
-        </div>
+        <GlanceTiles tiles={tiles} />
       </div>
       {selected && <BeastModal beast={selected} ownerUsernames={usernames} onClose={() => setSelected(null)} />}
     </div>
+  );
+}
+
+export type GlanceTile = { label: string; value: string; sub?: string; accent: string; small?: boolean; wide?: boolean };
+
+/** The figures grid of an "at a glance" panel. */
+export function GlanceTiles({ tiles }: { tiles: GlanceTile[] }) {
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {tiles.map((t) => (
+        <div
+          key={t.label}
+          className={`min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.02] p-3 ${t.wide ? "sm:col-span-2" : ""}`}
+        >
+          <p className="truncate text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">{t.label}</p>
+          <p className={`mt-1 truncate font-bold leading-tight ${t.accent} ${t.small ? "text-sm" : "text-xl"}`} title={t.value}>
+            {t.value}
+          </p>
+          {t.sub && <p className="mt-0.5 truncate text-[11px] text-zinc-500">{t.sub}</p>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Highest-power beast, with its art and owner; opens the beast on click. */
+export function StrongestBeastCard({
+  beast,
+  ownerName,
+  ownerLabel = "Owned by",
+  onSelect,
+}: {
+  beast: Beast | null;
+  ownerName?: string;
+  /** e.g. "Staked by" when the beast sits in the Loot Bag */
+  ownerLabel?: string;
+  onSelect: (b: Beast) => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={!beast}
+      onClick={() => beast && onSelect(beast)}
+      className="flex items-center gap-3 rounded-lg border border-[#e2b94c]/25 bg-gradient-to-br from-[#e2b94c]/10 to-transparent p-3 text-left transition-colors enabled:hover:border-[#e2b94c]/50"
+    >
+      <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black">
+        {beast?.image ? (
+          <img src={beast.image} alt="" className="h-14 w-14 object-contain" style={{ imageRendering: "pixelated" }} />
+        ) : (
+          <span className="text-zinc-700">?</span>
+        )}
+      </div>
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">Strongest beast</p>
+        <p className="truncate text-base font-bold text-white">{beast?.name ?? "…"}</p>
+        <p className="text-xs text-[#e2b94c]">⚡ {beast?.power?.toLocaleString() ?? "…"} power</p>
+        {beast?.owner && (
+          <p className="truncate text-[11px] text-zinc-500">
+            {ownerLabel}{" "}
+            <Link
+              to={`/account/${beast.owner}`}
+              onClick={(e) => e.stopPropagation()}
+              className="text-zinc-300 hover:text-white hover:underline"
+            >
+              {ownerName ?? `${beast.owner.slice(0, 6)}…${beast.owner.slice(-4)}`}
+            </Link>
+          </p>
+        )}
+      </div>
+    </button>
   );
 }
 

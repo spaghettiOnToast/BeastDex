@@ -62,7 +62,7 @@ export function GlobalSearchProvider({ children }: { children: ReactNode }) {
         const addresses = await lookupProfileAddresses([searchQuery]);
         const userAddresses = addresses[searchQuery.toLowerCase()] ?? [];
         if (userAddresses.length > 0) {
-          navigate(`/collection/${encodeURIComponent(searchQuery)}`);
+          navigate(`/collection/${encodeURIComponent(searchQuery.toLowerCase())}`);
           return;
         }
       } catch (error) {
