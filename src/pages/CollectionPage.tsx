@@ -30,6 +30,7 @@ import { Grid, RefreshCw, Table } from "lucide-react";
 import { ManageTracksLink } from "../components/tracks/ManageTracksLink";
 import {
   fetchBeastAttributeFilters,
+  fetchBeastSpecies,
   fetchBeasts,
   fetchGenesisBeasts,
   fetchOwnerBeastStats,
@@ -61,6 +62,8 @@ import { useAccount } from "@starknet-react/core";
 
 import { ClaimCorpseButton } from "../components/collection/ClaimCorpseButton";
 import FestivalBeastsStrip from "../components/profile/FestivalBeastsStrip";
+import LootBagStakesStrip from "../components/profile/LootBagStakesStrip";
+import { clearLootStakesCache, fetchHeldStakedLootBeasts } from "../services/lootDungeon";
 import { useFollowConnectedWallet } from "../hooks/useFollowConnectedWallet";
 import { GradeFilterDropdown } from "../components/filters/GradeFilterDropdown";
 import { matchesGradeFilter, gradeFilterLabel, type GradeFilter } from "../utils/gradeFilter";
@@ -78,6 +81,7 @@ import {
   type TierFilter,
 } from "../utils/tierRankFilter";
 import { ResultCount } from "../components/common/ResultCount";
+import { SPECIES_SET_OPTIONS, matchesSpeciesSet, type SpeciesSetFilter } from "../utils/speciesSet";
 
 const TABS = [
   { key: "all", label: "All" },
@@ -259,6 +263,15 @@ function CollectionPage() {
   const anyBeastFilter = gradeFilter !== "all" || tierFilter !== "all" || rankFilter !== "all";
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
+  /** Originals (1-75) / Loot Beasts (78-107): narrows both owned beasts and the species slots. */
+  const [speciesSet, setSpeciesSet] = useState<SpeciesSetFilter>("all");
+  /** Only the "Need to hunt" slots: what's left to complete the set. */
+  const [showMissingOnly, setShowMissingOnly] = useState(false);
+  /** Loot beasts this owner has staked in the Loot Bag (escrowed, so not in the wallet query). */
+  const [stakedBeasts, setStakedBeasts] = useState<Beast[]>([]);
+  const [stakesReload, setStakesReload] = useState(0);
+  /** Lowercased species name → species id, from the registry catalog. */
+  const [speciesIdByName, setSpeciesIdByName] = useState<Map<string, number>>(new Map());
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
 
   const summaryRequestRef = useRef(0);
@@ -491,12 +504,15 @@ function CollectionPage() {
         setFiltersError(null);
 
         // Load both filters and Genesis beasts in parallel
-        const [filters, genesisMap] = await Promise.all([
+        const [filters, genesisMap, species] = await Promise.all([
           fetchBeastAttributeFilters(),
           loadAllGenesisBeasts(),
+          fetchBeastSpecies(),
         ]);
 
         if (cancelled) return;
+
+        setSpeciesIdByName(new Map(species.map((s) => [s.name.trim().toLowerCase(), s.speciesId])));
 
         // Process beast types
         const beastTrait = Object.keys(filters).find(
@@ -575,38 +591,81 @@ function CollectionPage() {
   }, [beastTypes, genesisCache]); // Build catalog when beast types or Genesis cache change
 
   // Beasts the grid, table and duplicate counts work from: all owned, narrowed by grade, tier and rank.
+  useEffect(() => {
+    setStakedBeasts([]);
+    if (!resolvedAddress) return;
+    let alive = true;
+    fetchHeldStakedLootBeasts(resolvedAddress)
+      .then((list) => alive && setStakedBeasts(list.map((s) => s.beast)))
+      .catch((err) => console.warn("[collection] Loot Bag stakes unavailable:", err));
+    return () => {
+      alive = false;
+    };
+  }, [resolvedAddress, stakesReload]);
+
+  // Wallet beasts plus staked Loot Bag beasts: the collection the grid and set progress count.
+  const stakedIds = useMemo(() => new Set(stakedBeasts.map((b) => b.tokenId)), [stakedBeasts]);
+  const collectionBeasts = useMemo(() => {
+    if (stakedBeasts.length === 0) return ownedBeasts;
+    const inWallet = new Set(ownedBeasts.map((b) => b.tokenId));
+    return [...ownedBeasts, ...stakedBeasts.filter((b) => !inWallet.has(b.tokenId))];
+  }, [ownedBeasts, stakedBeasts]);
+
+  const speciesIdOfBeast = useCallback(
+    (b: Beast): number | undefined => speciesIdByName.get(getBeastTypeKey(b)) ?? b.speciesId,
+    [speciesIdByName]
+  );
+  const setFilteredBeasts = useMemo(
+    () => (speciesSet === "all" ? collectionBeasts : collectionBeasts.filter((b) => matchesSpeciesSet(speciesIdOfBeast(b), speciesSet))),
+    [collectionBeasts, speciesSet, speciesIdOfBeast]
+  );
   const gradeFilteredBeasts = useMemo(
     () =>
       !anyBeastFilter
-        ? ownedBeasts
-        : ownedBeasts.filter(
+        ? setFilteredBeasts
+        : setFilteredBeasts.filter(
             (b) => matchesGradeFilter(b, gradeFilter) && matchesTierFilter(b, tierFilter) && matchesRankFilter(b, rankFilter)
           ),
-    [ownedBeasts, gradeFilter, tierFilter, rankFilter, anyBeastFilter]
+    [setFilteredBeasts, gradeFilter, tierFilter, rankFilter, anyBeastFilter]
   );
+  // Species slots in the selected set.
+  const visibleBeastTypes = useMemo(
+    () => (speciesSet === "all" ? beastTypes : beastTypes.filter(({ key }) => matchesSpeciesSet(speciesIdByName.get(key), speciesSet))),
+    [beastTypes, speciesSet, speciesIdByName]
+  );
+  // Per-set owned counts for the set pills (any variant).
+  const speciesSetCounts = useMemo(() => {
+    const owned = new Set(collectionBeasts.map(getBeastTypeKey));
+    const counts = {} as Record<SpeciesSetFilter, { owned: number; total: number }>;
+    for (const { key } of SPECIES_SET_OPTIONS) {
+      const types = beastTypes.filter((t) => matchesSpeciesSet(speciesIdByName.get(t.key), key));
+      counts[key] = { owned: types.filter((t) => owned.has(t.key)).length, total: types.length };
+    }
+    return counts;
+  }, [collectionBeasts, beastTypes, speciesIdByName]);
 
   // Dropdown options with counts of owned beasts (before the tier/rank filters themselves).
   const tierOptions = useMemo<FilterOption<TierFilter>[]>(() => {
     const counts = new Map<number, number>();
-    for (const b of ownedBeasts) {
+    for (const b of collectionBeasts) {
       const t = tierOf(b);
       if (t != null) counts.set(t, (counts.get(t) ?? 0) + 1);
     }
     return [
-      { value: "all", label: "All", count: ownedBeasts.length },
+      { value: "all", label: "All", count: collectionBeasts.length },
       ...TIER_OPTIONS.map((t, i) => ({ value: t, label: `Tier ${t}`, short: `T${t}`, count: counts.get(t) ?? 0, separatorBefore: i === 0 })),
     ];
-  }, [ownedBeasts]);
+  }, [collectionBeasts]);
 
   const rankOptions = useMemo<FilterOption<RankFilter>[]>(() => {
     const counts = new Map<number, number>();
-    for (const b of ownedBeasts) {
+    for (const b of collectionBeasts) {
       const r = rankOf(b);
       if (r != null && r <= 10) counts.set(r, (counts.get(r) ?? 0) + 1);
     }
     const top10 = [...counts.values()].reduce((a, n) => a + n, 0);
     return [
-      { value: "all", label: "All", count: ownedBeasts.length },
+      { value: "all", label: "All", count: collectionBeasts.length },
       { value: "top10", label: "Top 10 (Rank 1–10)", short: "Top 10", count: top10, separatorBefore: true },
       ...RANK_OPTIONS.map((r, i) => ({
         value: r,
@@ -616,7 +675,7 @@ function CollectionPage() {
         separatorBefore: i === 0,
       })),
     ];
-  }, [ownedBeasts]);
+  }, [collectionBeasts]);
 
   const categoryMaps = useMemo(
     () => buildCategoryMaps(gradeFilteredBeasts),
@@ -699,6 +758,14 @@ function CollectionPage() {
   }, [beastsByTypeAndCategory, activeTab, showDuplicatesOnly]);
 
 
+  // Species of the visible set owned in the current tab, vs the set's size.
+  const setProgress = useMemo(() => {
+    const total = visibleBeastTypes.length;
+    const owned = beastsByTypeAndCategory[activeTab];
+    const collected = visibleBeastTypes.filter(({ key }) => owned.has(key)).length;
+    return { collected, total, missing: total - collected };
+  }, [visibleBeastTypes, beastsByTypeAndCategory, activeTab]);
+
   // Use template-based placeholders - much faster!
   const placeholderCache = useMemo(() => {
     const cache = new Map<string, Beast | null>();
@@ -711,7 +778,7 @@ function CollectionPage() {
   // Memoize the expensive tabEntries calculation
   const tabEntriesForCategory = useMemo(() => {
     // Pre-calculate commonly used values to avoid repeated work
-    const precomputedData = beastTypes.map(({ key, label }) => ({
+    const precomputedData = visibleBeastTypes.map(({ key, label }) => ({
       key,
       label,
       animatedShinyOwned: categoryMaps.animatedShiny.get(key) ?? null,
@@ -722,7 +789,7 @@ function CollectionPage() {
     }));
 
     return precomputedData;
-  }, [beastTypes, categoryMaps, placeholderCache]);
+  }, [visibleBeastTypes, categoryMaps, placeholderCache]);
 
   // Memoize the username resolver to avoid recreating it
   const resolveOwnerUsername = useCallback(
@@ -945,6 +1012,10 @@ function CollectionPage() {
           tabKey as TabKey
         ].filter((entry) => !entry.missing && entry.duplicateCount > 1);
       });
+    } else if (showMissingOnly) {
+      Object.keys(sortedEntries).forEach((tabKey) => {
+        sortedEntries[tabKey as TabKey] = sortedEntries[tabKey as TabKey].filter((entry) => entry.missing);
+      });
     }
 
     return sortedEntries;
@@ -955,6 +1026,7 @@ function CollectionPage() {
     categoryMaps,
     sortOption,
     showDuplicatesOnly,
+    showMissingOnly,
   ]);
 
   const anyLoading =
@@ -1013,6 +1085,8 @@ function CollectionPage() {
     apiCache.clearEndpoint("beast-query");
     apiCache.clearEndpoint("beast-by-id");
     apiCache.clearEndpoint("owner-beast-highlights");
+    clearLootStakesCache();
+    setStakesReload((n) => n + 1);
     void loadSummary();
   }, [loadSummary]);
 
@@ -1189,6 +1263,9 @@ function CollectionPage() {
         {/* Tiddy Mun / Black Shuck held by this owner (hidden when none) */}
         <FestivalBeastsStrip owner={resolvedAddress || null} />
 
+        {/* Loot beasts staked in the Loot Bag for Mega: escrowed, so absent from the wallet (hidden when none) */}
+        <LootBagStakesStrip owner={resolvedAddress || null} />
+
         {/* Consolidate SQL errors into a single banner */}
         {(() => {
           const errors = [summaryError, catalogError, filtersError].filter(Boolean);
@@ -1232,6 +1309,34 @@ function CollectionPage() {
           </p>
         </div>
 
+        {/* Species set: Originals (1-75) / Loot Beasts (78-107) */}
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          {SPECIES_SET_OPTIONS.map(({ key, label }) => {
+            const isActive = speciesSet === key;
+            const c = speciesSetCounts[key];
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setSpeciesSet(key)}
+                aria-pressed={isActive}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                  isActive
+                    ? "border-lsGold bg-lsGold/15 text-lsGold"
+                    : "border-white/[0.08] bg-white/[0.04] text-zinc-400 hover:text-white hover:border-lsGold/40"
+                }`}
+              >
+                {label}
+                {c.total > 0 && (
+                  <span className="ml-1.5 tabular-nums opacity-70">
+                    {c.owned}/{c.total}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Tabs - colored pills */}
         <div className="mb-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -1250,7 +1355,7 @@ function CollectionPage() {
                   }`}
                 >
                   {tab.label}
-                  {ownedBeasts.length > 0 && (
+                  {collectionBeasts.length > 0 && (
                     <span className="ml-1.5 tabular-nums opacity-70">{tabCounts[tab.key].toLocaleString()}</span>
                   )}
                 </button>
@@ -1264,13 +1369,33 @@ function CollectionPage() {
           <div className="flex items-center justify-between gap-2 min-w-0">
             <div className="flex flex-wrap items-center gap-2 min-w-0">
               <SortDropdown value={sortOption} onChange={setSortOption} />
-              <GradeFilterDropdown value={gradeFilter} onChange={setGradeFilter} beasts={ownedBeasts} />
+              <GradeFilterDropdown value={gradeFilter} onChange={setGradeFilter} beasts={collectionBeasts} />
               <OptionFilterDropdown name="Tier" value={tierFilter} allValue="all" options={tierOptions} onChange={setTierFilter} />
               <OptionFilterDropdown name="Rank" value={rankFilter} allValue="all" options={rankOptions} onChange={setRankFilter} />
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setShowDuplicatesOnly(!showDuplicatesOnly)}
+                onClick={() => {
+                  setShowMissingOnly(!showMissingOnly);
+                  setShowDuplicatesOnly(false);
+                }}
+                aria-pressed={showMissingOnly}
+                title="Show only the species you still need"
+                className={`font-medium text-xs h-8 ${
+                  showMissingOnly
+                    ? "border-accent/30 bg-accent/10 text-accent"
+                    : "border-white/[0.06] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08]"
+                }`}
+              >
+                Missing
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowDuplicatesOnly(!showDuplicatesOnly);
+                  setShowMissingOnly(false);
+                }}
                 className={`font-medium text-xs h-8 ${
                   showDuplicatesOnly
                     ? "border-accent/30 bg-accent/10 text-accent"
@@ -1333,19 +1458,35 @@ function CollectionPage() {
         </div>
 
         {/* The table view breaks down every variant itself, so the count is for the grid. */}
-        {!catalogLoading && ownedBeasts.length > 0 && viewMode === "grid" && (
+        {!catalogLoading && collectionBeasts.length > 0 && viewMode === "grid" && (
           <ResultCount
             className="mb-3"
             count={resultSummary.beasts}
             extra={`${resultSummary.species.toLocaleString()} species`}
             filters={[
+              ...(speciesSet !== "all" ? [SPECIES_SET_OPTIONS.find((o) => o.key === speciesSet)?.label ?? ""] : []),
               ...(activeTab !== "all" ? [TABS.find((t) => t.key === activeTab)?.label ?? ""] : []),
               ...(gradeFilter !== "all" ? [gradeFilterLabel(gradeFilter)] : []),
               ...(tierFilter !== "all" ? [tierFilterLabel(tierFilter)] : []),
               ...(rankFilter !== "all" ? [rankFilterLabel(rankFilter)] : []),
               ...(showDuplicatesOnly ? ["Duplicates"] : []),
+              ...(showMissingOnly ? ["Missing"] : []),
             ]}
           />
+        )}
+        {/* Set progress for the current variant tab (and grade/tier/rank filters) */}
+        {!catalogLoading && viewMode === "grid" && visibleBeastTypes.length > 0 && (
+          <p className="-mt-1 mb-3 text-xs text-zinc-400">
+            <span className="tabular-nums font-semibold text-white">{setProgress.collected}</span>
+            <span className="tabular-nums"> / {setProgress.total}</span> species collected
+            {setProgress.missing > 0 ? (
+              <>
+                {" "}· <span className="tabular-nums text-amber-300">{setProgress.missing}</span> to hunt
+              </>
+            ) : (
+              <span className="text-lsGold"> · Set complete</span>
+            )}
+          </p>
         )}
                 {catalogLoading ? (
           <p className="text-xs text-zinc-400">Loading collection...</p>
@@ -1357,7 +1498,7 @@ function CollectionPage() {
           />
         ) : (
           <>
-          {anyBeastFilter && !tabEntries[activeTab].some((entry) => !entry.missing) && (
+          {anyBeastFilter && !showMissingOnly && !tabEntries[activeTab].some((entry) => !entry.missing) && (
             <p className="py-8 text-center text-sm text-zinc-500">
               No beasts match{" "}
               {[
@@ -1371,8 +1512,8 @@ function CollectionPage() {
             </p>
           )}
           <div className="grid grid-cols-3 gap-1.5 sm:gap-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-            {/* A grade filter shows only matching owned beasts, not "Need to hunt" slots. */}
-            {tabEntries[activeTab].filter((entry) => !anyBeastFilter || !entry.missing).map((entry) => (
+            {/* A grade filter shows only matching owned beasts, not "Need to hunt" slots (unless asking for Missing). */}
+            {tabEntries[activeTab].filter((entry) => !anyBeastFilter || showMissingOnly || !entry.missing).map((entry) => (
               <BeastCard
                 key={entry.id}
                 beast={
@@ -1394,6 +1535,7 @@ function CollectionPage() {
                 disabled={entry.missing}
                 duplicateCount={entry.duplicateCount}
                 hasAllVariants={entry.hasAllVariants}
+                staked={!entry.missing && !!entry.beast?.tokenId && stakedIds.has(entry.beast.tokenId)}
                 onSelect={handleBeastSelect}
               />
             ))}

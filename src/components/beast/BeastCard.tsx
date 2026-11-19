@@ -55,6 +55,8 @@ type Props = {
   duplicateCount?: number;
   /** Highlights the card when every named variant of this species/affix has been collected */
   hasAllVariants?: boolean;
+  /** Staked in the Loot Bag for Mega: held by the Loot Dungeon contract, still the owner's. */
+  staked?: boolean;
   /** Draw the MIDI notes background on MIDI beasts (default true). */
   showNotes?: boolean;
   /** Never wrap in a graded slab (the caller draws its own). */
@@ -89,6 +91,7 @@ const BeastCard = memo(function BeastCard({
   disabled = false,
   duplicateCount,
   hasAllVariants = false,
+  staked = false,
   showNotes = true,
   noSlab = false,
   className,
@@ -194,6 +197,20 @@ const BeastCard = memo(function BeastCard({
           justifyContent: "center", fontSize: 10, fontWeight: "bold",
           boxShadow: "0 1px 4px rgba(0,0,0,0.5)",
         }}>{duplicateCount}</div>
+      )}
+      {staked && !missing && (
+        <div
+          title="Staked in the Loot Bag for its Mega transform: held by the Loot Dungeon contract until withdrawn"
+          style={{
+            position: "absolute", top: -6, left: "50%", transform: "translateX(-50%)", zIndex: 30,
+            background: "#0b0b0d", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.6)",
+            borderRadius: 999, fontWeight: "bold", letterSpacing: 1, lineHeight: 1, whiteSpace: "nowrap",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.6)",
+          }}
+          className="px-[5px] py-[2px] text-[7px] uppercase @min-[150px]:px-[7px] @min-[150px]:py-[3px] @min-[150px]:text-[9px]"
+        >
+          Staked
+        </div>
       )}
       {(() => {
         const face = (

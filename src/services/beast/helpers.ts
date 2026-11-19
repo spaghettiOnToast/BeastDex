@@ -10,38 +10,34 @@ import {
 } from "@provable-games/collectables";
 import type { Beast, BeastAttribute, BeastVisual } from "./types";
 import { spriteSpeciesName } from "./cardImage";
+import { presetFlags } from "./presets";
 
 const COLLECTABLES_BASE_URL = "/collectables";
 
-const VISUALS: BeastVisual[] = ["Regular", "Shiny", "MIDI", "Shiny MIDI"];
-
-/** Visual preset label → v3 `visualEffects` value. */
-export const VISUAL_TO_EFFECTS: Record<BeastVisual, number> = {
-  Regular: 0,
-  Shiny: 1,
-  MIDI: 2,
-  "Shiny MIDI": 3,
-};
+/** Visual labels, indexed by (shiny ? 1 : 0) + (midi ? 2 : 0). */
+export const BEAST_VISUALS: BeastVisual[] = ["Regular", "Shiny", "MIDI", "Shiny MIDI"];
 
 /**
  * Shiny / animated / visual label for a beast. v3 encodes these in
- * `visualEffects` (0 regular, 1 shiny, 2 MIDI, 3 shiny MIDI — labels per the v3 announcement: every original is animated now, and presets 2/3 add the MIDI notes effect; `animated` below keeps the legacy V2 name); the SDK's
- * `animated` flag is always true on v3, so it must not be used there.
+ * `visualEffects`, whose meaning is per species (see ./presets): "Shiny" is the
+ * alternate art + rainbow rim, "MIDI" the notes background (`animated` keeps
+ * the legacy V2 name for it). The SDK's `animated` flag is always true on v3,
+ * so it must not be used there.
  */
-export function beastVisual(sdkBeast: Pick<SdkBeast, "shiny" | "animated" | "visualEffects">): {
+export function beastVisual(
+  sdkBeast: Pick<SdkBeast, "shiny" | "animated" | "visualEffects"> & { beastId?: number | null },
+): {
   shiny: boolean;
   animated: boolean;
   visual: BeastVisual;
 } {
   if (typeof sdkBeast.visualEffects === "number") {
-    const ve = sdkBeast.visualEffects;
-    const shiny = ve === 1 || ve === 3;
-    const animated = ve === 2 || ve === 3;
-    return { shiny, animated, visual: VISUALS[ve] ?? "Regular" };
+    const { shiny, midi } = presetFlags(sdkBeast.beastId, sdkBeast.visualEffects);
+    return { shiny, animated: midi, visual: BEAST_VISUALS[(shiny ? 1 : 0) + (midi ? 2 : 0)] };
   }
   const shiny = Boolean(sdkBeast.shiny);
   const animated = Boolean(sdkBeast.animated);
-  return { shiny, animated, visual: VISUALS[(shiny ? 1 : 0) + (animated ? 2 : 0)] };
+  return { shiny, animated, visual: BEAST_VISUALS[(shiny ? 1 : 0) + (animated ? 2 : 0)] };
 }
 
 /**

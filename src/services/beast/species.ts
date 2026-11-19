@@ -2,6 +2,7 @@ import type { BeastSpecies } from "@provable-games/collectables";
 import { collectablesClient } from "./collectablesClient";
 import { MAX_BEASTS_PER_TYPE } from "./constants";
 import { apiCache } from "../apiCache";
+import { rememberSpecies } from "./presets";
 
 /**
  * Species catalog from the collectables API: the v3 registry (incl. species past
@@ -10,6 +11,7 @@ import { apiCache } from "../apiCache";
 export async function fetchBeastSpecies(): Promise<BeastSpecies[]> {
   return apiCache.get("beast-species", {}, async () => {
     const res = await collectablesClient.beasts.species();
+    rememberSpecies(res.items);
     return res.items;
   });
 }

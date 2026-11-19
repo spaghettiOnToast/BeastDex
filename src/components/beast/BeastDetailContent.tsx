@@ -14,6 +14,7 @@ import GradedSlab from "./GradedSlab";
 import { isSlabbed } from "../../utils/slab";
 import BeastMusicPanel from "./BeastMusicPanel";
 import { SUMMIT_ENABLED } from "../../services/summitApi/constants";
+import { fetchLootStake, isLootDungeon, type LootStake } from "../../services/lootDungeon";
 
 type BeastDetailContentProps = {
   beast: Beast;
@@ -174,6 +175,21 @@ export function BeastDetailContent({
   const attributes = (Array.isArray(beast.attributes) ? beast.attributes : []).filter(
     (attr) => !HIDDEN_ATTRIBUTES.has(String(attr.trait_type ?? "").toLowerCase()),
   );
+
+  // Staked for Mega: the Loot Dungeon contract holds it; show who staked it.
+  const heldByLootDungeon = isLootDungeon(beast.owner);
+  const [stake, setStake] = useState<LootStake | null>(null);
+  useEffect(() => {
+    setStake(null);
+    if (!heldByLootDungeon) return;
+    let alive = true;
+    fetchLootStake(beast.tokenId)
+      .then((s) => alive && setStake(s))
+      .catch((err) => console.warn("[loot bag] stake unavailable:", err));
+    return () => {
+      alive = false;
+    };
+  }, [beast.tokenId, heldByLootDungeon]);
 
   const ownerAddressLower = beast.owner ? beast.owner.toLowerCase() : "";
   const accountIdentifier = ownerUsername
@@ -432,7 +448,26 @@ export function BeastDetailContent({
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-white/[0.06]">
           {/* Owned by */}
           <div className="rounded-lg border border-white/[0.06] bg-surface/40 px-4 py-2.5 text-sm text-zinc-400">
-            {beast.owner ? (
+            {heldByLootDungeon ? (
+              <span title="Staked in the Loot Bag for its Mega transform: the Loot Dungeon contract holds it until it transforms or is withdrawn. A kill of this beast burns it and resets the Mega.">
+                {stake ? (
+                  <>
+                    Staked by{" "}
+                    <Link to={`/collection/${stake.staker}`} className="text-gold font-medium hover:underline">
+                      {stake.staker.slice(0, 6)}…{stake.staker.slice(-4)}
+                    </Link>
+                    <span className="text-zinc-500">
+                      {" "}· Mega {stake.transformsAt * 1000 <= Date.now()
+                        ? "ready"
+                        : `on ${new Date(stake.transformsAt * 1000).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`}
+                      {stake.unsafeStake && " (unsafe stake)"}
+                    </span>
+                  </>
+                ) : (
+                  "Staked in the Loot Bag"
+                )}
+              </span>
+            ) : beast.owner ? (
               <span>
                 Owned by{" "}
                 <Link
