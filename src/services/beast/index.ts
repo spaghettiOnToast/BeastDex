@@ -193,10 +193,21 @@ export async function fetchBeasts({
   };
 
   const result = await _fetchPage(ownerAddress, baseQuery, page);
+  const live = result.items.filter(isLiveToken);
   return {
-    beasts: result.items.map(mapSdkBeast),
-    total: result.total,
+    beasts: live.map(mapSdkBeast),
+    // The total still counts burned tokens; take off the ones seen on this page.
+    total: Math.max(0, result.total - (result.items.length - live.length)),
   };
+}
+
+/**
+ * The API keeps burned tokens (a Loot beast transformed into its Mega, or taken
+ * in the Loot Dungeon) and lists them with no owner. Every live token has one, so
+ * an ownerless token (with `includeOwner`) is a burned one.
+ */
+function isLiveToken(item: { owner?: string | null }): boolean {
+  return item.owner != null && item.owner !== "" && BigInt(item.owner) !== 0n;
 }
 
 /** Every beast an address owns (paged 1000 at a time, capped at `max`). */
@@ -233,10 +244,11 @@ export async function fetchTopBeasts(limit: number = 10, filters: AttributeFilte
       ..._mapAttributeFilters(filters),
       sort: "power",
       order: "desc",
-      limit,
+      // Headroom for burned tokens, which are dropped below.
+      limit: Math.min(limit + 20, 100),
       includeOwner: true,
     });
-    return result.items.map(mapSdkBeast);
+    return result.items.filter(isLiveToken).slice(0, limit).map(mapSdkBeast);
   });
 }
 

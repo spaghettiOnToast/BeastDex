@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Beast } from "../src/services/beast";
 
 // ── API-side rank sort (fetchBeasts) ─────────────────────────────────────────
-type Item = { tokenId: string; rank: number; projectedRank: number; genesis?: boolean; power: number };
+type Item = { tokenId: string; rank: number; projectedRank: number; genesis?: boolean; power: number; owner?: string | null };
 const api = vi.hoisted(() => ({ all: [] as Item[], calls: [] as Record<string, unknown>[] }));
 
 vi.mock("../src/services/beast/collectablesClient", () => ({
@@ -18,7 +18,7 @@ vi.mock("../src/services/beast/collectablesClient", () => ({
           rows.sort((a, b) => (q.order === "desc" ? b.projectedRank - a.projectedRank : a.projectedRank - b.projectedRank));
         const limit = (q.limit as number) ?? 50;
         const offset = q.cursor ? Number(q.cursor) : 0;
-        const items = rows.slice(offset, offset + limit);
+        const items = rows.slice(offset, offset + limit).map((r) => ({ owner: "0x1", ...r }));
         const next = offset + limit < rows.length ? String(offset + limit) : null;
         return { items, total: rows.length, nextCursor: next };
       },
@@ -63,6 +63,13 @@ describe("fetchBeasts rank sort and filter (API projected rank)", () => {
     const r = await fetchBeasts({ attributeFilters: { Rank: [1, 10] }, limit: 10 });
     expect(api.calls[0]).toMatchObject({ projectedRankGte: 1, projectedRankLte: 10, genesis: false });
     expect(ids(r).sort()).toEqual(["new-p2", "p1", "p3-onchain2"]);
+  });
+
+  it("drops burned (ownerless) tokens and takes them off the total", async () => {
+    api.all.push({ tokenId: "burned", rank: 0, projectedRank: 5, power: 30, owner: null });
+    const r = await fetchBeasts({ limit: 10 });
+    expect(ids(r)).not.toContain("burned");
+    expect(r.total).toBe(4);
   });
 });
 
