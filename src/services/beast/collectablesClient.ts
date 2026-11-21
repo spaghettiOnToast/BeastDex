@@ -1,4 +1,5 @@
 import { CollectablesClient } from "@provable-games/collectables";
+import { withoutBurned } from "./burned";
 
 /**
  * Collectables API serving the Beasts v3 (MOBs) collection — the same
@@ -11,7 +12,8 @@ export const COLLECTABLES_API_URL =
   (import.meta.env.VITE_COLLECTABLES_API_URL as string | undefined)?.trim() ||
   DEFAULT_COLLECTABLES_API_URL;
 
-export const collectablesClient = new CollectablesClient({ baseUrl: COLLECTABLES_API_URL });
+/** Every list, count, group and stats figure leaves out burned tokens (see ./burned). */
+export const collectablesClient = withoutBurned(new CollectablesClient({ baseUrl: COLLECTABLES_API_URL }));
 
 /**
  * The LEGACY Beasts collection (pre-v3). v3 reset adventurer kill counts at the
