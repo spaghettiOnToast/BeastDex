@@ -4,6 +4,7 @@ import { ExternalLink } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
 import { controllerConnector } from "../../wallet/controller";
 import { WALLET_INSTALL_URLS, connectorIconSrc, walletName } from "../../wallet/connectors";
+import { isGameAccountConnectorId } from "../../wallet/gameAccount";
 import controllerIcon from "../../assets/cartridge-icon.svg";
 
 type Props = {
@@ -49,7 +50,42 @@ export function WalletConnectDialog({ open, onOpenChange, onConnected }: Props) 
   };
 
   const controller = connectors.find((c) => c.id === controllerConnector.id);
-  const injected = connectors.filter((c) => c.id !== controllerConnector.id);
+  const injected = connectors.filter((c) => c.id !== controllerConnector.id && !isGameAccountConnectorId(c.id));
+  const gameAccounts = connectors.filter((c) => isGameAccountConnectorId(c.id));
+
+  const walletRow = (c: Connector, label: string) => {
+    const isAvailable = available[c.id] ?? false;
+    const installUrl = WALLET_INSTALL_URLS[c.id];
+    const icon = connectorIconSrc(c);
+    const row = (
+      <>
+        {icon ? (
+          <img src={icon} alt="" className="h-7 w-7 flex-shrink-0 rounded" />
+        ) : (
+          <span className="h-7 w-7 flex-shrink-0 rounded bg-white/10" />
+        )}
+        <span className="flex-1 text-sm font-medium text-zinc-100">{label}</span>
+        {pending === c.id ? (
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-gold border-t-transparent" />
+        ) : !isAvailable ? (
+          <span className="flex items-center gap-1 text-[11px] text-zinc-500">
+            Install <ExternalLink className="h-3 w-3" />
+          </span>
+        ) : null}
+      </>
+    );
+    const cls =
+      "w-full flex items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2.5 text-left transition-colors hover:border-white/20 hover:bg-white/[0.06] disabled:opacity-60";
+    return isAvailable || !installUrl ? (
+      <button key={c.id} type="button" disabled={pending !== null || !isAvailable} onClick={() => connect(c)} className={cls}>
+        {row}
+      </button>
+    ) : (
+      <a key={c.id} href={installUrl} target="_blank" rel="noopener noreferrer" className={cls}>
+        {row}
+      </a>
+    );
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -83,46 +119,18 @@ export function WalletConnectDialog({ open, onOpenChange, onConnected }: Props) 
           {injected.length > 0 && (
             <div className="space-y-1.5">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Starknet wallets</p>
-              {injected.map((c) => {
-                const isAvailable = available[c.id] ?? false;
-                const installUrl = WALLET_INSTALL_URLS[c.id];
-                const icon = connectorIconSrc(c);
-                const name = walletName(c);
-                const row = (
-                  <>
-                    {icon ? (
-                      <img src={icon} alt="" className="h-7 w-7 flex-shrink-0 rounded" />
-                    ) : (
-                      <span className="h-7 w-7 flex-shrink-0 rounded bg-white/10" />
-                    )}
-                    <span className="flex-1 text-sm font-medium text-zinc-100">{name}</span>
-                    {pending === c.id ? (
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-gold border-t-transparent" />
-                    ) : !isAvailable ? (
-                      <span className="flex items-center gap-1 text-[11px] text-zinc-500">
-                        Install <ExternalLink className="h-3 w-3" />
-                      </span>
-                    ) : null}
-                  </>
-                );
-                const cls =
-                  "w-full flex items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2.5 text-left transition-colors hover:border-white/20 hover:bg-white/[0.06] disabled:opacity-60";
-                return isAvailable || !installUrl ? (
-                  <button
-                    key={c.id}
-                    type="button"
-                    disabled={pending !== null || !isAvailable}
-                    onClick={() => connect(c)}
-                    className={cls}
-                  >
-                    {row}
-                  </button>
-                ) : (
-                  <a key={c.id} href={installUrl} target="_blank" rel="noopener noreferrer" className={cls}>
-                    {row}
-                  </a>
-                );
-              })}
+              {injected.map((c) => walletRow(c, walletName(c)))}
+            </div>
+          )}
+
+          {gameAccounts.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Loot Survivor Game Account</p>
+              <p className="text-[11px] leading-relaxed text-zinc-400">
+                The same account as Loot Survivor&apos;s EVM sign-in, signed with your EVM wallet. Gas is paid in STRK
+                from the Game Account.
+              </p>
+              {gameAccounts.map((c) => walletRow(c, c.name))}
             </div>
           )}
 

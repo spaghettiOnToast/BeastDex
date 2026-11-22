@@ -233,10 +233,11 @@ export async function fetchTopBeasts(limit: number = 10, filters: AttributeFilte
       ..._mapAttributeFilters(filters),
       sort: "power",
       order: "desc",
-      limit,
+      // Headroom: the client drops burned tokens from the page (see ./burned).
+      limit: Math.min(limit + 20, 100),
       includeOwner: true,
     });
-    return result.items.map(mapSdkBeast);
+    return result.items.slice(0, limit).map(mapSdkBeast);
   });
 }
 

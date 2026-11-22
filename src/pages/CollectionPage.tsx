@@ -1090,14 +1090,22 @@ function CollectionPage() {
     void loadSummary();
   }, [loadSummary]);
 
-  // Most powerful beast is the first beast (sorted by default power)
-  const mostPowerfulBeast = useMemo(
+  // Most powerful beast is the first beast (sorted by default power); drives the profile title.
+  const overallMostPowerful = useMemo(
     () => (ownedBeasts.length > 0 ? ownedBeasts[0] : null),
     [ownedBeasts]
   );
 
+  // The hero's "Most Powerful" follows the Originals / Loot Beasts set (staked Loot Bag beasts count).
+  const mostPowerfulBeast = useMemo(() => {
+    if (speciesSet === "all") return overallMostPowerful;
+    let best: Beast | null = null;
+    for (const b of setFilteredBeasts) if (!best || (b.power ?? 0) > (best.power ?? 0)) best = b;
+    return best;
+  }, [speciesSet, overallMostPowerful, setFilteredBeasts]);
+
   const mostPowerfulTitle = useMemo(() => {
-    const name = mostPowerfulBeast?.name;
+    const name = overallMostPowerful?.name;
     if (!name) return null;
     const trimmed = name.trim();
     const quotedMatch = trimmed.match(/"([^"]+)"/);
@@ -1106,7 +1114,7 @@ function CollectionPage() {
     if (parts.length >= 2) return `${parts[0]} ${parts[1]}`;
     if (parts.length === 1) return parts[0];
     return null;
-  }, [mostPowerfulBeast]);
+  }, [overallMostPowerful]);
 
 
   // Display stats for the collection hero
