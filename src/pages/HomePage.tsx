@@ -67,7 +67,7 @@ function HomePage() {
   const [setStats, setSetStats] = useState<SetCollectionStats[]>([]);
   const [setStatsLoading, setSetStatsLoading] = useState(true);
   const [setStatsError, setSetStatsError] = useState<string | null>(null);
-  // Originals / Loot Beasts toggle: drives the stats panel and narrows the grid to that set.
+  // Originals / Loot Beasts / Abstract Beasts toggle: drives the stats panel and narrows the grid to that set.
   const [activeSet, setActiveSet] = useState<CollectionSet>("original");
   const [selectedBeast, setSelectedBeast] = useState<Beast | null>(null);
   const [sortOption, setSortOption] = useState<SortOption>("default");

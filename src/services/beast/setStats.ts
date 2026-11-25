@@ -1,12 +1,14 @@
 /**
- * Collection progress split by species set: the Originals (every non-Loot
- * species, incl. the festival one-offs) and the Loot Dungeon beasts (78-107).
+ * Collection progress split by species set: the Originals (every species
+ * outside a dungeon set, incl. the festival one-offs), the Loot Dungeon beasts
+ * (78-107) and the Abstract Dungeon beasts (108-122).
  * Each figure is a `limit: 1` count query filtered to the set's species.
  *
  * Loot visuals differ: shiny art only comes from a staked beast reaching its
  * Mega form (presets 2/3), so Loot counts Mega / MIDI / Standard, without the
  * Genesis beasts (all Shiny MIDI, one holder) that would otherwise be the only
- * "shinies".
+ * "shinies". Abstract beasts use the classic renderer, so they get the
+ * Originals' tiles, also without their Genesis beasts.
  */
 import type { BeastQuery } from "@provable-games/collectables";
 import { apiCache } from "../apiCache";
@@ -15,9 +17,10 @@ import { MAX_BEASTS_PER_TYPE } from "./constants";
 import { visualsQuery } from "./presets";
 import { fetchBeastSpecies } from "./species";
 import { lootSpecies } from "../lootDungeon";
+import { abstractSpecies } from "../abstractDungeon";
 import type { TierCollectionStats } from "./index";
 
-export type CollectionSet = "original" | "loot";
+export type CollectionSet = "original" | "loot" | "abstract";
 
 export type VisualCount = { label: string; value: number };
 
@@ -30,11 +33,11 @@ export type SetCollectionStats = {
   tiers: TierCollectionStats[];
   /** the set's visual tiles, rarest first */
   visuals: VisualCount[];
-  /** attribute filters that narrow beast lists to the set (Loot leaves out Genesis) */
+  /** attribute filters that narrow beast lists to the set (the dungeon sets leave out Genesis) */
   filters: Record<string, string[]>;
 };
 
-const SET_LABELS: Record<CollectionSet, string> = { original: "Originals", loot: "Loot Beasts" };
+const SET_LABELS: Record<CollectionSet, string> = { original: "Originals", loot: "Loot Beasts", abstract: "Abstract Beasts" };
 
 async function count(q: Partial<BeastQuery>): Promise<number> {
   return (await collectablesClient.beasts.list({ ...q, limit: 1 })).total ?? 0;
@@ -42,7 +45,7 @@ async function count(q: Partial<BeastQuery>): Promise<number> {
 
 /**
  * Species filter for a set. The API caps `beastIdIn` at 50 ids, so a set whose
- * ids are one contiguous run (Originals 1-77, Loot 78-107) is sent as a range.
+ * ids are one contiguous run (Originals 1-77, Loot 78-107, Abstract 108-122) is sent as a range.
  */
 export function speciesFilter(speciesIds: readonly number[]): Partial<BeastQuery> {
   const sorted = [...speciesIds].sort((a, b) => a - b);
@@ -52,13 +55,17 @@ export function speciesFilter(speciesIds: readonly number[]): Partial<BeastQuery
 }
 
 async function setStats(set: CollectionSet, speciesIds: number[], tierOf: Map<number, number>): Promise<SetCollectionStats> {
-  const base = speciesFilter(speciesIds);
+  // The dungeon sets' Genesis beasts (all Shiny MIDI, one holder) would skew their visual tiles;
+  // tier progress still counts them, as max supply does.
+  const noGenesis = set !== "original";
+  const inSet = speciesFilter(speciesIds);
+  const base: Partial<BeastQuery> = { ...inSet, ...(noGenesis ? { genesis: false } : {}) };
   const visualQueries: Array<[string, Partial<BeastQuery>]> =
     set === "loot"
       ? [
-          ["Mega", { ...base, visualEffectsIn: [2, 3], genesis: false }],
-          ["MIDI", { ...base, visualEffectsIn: [1], genesis: false }],
-          ["Standard", { ...base, visualEffectsIn: [0], genesis: false }],
+          ["Mega", { ...base, visualEffectsIn: [2, 3] }],
+          ["MIDI", { ...base, visualEffectsIn: [1] }],
+          ["Standard", { ...base, visualEffectsIn: [0] }],
         ]
       : [
           ["Shiny MIDI", { ...base, ...visualsQuery(["Shiny MIDI"]) }],
@@ -72,7 +79,7 @@ async function setStats(set: CollectionSet, speciesIds: number[], tierOf: Map<nu
     Promise.all(
       tierNums.map(async (tier) => {
         const ids = speciesIds.filter((id) => tierOf.get(id) === tier);
-        const collected = ids.length ? await count({ ...base, tier }) : 0;
+        const collected = ids.length ? await count({ ...inSet, tier }) : 0;
         return { tier, collected, maxSupply: ids.length * MAX_BEASTS_PER_TYPE };
       }),
     ),
@@ -88,20 +95,23 @@ async function setStats(set: CollectionSet, speciesIds: number[], tierOf: Map<nu
     visuals,
     filters: {
       "Species Id": [String(Math.min(...speciesIds)), String(Math.max(...speciesIds))],
-      ...(set === "loot" ? { Genesis: ["0"] } : {}),
+      ...(noGenesis ? { Genesis: ["0"] } : {}),
     },
   };
 }
 
-/** Originals and Loot Beasts collection stats, cached like the other collection figures. */
+/** Originals, Loot Beasts and Abstract Beasts collection stats, cached like the other collection figures. */
 export function fetchSetCollectionStats(): Promise<SetCollectionStats[]> {
   return apiCache.get("set-collection-stats", {}, async () => {
     const species = await fetchBeastSpecies();
     const loot = new Set(lootSpecies(species).map((s) => s.speciesId));
+    const abstract = new Set(abstractSpecies(species).map((s) => s.speciesId));
     const tierOf = new Map(species.map((s) => [s.speciesId, s.tier]));
+    const originals = species.map((s) => s.speciesId).filter((id) => !loot.has(id) && !abstract.has(id));
     return Promise.all([
-      setStats("original", species.map((s) => s.speciesId).filter((id) => !loot.has(id)), tierOf),
+      setStats("original", originals, tierOf),
       setStats("loot", [...loot], tierOf),
+      ...(abstract.size > 0 ? [setStats("abstract", [...abstract], tierOf)] : []),
     ]);
   });
 }

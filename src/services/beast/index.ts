@@ -116,7 +116,7 @@ function _mapAttributeFilters(filters: AttributeFiltersInput): Partial<BeastQuer
         q.genesis ??= false;
       }
     } else if (key === "species id" && values.length >= 2) {
-      // [lo, hi] species range (a species set: Originals 1-77, Loot 78-107)
+      // [lo, hi] species range (a species set: Originals 1-77, Loot 78-107, Abstract 108-122)
       q.beastIdGte = Number(values[0]);
       q.beastIdLte = Number(values[1]);
     } else if (key === "adventurers killed" && values.length >= 2) {

@@ -263,7 +263,7 @@ function CollectionPage() {
   const anyBeastFilter = gradeFilter !== "all" || tierFilter !== "all" || rankFilter !== "all";
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
-  /** Originals (1-75) / Loot Beasts (78-107): narrows both owned beasts and the species slots. */
+  /** Originals (1-75) / Loot Beasts (78-107) / Abstract Beasts (108-122): narrows both owned beasts and the species slots. */
   const [speciesSet, setSpeciesSet] = useState<SpeciesSetFilter>("all");
   /** Only the "Need to hunt" slots: what's left to complete the set. */
   const [showMissingOnly, setShowMissingOnly] = useState(false);
@@ -1096,7 +1096,7 @@ function CollectionPage() {
     [ownedBeasts]
   );
 
-  // The hero's "Most Powerful" follows the Originals / Loot Beasts set (staked Loot Bag beasts count).
+  // The hero's "Most Powerful" follows the species set (staked Loot Bag beasts count).
   const mostPowerfulBeast = useMemo(() => {
     if (speciesSet === "all") return overallMostPowerful;
     let best: Beast | null = null;
@@ -1317,7 +1317,7 @@ function CollectionPage() {
           </p>
         </div>
 
-        {/* Species set: Originals (1-75) / Loot Beasts (78-107) */}
+        {/* Species set: Originals (1-75) / Loot Beasts (78-107) / Abstract Beasts (108-122) */}
         <div className="mb-3 flex flex-wrap items-center gap-2">
           {SPECIES_SET_OPTIONS.map(({ key, label }) => {
             const isActive = speciesSet === key;

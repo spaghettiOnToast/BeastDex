@@ -4,8 +4,9 @@ import { SetCollectionPanel } from "../stats/SetCollectionPanel";
 import { GradeBrowser } from "./GradeBrowser";
 import { CollectionGlance } from "./CollectionGlance";
 import { LootGlance } from "./LootBeastsStats";
+import { AbstractGlance } from "./AbstractBeastsStats";
 
-/** Statistics → Collection Stats: every section follows the Originals / Loot Beasts toggle. */
+/** Statistics → Collection Stats: every section follows the Originals / Loot Beasts / Abstract Beasts toggle. */
 export function BeastCollectionStats() {
   const [sets, setSets] = useState<SetCollectionStats[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,7 +32,13 @@ export function BeastCollectionStats() {
 
       {filters && (
         <>
-          {active === "loot" ? <LootGlance /> : <CollectionGlance filters={filters} title="Originals at a glance" />}
+          {active === "loot" ? (
+            <LootGlance />
+          ) : active === "abstract" ? (
+            <AbstractGlance />
+          ) : (
+            <CollectionGlance filters={filters} title="Originals at a glance" />
+          )}
           {/* Browse the set's beasts by card grade (0-10); keyed so paging restarts per set */}
           <GradeBrowser key={active} filters={filters} />
         </>

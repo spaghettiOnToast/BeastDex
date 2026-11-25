@@ -9,6 +9,9 @@ describe("speciesSet", () => {
     expect(speciesSetOf(77)).toBe("festival");
     expect(speciesSetOf(78)).toBe("loot");
     expect(speciesSetOf(107)).toBe("loot");
+    expect(speciesSetOf(108)).toBe("abstract");
+    expect(speciesSetOf(122)).toBe("abstract");
+    expect(speciesSetOf(123)).toBe("festival");
   });
 
   it("filters, passing unknown species only for all", () => {
@@ -16,5 +19,8 @@ describe("speciesSet", () => {
     expect(matchesSpeciesSet(80, "original")).toBe(false);
     expect(matchesSpeciesSet(undefined, "loot")).toBe(false);
     expect(matchesSpeciesSet(undefined, "all")).toBe(true);
+    expect(matchesSpeciesSet(115, "abstract")).toBe(true);
+    expect(matchesSpeciesSet(115, "original")).toBe(false);
+    expect(matchesSpeciesSet(115, "loot")).toBe(false);
   });
 });

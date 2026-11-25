@@ -13,6 +13,7 @@ const TIER_COLORS: Record<number, { text: string; gradient: string; border: stri
 const SET_BAR: Record<CollectionSet, { text: string; bar: string }> = {
   original: { text: "text-[#39ff14]", bar: "bg-[#39ff14] shadow-[0_0_8px_#39ff14]" },
   loot: { text: "text-[#d4a017]", bar: "bg-[#d4a017] shadow-[0_0_8px_#d4a017]" },
+  abstract: { text: "text-[#c084fc]", bar: "bg-[#c084fc] shadow-[0_0_8px_#c084fc]" },
 };
 
 const VISUAL_STYLE: Record<string, { gradient: string; accent: string; sub?: string }> = {
@@ -28,7 +29,7 @@ const VISUAL_STYLE: Record<string, { gradient: string; accent: string; sub?: str
 };
 
 /**
- * Collection progress per species set (Originals / Loot Beasts): a "Beasts
+ * Collection progress per species set (Originals / Loot / Abstract Beasts): a "Beasts
  * Collected" bar for each, then the selected set's visual tiles and tiers.
  */
 export function SetCollectionPanel({
