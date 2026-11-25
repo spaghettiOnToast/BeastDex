@@ -11,7 +11,7 @@ type StatsPanelProps = {
   onActiveSetChange?: (set: CollectionSet) => void;
 };
 
-/** Home page collection progress: Originals and Loot Beasts. */
+/** Home page collection progress: Originals, Loot Beasts and Abstract Beasts. */
 export const StatsPanel = memo(function StatsPanel({ sets, loading, error, activeSet, onActiveSetChange }: StatsPanelProps) {
   return (
     <div className="mb-4 sm:mb-6 space-y-3">

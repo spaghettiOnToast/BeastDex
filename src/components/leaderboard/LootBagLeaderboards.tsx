@@ -1,44 +1,101 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import {
-  fetchLootLeaderboards,
-  LOOT_BAG_URL,
-  type LootLeaderboardEntry,
-  type LootLeaderboards,
-} from "../../services/lootDungeon";
+import { fetchLootLeaderboards, LOOT_BAG_URL } from "../../services/lootDungeon";
+import { ABSTRACT_DUNGEON_URL, fetchAbstractLeaderboards } from "../../services/abstractDungeon";
 import { useControllerUsernames } from "../../hooks/useControllerUsernames";
 import { normaliseStarknetAddress } from "../../utils/address";
 
 const PAGE_SIZE = 10;
 
-const BOARDS: Array<{ key: keyof LootLeaderboards; title: string; icon: string; unit: string; blurb: string; color: string }> = [
+type LeaderboardEntry = { address: string; count: number };
+type BoardDef<K extends string> = { key: K; title: string; icon: string; unit: string; blurb: string; color: string };
+
+const LOOT_BOARDS: BoardDef<"slain" | "staked" | "lost">[] = [
   { key: "slain", title: "Most Slain", icon: "⚔️", unit: "slain", blurb: "Loot beasts slain and claimed", color: "text-[#8bff72]" },
   { key: "staked", title: "Most Staked", icon: "🎒", unit: "staked", blurb: "Beasts staked for Mega, all time", color: "text-[#7dfbff]" },
   { key: "lost", title: "Most Lost", icon: "💀", unit: "lost", blurb: "Staked beasts taken by other players", color: "text-[#ff6b35]" },
 ];
 
+const ABSTRACT_BOARDS: BoardDef<"slain" | "entered">[] = [
+  { key: "slain", title: "Most Slain", icon: "⚔️", unit: "slain", blurb: "Abstract beasts slain and claimed", color: "text-[#8bff72]" },
+  { key: "entered", title: "Most Games", icon: "🌀", unit: "games", blurb: "Free daily games entered", color: "text-[#c084fc]" },
+];
+
 export function LootBagLeaderboards() {
-  const [data, setData] = useState<LootLeaderboards | null>(null);
+  return (
+    <DungeonLeaderboards
+      boards={LOOT_BOARDS}
+      load={fetchLootLeaderboards}
+      name="Loot Bag"
+      loadingText="Reading the Loot Dungeon…"
+      source={
+        <>
+          Read live from the{" "}
+          <a href={LOOT_BAG_URL} target="_blank" rel="noreferrer" className="text-zinc-300 hover:text-gold">
+            Loot Bag
+          </a>{" "}
+          (Loot Dungeon) contract events on chain.
+        </>
+      }
+    />
+  );
+}
+
+export function AbstractDungeonLeaderboards() {
+  return (
+    <DungeonLeaderboards
+      boards={ABSTRACT_BOARDS}
+      load={fetchAbstractLeaderboards}
+      name="Abstract Dungeon"
+      loadingText="Reading the Abstract Dungeon…"
+      source={
+        <>
+          Read live from the{" "}
+          <a href={ABSTRACT_DUNGEON_URL} target="_blank" rel="noreferrer" className="text-zinc-300 hover:text-gold">
+            Abstract Dungeon
+          </a>{" "}
+          contract events on chain.
+        </>
+      }
+    />
+  );
+}
+
+/** A dungeon's leaderboards, one column per board, read from its contract events. */
+function DungeonLeaderboards<K extends string>({
+  boards,
+  load,
+  name,
+  loadingText,
+  source,
+}: {
+  boards: BoardDef<K>[];
+  load: () => Promise<Record<K, LeaderboardEntry[]>>;
+  name: string;
+  loadingText: string;
+  source: ReactNode;
+}) {
+  const [data, setData] = useState<Record<K, LeaderboardEntry[]> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    fetchLootLeaderboards()
+    load()
       .then((d) => !cancelled && setData(d))
       .catch((err) => {
-        console.error("Failed to load Loot Bag leaderboards:", err);
-        if (!cancelled) setError("Failed to load Loot Bag leaderboards");
+        console.error(`Failed to load ${name} leaderboards:`, err);
+        if (!cancelled) setError(`Failed to load ${name} leaderboards`);
       });
     return () => {
       cancelled = true;
     };
-  }, [nonce]);
+  }, [nonce, load, name]);
 
   const addresses = useMemo(
-    () => (data ? [...new Set(BOARDS.flatMap((b) => data[b.key].map((e) => e.address)))] : []),
-    [data],
+    () => (data ? [...new Set(boards.flatMap((b) => data[b.key].map((e) => e.address)))] : []),
+    [data, boards],
   );
   const { usernames } = useControllerUsernames(addresses);
 
@@ -61,7 +118,7 @@ export function LootBagLeaderboards() {
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
           <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-accent border-t-transparent" />
-          <p className="text-zinc-400">Reading the Loot Dungeon…</p>
+          <p className="text-zinc-400">{loadingText}</p>
         </div>
       </div>
     );
@@ -69,15 +126,9 @@ export function LootBagLeaderboards() {
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-zinc-500">
-        Read live from the{" "}
-        <a href={LOOT_BAG_URL} target="_blank" rel="noreferrer" className="text-zinc-300 hover:text-gold">
-          Loot Bag
-        </a>{" "}
-        (Loot Dungeon) contract events on chain.
-      </p>
-      <div className="grid gap-4 lg:grid-cols-3">
-        {BOARDS.map((b) => (
+      <p className="text-xs text-zinc-500">{source}</p>
+      <div className={`grid gap-4 ${boards.length === 2 ? "lg:grid-cols-2" : "lg:grid-cols-3"}`}>
+        {boards.map((b) => (
           <Board key={b.key} board={b} entries={data[b.key]} usernames={usernames} />
         ))}
       </div>
@@ -90,8 +141,8 @@ function Board({
   entries,
   usernames,
 }: {
-  board: (typeof BOARDS)[number];
-  entries: LootLeaderboardEntry[];
+  board: BoardDef<string>;
+  entries: LeaderboardEntry[];
   usernames: Record<string, string>;
 }) {
   const [shown, setShown] = useState(PAGE_SIZE);

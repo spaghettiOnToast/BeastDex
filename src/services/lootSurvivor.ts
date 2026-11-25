@@ -29,6 +29,18 @@ export type Dungeon = {
 
 export const DUNGEONS: Dungeon[] = [
   {
+    id: "abstract",
+    name: "Abstract Dungeon",
+    tagline: "Something has come through the arches",
+    image: "/images/abstract-signup/scene.webp",
+    accentColor: "#cfa65c",
+    status: "online",
+    entryCost: "Free daily",
+    difficulty: "Medium",
+    reward: "Beasts",
+    tags: ["Collectables", "Endless"],
+  },
+  {
     id: "lootbag",
     name: "Loot Bag",
     tagline: "Hunt the beasts · enter with a Loot bag",

@@ -13,6 +13,7 @@ import { beastVisual, mapSdkBeast } from "./beast/helpers";
 import type { Beast, BeastVisual } from "./beast/types";
 import { apiCache } from "./apiCache";
 import { fetchAllLootStakes, isLootDungeon, lootSpecies, type LootStake } from "./lootDungeon";
+import { abstractSpecies, scanAbstractDungeon } from "./abstractDungeon";
 
 const PAGE = 100; // API max
 const MAX_PAGES = 100;
@@ -98,26 +99,63 @@ export function tallyLootBeasts(
   };
 }
 
+/** Every beast (with owner) of the given species, paging through the API. */
+async function fetchSpeciesBeasts(speciesIds: number[]): Promise<SdkBeast[]> {
+  const all: SdkBeast[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const res = await collectablesClient.beasts.list({ beastIdIn: speciesIds, includeOwner: true, limit: PAGE, cursor });
+    all.push(...res.items);
+    if (!res.nextCursor) break;
+    cursor = res.nextCursor;
+  }
+  return all;
+}
+
 export function fetchLootBeastStats(): Promise<LootBeastStats> {
   return apiCache.get("loot-beast-stats", {}, async () => {
     const species = lootSpecies(await fetchBeastSpecies()).map((s) => s.speciesId);
     const [items, stakes] = await Promise.all([
-      (async () => {
-        const all: SdkBeast[] = [];
-        let cursor: string | undefined;
-        for (let page = 0; page < MAX_PAGES; page++) {
-          const res = await collectablesClient.beasts.list({ beastIdIn: species, includeOwner: true, limit: PAGE, cursor });
-          all.push(...res.items);
-          if (!res.nextCursor) break;
-          cursor = res.nextCursor;
-        }
-        return all;
-      })(),
+      fetchSpeciesBeasts(species),
       fetchAllLootStakes().catch((err) => {
         console.warn("[loot stats] stakes unavailable, counting the Loot Dungeon as holder:", err);
         return [] as LootStake[];
       }),
     ]);
     return tallyLootBeasts(items, stakes);
+  });
+}
+
+export type AbstractBeastStats = LootBeastStats & {
+  /** beasts slain and claimed in the Abstract Dungeon */
+  claims: number;
+  /** daily games entered */
+  entries: number;
+  /** distinct players who entered or claimed */
+  players: number;
+};
+
+/**
+ * Figures for the Abstract Dungeon beasts (species 108-122), for the
+ * Statistics → Abstract Beasts tab: the same tally as Loot (no stakes: the
+ * Abstract Dungeon never holds beasts) plus the dungeon's claim/entry counts.
+ */
+export function fetchAbstractBeastStats(): Promise<AbstractBeastStats> {
+  return apiCache.get("abstract-beast-stats", {}, async () => {
+    const species = abstractSpecies(await fetchBeastSpecies()).map((s) => s.speciesId);
+    const [items, log] = await Promise.all([
+      species.length ? fetchSpeciesBeasts(species) : Promise.resolve([] as SdkBeast[]),
+      scanAbstractDungeon().catch((err) => {
+        console.warn("[abstract stats] dungeon events unavailable:", err);
+        return null;
+      }),
+    ]);
+    const players = new Set([...(log?.claims.map((c) => c.recipient) ?? []), ...(log?.entries.map((e) => e.player) ?? [])].map((a) => BigInt(a).toString(16)));
+    return {
+      ...tallyLootBeasts(items, []),
+      claims: log?.claims.length ?? 0,
+      entries: log?.entries.length ?? 0,
+      players: players.size,
+    };
   });
 }
